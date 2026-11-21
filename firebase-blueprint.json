@@ -1,0 +1,358 @@
+{
+  "entities": {
+    "NewsArticle": {
+      "title": "NewsArticle",
+      "description": "Berita terkini dan warta jemaat SIB Toburon yang disinkronkan secara real-time.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Judul berita (3-160 karakter)"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Ringkasan singkat berita (5-320 karakter)"
+        },
+        "content": {
+          "type": "string",
+          "description": "Isi lengkap warta atau berita gereja (10-5000 karakter)"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["WARTA", "PENGUMUMAN", "RENUNGAN", "PELAYANAN", "PEMUDA"],
+          "description": "Kategori berita"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID admin penulis berita"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Nama penulis atau tim redaksi (1-80 karakter)"
+        },
+        "coverPreset": {
+          "type": "string",
+          "enum": ["SANCTUARY", "WORSHIP", "FELLOWSHIP", "CUSTOM"],
+          "description": "Tema sampul bawaan atau kustom"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL gambar opsional (maks 1000 karakter)"
+        },
+        "imageBase64": {
+          "type": "string",
+          "description": "Gambar terkompresi Base64 opsional dari Photo Picker (maks 260000 karakter)"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "Penanda berita utama yang disematkan"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Status publikasi berita ke seluruh jemaat"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembuatan (FieldValue.serverTimestamp(), immutable)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "title",
+        "summary",
+        "content",
+        "category",
+        "authorId",
+        "authorName",
+        "coverPreset",
+        "pinned",
+        "published",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChurchSchedule": {
+      "title": "ChurchSchedule",
+      "description": "Jadwal ibadah dan kegiatan pelayanan SIB Toburon.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Nama kegiatan atau ibadah (3-140 karakter)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detail kegiatan dan catatan jemaat (1-1500 karakter)"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["IBADAH", "DOA", "PEMUDA", "SEKOLAH_MINGGU", "PERSEKUTUAN", "RAPAT"],
+          "description": "Kategori kegiatan"
+        },
+        "dateLabel": {
+          "type": "string",
+          "description": "Label tanggal atau hari (3-60 karakter)"
+        },
+        "timeLabel": {
+          "type": "string",
+          "description": "Label jam kegiatan (3-40 karakter)"
+        },
+        "location": {
+          "type": "string",
+          "description": "Lokasi kegiatan (2-120 karakter)"
+        },
+        "speaker": {
+          "type": "string",
+          "description": "Pengkhotbah atau koordinator (0-100 karakter)"
+        },
+        "sortOrder": {
+          "type": "integer",
+          "description": "Urutan kronologis YYYYMMDDHHmm atau angka urutan"
+        },
+        "recurring": {
+          "type": "boolean",
+          "description": "Penanda jadwal rutin mingguan"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Status publikasi jadwal ke seluruh jemaat"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID admin pembuat jadwal"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembuatan (FieldValue.serverTimestamp(), immutable)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "category",
+        "dateLabel",
+        "timeLabel",
+        "location",
+        "speaker",
+        "sortOrder",
+        "recurring",
+        "published",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GalleryPhoto": {
+      "title": "GalleryPhoto",
+      "description": "Foto dokumentasi kegiatan gereja pada galeri foto interaktif.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Judul foto (2-120 karakter)"
+        },
+        "caption": {
+          "type": "string",
+          "description": "Keterangan foto (0-600 karakter)"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["IBADAH", "PEMUDA", "SEKOLAH_MINGGU", "PELAYANAN", "UMUM"],
+          "description": "Kategori album galeri"
+        },
+        "eventDate": {
+          "type": "string",
+          "description": "Tanggal dokumentasi (2-50 karakter)"
+        },
+        "coverPreset": {
+          "type": "string",
+          "enum": ["SANCTUARY", "WORSHIP", "FELLOWSHIP", "CUSTOM"],
+          "description": "Gambar bawaan atau kustom"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL gambar HTTPS opsional (maks 1000 karakter)"
+        },
+        "imageBase64": {
+          "type": "string",
+          "description": "Gambar terkompresi Base64 opsional (maks 260000 karakter)"
+        },
+        "likesCount": {
+          "type": "integer",
+          "description": "Jumlah apresiasi jemaat"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Status publikasi foto ke galeri jemaat"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID admin pengunggah"
+        },
+        "photographerName": {
+          "type": "string",
+          "description": "Nama fotografer atau tim multimedia (1-80 karakter)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu unggah (FieldValue.serverTimestamp(), immutable)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "title",
+        "caption",
+        "category",
+        "eventDate",
+        "coverPreset",
+        "likesCount",
+        "published",
+        "authorId",
+        "photographerName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminMember": {
+      "title": "AdminMember",
+      "description": "Daftar UID pengurus gereja yang memiliki hak kelola konten buletin.",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Nama pengurus admin (1-80 karakter)"
+        },
+        "roleTitle": {
+          "type": "string",
+          "description": "Jabatan pelayanan (1-60 karakter)"
+        },
+        "addedBy": {
+          "type": "string",
+          "description": "UID admin yang menambahkan"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu penambahan (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["displayName", "roleTitle", "addedBy", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil pribadi jemaat SIB Toburon (terisolasi per pemilik akun).",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "Nama tampilan jemaat (1-80 karakter)"
+        },
+        "fellowshipGroup": {
+          "type": "string",
+          "enum": ["UMUM", "PEMUDA", "KAUM_IBU", "KAUM_BAPAK", "SEKOLAH_MINGGU", "PELAYAN"],
+          "description": "Kelompok persekutuan jemaat"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembuatan profil (FieldValue.serverTimestamp())"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan profil (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["displayName", "fellowshipGroup", "createdAt", "updatedAt"]
+    },
+    "UserBookmark": {
+      "title": "UserBookmark",
+      "description": "Berita atau jadwal yang disimpan oleh jemaat.",
+      "type": "object",
+      "properties": {
+        "itemId": {
+          "type": "string",
+          "description": "ID dokumen berita atau jadwal"
+        },
+        "itemType": {
+          "type": "string",
+          "enum": ["NEWS", "SCHEDULE"],
+          "description": "Tipe item tersimpan"
+        },
+        "title": {
+          "type": "string",
+          "description": "Judul ringkas item tersimpan (1-160 karakter)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu penyimpanan (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["itemId", "itemType", "title", "createdAt"]
+    },
+    "PhotoLike": {
+      "title": "PhotoLike",
+      "description": "Catatan apresiasi/suka jemaat terhadap foto galeri untuk sinkronisasi atomik.",
+      "type": "object",
+      "properties": {
+        "photoId": {
+          "type": "string",
+          "description": "ID foto galeri"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu menyukai foto (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["photoId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/news/{newsId}": {
+      "schema": { "$ref": "#/entities/NewsArticle" },
+      "description": "Koleksi berita terkini & warta jemaat SIB Toburon"
+    },
+    "/schedules/{scheduleId}": {
+      "schema": { "$ref": "#/entities/ChurchSchedule" },
+      "description": "Koleksi jadwal ibadah dan kegiatan gereja SIB Toburon"
+    },
+    "/gallery_photos/{photoId}": {
+      "schema": { "$ref": "#/entities/GalleryPhoto" },
+      "description": "Koleksi galeri foto interaktif gereja SIB Toburon"
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminMember" },
+      "description": "Daftar pengurus admin yang diizinkan mengelola buletin"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Profil pribadi masing-masing anggota jemaat"
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/UserBookmark" },
+      "description": "Daftar berita dan jadwal tersimpan milik jemaat"
+    },
+    "/users/{userId}/liked_photos/{photoId}": {
+      "schema": { "$ref": "#/entities/PhotoLike" },
+      "description": "Status apresiasi foto galeri milik jemaat"
+    }
+  }
+}

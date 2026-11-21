@@ -1,0 +1,340 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Pure token check (0 DB reads) for bootstrapped church admin with verified email
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        'email_verified' in request.auth.token &&
+        'email' in request.auth.token &&
+        request.auth.token.email_verified == true &&
+        (request.auth.token.email == 'Raxxon47@gmail.com' ||
+         request.auth.token.email == 'raxxon47@gmail.com');
+    }
+
+    // Full admin verification including delegated church admins in /admins/{uid}
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+
+    function isValidNewsArticle(data) {
+      return data.title is string && data.title.size() >= 3 && data.title.size() <= 160 &&
+        data.summary is string && data.summary.size() >= 5 && data.summary.size() <= 320 &&
+        data.content is string && data.content.size() >= 10 && data.content.size() <= 5000 &&
+        data.category in ['WARTA', 'PENGUMUMAN', 'RENUNGAN', 'PELAYANAN', 'PEMUDA'] &&
+        isValidId(data.authorId) &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+        data.coverPreset in ['SANCTUARY', 'WORSHIP', 'FELLOWSHIP', 'CUSTOM'] &&
+        data.pinned is bool &&
+        data.published is bool &&
+        (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
+        (!('imageBase64' in data) || data.imageBase64 == null || (data.imageBase64 is string && data.imageBase64.size() <= 260000)) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidChurchSchedule(data) {
+      return data.title is string && data.title.size() >= 3 && data.title.size() <= 140 &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 1500 &&
+        data.category in ['IBADAH', 'DOA', 'PEMUDA', 'SEKOLAH_MINGGU', 'PERSEKUTUAN', 'RAPAT'] &&
+        data.dateLabel is string && data.dateLabel.size() >= 3 && data.dateLabel.size() <= 60 &&
+        data.timeLabel is string && data.timeLabel.size() >= 3 && data.timeLabel.size() <= 40 &&
+        data.location is string && data.location.size() >= 2 && data.location.size() <= 120 &&
+        data.speaker is string && data.speaker.size() <= 100 &&
+        data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 9999999999999 &&
+        data.recurring is bool &&
+        data.published is bool &&
+        isValidId(data.authorId) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidGalleryPhoto(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        data.caption is string && data.caption.size() <= 600 &&
+        data.category in ['IBADAH', 'PEMUDA', 'SEKOLAH_MINGGU', 'PELAYANAN', 'UMUM'] &&
+        data.eventDate is string && data.eventDate.size() >= 2 && data.eventDate.size() <= 50 &&
+        data.coverPreset in ['SANCTUARY', 'WORSHIP', 'FELLOWSHIP', 'CUSTOM'] &&
+        data.likesCount is int && data.likesCount >= 0 && data.likesCount <= 1000000 &&
+        data.published is bool &&
+        isValidId(data.authorId) &&
+        data.photographerName is string && data.photographerName.size() >= 1 && data.photographerName.size() <= 80 &&
+        (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
+        (!('imageBase64' in data) || data.imageBase64 == null || (data.imageBase64 is string && data.imageBase64.size() <= 260000)) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAdminMember(data) {
+      return data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.roleTitle is string && data.roleTitle.size() >= 1 && data.roleTitle.size() <= 60 &&
+        isValidId(data.addedBy) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidUserProfile(data) {
+      return data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.fellowshipGroup in ['UMUM', 'PEMUDA', 'KAUM_IBU', 'KAUM_BAPAK', 'SEKOLAH_MINGGU', 'PELAYAN'] &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidUserBookmark(data) {
+      return isValidId(data.itemId) &&
+        data.itemType in ['NEWS', 'SCHEDULE'] &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidPhotoLike(data, expectedPhotoId) {
+      return isValidId(data.photoId) &&
+        data.photoId == expectedPhotoId &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 1. Berita Terkini (/news/{newsId})
+    match /news/{newsId} {
+      allow get: if isSignedIn() && isValidId(newsId) && (
+        existing().published == true ||
+        existing().authorId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Cost-optimized list check (no get/exists inside allow list)
+      allow list: if isSignedIn() && (
+        resource.data.published == true ||
+        resource.data.authorId == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(newsId) &&
+        isValidNewsArticle(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'summary', 'content', 'category', 'authorId', 'authorName',
+          'coverPreset', 'pinned', 'published', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'summary', 'content', 'category', 'authorId', 'authorName',
+          'coverPreset', 'pinned', 'published', 'imageUrl', 'imageBase64',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow update: if isSignedIn() &&
+        isValidId(newsId) &&
+        isValidNewsArticle(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'summary', 'content', 'category', 'authorName',
+          'coverPreset', 'pinned', 'published', 'imageUrl', 'imageBase64', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isSignedIn() && isValidId(newsId) && isAdmin();
+    }
+
+    // 2. Jadwal Kegiatan Gereja (/schedules/{scheduleId})
+    match /schedules/{scheduleId} {
+      allow get: if isSignedIn() && isValidId(scheduleId) && (
+        existing().published == true ||
+        existing().authorId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.published == true ||
+        resource.data.authorId == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(scheduleId) &&
+        isValidChurchSchedule(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'description', 'category', 'dateLabel', 'timeLabel',
+          'location', 'speaker', 'sortOrder', 'recurring', 'published',
+          'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'description', 'category', 'dateLabel', 'timeLabel',
+          'location', 'speaker', 'sortOrder', 'recurring', 'published',
+          'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow update: if isSignedIn() &&
+        isValidId(scheduleId) &&
+        isValidChurchSchedule(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'description', 'category', 'dateLabel', 'timeLabel',
+          'location', 'speaker', 'sortOrder', 'recurring', 'published', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isSignedIn() && isValidId(scheduleId) && isAdmin();
+    }
+
+    // 3. Galeri Foto Interaktif (/gallery_photos/{photoId})
+    match /gallery_photos/{photoId} {
+      allow get: if isSignedIn() && isValidId(photoId) && (
+        existing().published == true ||
+        existing().authorId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.published == true ||
+        resource.data.authorId == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(photoId) &&
+        isValidGalleryPhoto(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().likesCount == 0 &&
+        incoming().keys().hasAll([
+          'title', 'caption', 'category', 'eventDate', 'coverPreset',
+          'likesCount', 'published', 'authorId', 'photographerName',
+          'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'caption', 'category', 'eventDate', 'coverPreset',
+          'likesCount', 'published', 'authorId', 'photographerName',
+          'imageUrl', 'imageBase64', 'createdAt', 'updatedAt'
+        ]) &&
+        isAdmin();
+
+      // Action-Based Update: Admin metadata edit OR Jemaat atomic Like/Unlike
+      allow update: if isSignedIn() &&
+        isValidId(photoId) &&
+        isValidGalleryPhoto(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt && (
+          // Action 1: Admin content edit
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'caption', 'category', 'eventDate', 'coverPreset',
+            'published', 'photographerName', 'imageUrl', 'imageBase64', 'updatedAt'
+          ])) ||
+          // Action 2: Jemaat atomic like (+1) paired with /users/{uid}/liked_photos/{photoId}
+          (existing().published == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt']) &&
+            incoming().likesCount == existing().likesCount + 1 &&
+            existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/liked_photos/$(photoId))) ||
+          // Action 3: Jemaat atomic unlike (-1) paired with deleting /users/{uid}/liked_photos/{photoId}
+          (existing().published == true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt']) &&
+            incoming().likesCount == existing().likesCount - 1 &&
+            !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/liked_photos/$(photoId)))
+        );
+
+      allow delete: if isSignedIn() && isValidId(photoId) && isAdmin();
+    }
+
+    // 4. Daftar Admin Gereja (/admins/{adminUid})
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (
+        request.auth.uid == adminUid || isAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.addedBy == request.auth.uid || isBootstrappedAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(adminUid) &&
+        isValidAdminMember(incoming()) &&
+        incoming().addedBy == request.auth.uid &&
+        incoming().keys().hasAll(['displayName', 'roleTitle', 'addedBy', 'createdAt']) &&
+        incoming().keys().hasOnly(['displayName', 'roleTitle', 'addedBy', 'createdAt']) &&
+        isAdmin();
+
+      allow delete: if isSignedIn() && isValidId(adminUid) && isAdmin();
+    }
+
+    // 5. Profil Jemaat (/users/{userId}) - Strictly owner-isolated
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().keys().hasAll(['displayName', 'fellowshipGroup', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['displayName', 'fellowshipGroup', 'createdAt', 'updatedAt']);
+
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'fellowshipGroup', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // 6. Bookmark Jemaat (/users/{userId}/bookmarks/{bookmarkId})
+      match /bookmarks/{bookmarkId} {
+        allow list: if isOwner(userId);
+        allow get, delete: if isOwner(userId) && isValidId(bookmarkId);
+
+        allow create: if isOwner(userId) &&
+          isValidId(bookmarkId) &&
+          isValidUserBookmark(incoming()) &&
+          incoming().keys().hasAll(['itemId', 'itemType', 'title', 'createdAt']) &&
+          incoming().keys().hasOnly(['itemId', 'itemType', 'title', 'createdAt']);
+      }
+
+      // 7. Status Suka Foto (/users/{userId}/liked_photos/{photoId})
+      match /liked_photos/{photoId} {
+        allow list: if isOwner(userId);
+        allow get, delete: if isOwner(userId) && isValidId(photoId);
+
+        allow create: if isOwner(userId) &&
+          isValidId(photoId) &&
+          isValidPhotoLike(incoming(), photoId) &&
+          incoming().keys().hasAll(['photoId', 'createdAt']) &&
+          incoming().keys().hasOnly(['photoId', 'createdAt']) &&
+          exists(/databases/$(database)/documents/gallery_photos/$(photoId));
+      }
+    }
+  }
+}

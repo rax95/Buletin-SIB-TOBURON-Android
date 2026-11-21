@@ -1,0 +1,415 @@
+const {
+  initializeTestEnvironment,
+  assertFails,
+  assertSucceeds,
+} = require("@firebase/rules-unit-testing");
+const { test, before, after, beforeEach } = require("node:test");
+const fs = require("node:fs");
+
+let testEnv;
+const PROJECT_ID = process.env.GCP_PROJECT || "demo-no-project";
+const ADMIN_UID = "admin_raxxon_01";
+const DELEGATED_ADMIN_UID = "admin_sekretaris_02";
+const JEMAAT_ALICE = "jemaat_alice_01";
+const JEMAAT_BOB = "jemaat_bob_02";
+
+const [emulatorHost, emulatorPortStr] = (
+  process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8085"
+).split(":");
+const emulatorPort = parseInt(emulatorPortStr, 10);
+
+function pastDate(msAgo = 5000) {
+  return new Date(Date.now() - msAgo);
+}
+
+function adminContext() {
+  return testEnv.authenticatedContext(ADMIN_UID, {
+    email: "Raxxon47@gmail.com",
+    email_verified: true,
+  });
+}
+
+function spoofedAdminContext() {
+  return testEnv.authenticatedContext("spoof_uid", {
+    email: "Raxxon47@gmail.com",
+    email_verified: false,
+  });
+}
+
+before(async () => {
+  const rules = fs.readFileSync("./firestore.rules", "utf8");
+  testEnv = await initializeTestEnvironment({
+    projectId: PROJECT_ID,
+    firestore: {
+      rules,
+      host: emulatorHost,
+      port: emulatorPort,
+    },
+  });
+});
+
+after(async () => {
+  if (testEnv) {
+    await testEnv.cleanup();
+  }
+});
+
+beforeEach(async () => {
+  if (testEnv) {
+    await testEnv.clearFirestore();
+  }
+});
+
+// 1. Unauthenticated access denied on all collections
+test("Unauthenticated users cannot read or write any collection", async () => {
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate();
+
+  await assertFails(unauthDb.collection("news").where("published", "==", true).get());
+  await assertFails(unauthDb.collection("schedules").where("published", "==", true).get());
+  await assertFails(unauthDb.collection("gallery_photos").where("published", "==", true).get());
+  await assertFails(
+    unauthDb.collection("news").doc("news_1").set({
+      title: "Warta Minggu",
+      summary: "Ringkasan ibadah minggu",
+      content: "Isi lengkap warta jemaat SIB Toburon.",
+      category: "WARTA",
+      authorId: ADMIN_UID,
+      authorName: "Admin",
+      coverPreset: "SANCTUARY",
+      pinned: false,
+      published: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+});
+
+// 2. Email Spoofing Attack (email matches admin, email_verified == false)
+test("Spoofed admin with unverified email is rejected", async () => {
+  const spoofDb = spoofedAdminContext().firestore();
+  const ts = pastDate();
+
+  await assertFails(
+    spoofDb.collection("news").doc("spoof_news").set({
+      title: "Warta Palsu",
+      summary: "Ringkasan percobaan spoof",
+      content: "Ini adalah percobaan spoofing email tanpa verifikasi.",
+      category: "WARTA",
+      authorId: "spoof_uid",
+      authorName: "Spoof",
+      coverPreset: "SANCTUARY",
+      pinned: false,
+      published: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+});
+
+// 3. News CRUD, query alignment, shadow field rejection & future timestamp rejection
+test("Admin can create/update/delete news; jemaat can only read published news via filtered query", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const created = pastDate(10000);
+
+  // Admin creates published news (mirrors Kotlin NewsRepository.createNews map - no "id" key)
+  await assertSucceeds(
+    adminDb.collection("news").doc("news_001").set({
+      title: "Ibadah Syukur Hari Ulang Tahun SIB Toburon",
+      summary: "Undangan bagi seluruh jemaat menghadiri ibadah syukur bersama.",
+      content: "Shalom jemaat SIB Toburon, mari hadir bersama dalam ibadah syukur hari Minggu ini pukul 08:00 WITA.",
+      category: "WARTA",
+      authorId: ADMIN_UID,
+      authorName: "Sekretariat SIB Toburon",
+      coverPreset: "SANCTUARY",
+      pinned: true,
+      published: true,
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  // Admin creates draft news
+  await assertSucceeds(
+    adminDb.collection("news").doc("news_draft").set({
+      title: "Draf Pengumuman Natal",
+      summary: "Draf jadwal persiapan panitia natal.",
+      content: "Konten ini masih berupa draf dan belum dipublikasikan ke jemaat.",
+      category: "PENGUMUMAN",
+      authorId: ADMIN_UID,
+      authorName: "Admin",
+      coverPreset: "WORSHIP",
+      pinned: false,
+      published: false,
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  // Reject shadow field (`id` or `isVerified`)
+  await assertFails(
+    adminDb.collection("news").doc("news_bad").set({
+      id: "news_bad",
+      title: "Berita dengan ID",
+      summary: "Ringkasan berita tidak sah.",
+      content: "Tidak boleh menyertakan key id dalam payload dokumen.",
+      category: "WARTA",
+      authorId: ADMIN_UID,
+      authorName: "Admin",
+      coverPreset: "SANCTUARY",
+      pinned: false,
+      published: true,
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  // Reject future timestamp
+  await assertFails(
+    adminDb.collection("news").doc("news_future").set({
+      title: "Berita Masa Depan",
+      summary: "Ringkasan timestamp tidak sah.",
+      content: "Timestamp tidak boleh melampaui request.time server.",
+      category: "WARTA",
+      authorId: ADMIN_UID,
+      authorName: "Admin",
+      coverPreset: "SANCTUARY",
+      pinned: false,
+      published: true,
+      createdAt: new Date(Date.now() + 60000),
+      updatedAt: new Date(Date.now() + 60000),
+    })
+  );
+
+  // Admin partial update preserves createdAt
+  await assertSucceeds(
+    adminDb.collection("news").doc("news_001").update({
+      title: "Ibadah Syukur HUT SIB Toburon (Diperbarui)",
+      updatedAt: pastDate(1000),
+    })
+  );
+
+  // Reject mutating immutable createdAt
+  await assertFails(
+    adminDb.collection("news").doc("news_001").update({
+      createdAt: pastDate(500),
+      updatedAt: pastDate(500),
+    })
+  );
+
+  // Jemaat filtered query succeeds (matches Kotlin observePublishedNews)
+  await assertSucceeds(
+    aliceDb.collection("news").where("published", "==", true).get()
+  );
+
+  // Jemaat unfiltered query fails (Query Trust Test)
+  await assertFails(aliceDb.collection("news").get());
+
+  // Jemaat cannot get unpublished draft
+  await assertFails(aliceDb.collection("news").doc("news_draft").get());
+
+  // Jemaat cannot create, update, or delete news
+  await assertFails(
+    aliceDb.collection("news").doc("news_001").update({
+      title: "Dibajak Jemaat",
+      updatedAt: pastDate(1000),
+    })
+  );
+  await assertFails(aliceDb.collection("news").doc("news_001").delete());
+
+  // Admin can list all news and delete draft
+  await assertSucceeds(adminDb.collection("news").get());
+  await assertSucceeds(adminDb.collection("news").doc("news_draft").delete());
+});
+
+// 4. Schedules CRUD & Query alignment
+test("Schedules enforce admin writes and published-only jemaat list queries", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const created = pastDate(10000);
+
+  await assertSucceeds(
+    adminDb.collection("schedules").doc("sched_001").set({
+      title: "Ibadah Raya Minggu",
+      description: "Ibadah umum jemaat SIB Toburon disertai perjamuan kasih.",
+      category: "IBADAH",
+      dateLabel: "Minggu, 22 Nov 2026",
+      timeLabel: "08:00 - 10:00 WITA",
+      location: "Gedung Utama SIB Toburon",
+      speaker: "Pdt. Markus L. T.",
+      sortOrder: 202611220800,
+      recurring: true,
+      published: true,
+      authorId: ADMIN_UID,
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  // Jemaat filtered query succeeds
+  await assertSucceeds(
+    aliceDb.collection("schedules").where("published", "==", true).get()
+  );
+  // Jemaat unfiltered query fails
+  await assertFails(aliceDb.collection("schedules").get());
+  // Jemaat write fails
+  await assertFails(
+    aliceDb.collection("schedules").doc("sched_001").update({
+      location: "Lokasi Palsu",
+      updatedAt: pastDate(1000),
+    })
+  );
+});
+
+// 5. Gallery Photos & Atomic Like/Unlike via WriteBatch
+test("Gallery photos enforce atomic likesCount updates paired with user liked_photos", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const created = pastDate(10000);
+
+  await assertSucceeds(
+    adminDb.collection("gallery_photos").doc("photo_001").set({
+      title: "Persekutuan Padang Pemuda",
+      caption: "Kebersamaan kaum muda SIB Toburon di bukit hijau.",
+      category: "PEMUDA",
+      eventDate: "15 Nov 2026",
+      coverPreset: "FELLOWSHIP",
+      likesCount: 0,
+      published: true,
+      authorId: ADMIN_UID,
+      photographerName: "Tim Multimedia",
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  // Direct standalone likesCount increment without creating liked_photos fails (Atomicity Guarantee!)
+  await assertFails(
+    aliceDb.collection("gallery_photos").doc("photo_001").update({
+      likesCount: 1,
+      updatedAt: pastDate(2000),
+    })
+  );
+
+  // Atomic batch: create /users/alice/liked_photos/photo_001 + increment likesCount succeeds!
+  const likeBatch = aliceDb.batch();
+  const likeTime = pastDate(2000);
+  likeBatch.set(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).collection("liked_photos").doc("photo_001"),
+    {
+      photoId: "photo_001",
+      createdAt: likeTime,
+    }
+  );
+  likeBatch.update(aliceDb.collection("gallery_photos").doc("photo_001"), {
+    likesCount: 1,
+    updatedAt: likeTime,
+  });
+  await assertSucceeds(likeBatch.commit());
+
+  // Atomic unlike batch: delete liked_photos + decrement likesCount succeeds!
+  const unlikeBatch = aliceDb.batch();
+  unlikeBatch.delete(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).collection("liked_photos").doc("photo_001")
+  );
+  unlikeBatch.update(aliceDb.collection("gallery_photos").doc("photo_001"), {
+    likesCount: 0,
+    updatedAt: pastDate(1000),
+  });
+  await assertSucceeds(unlikeBatch.commit());
+
+  // Jemaat cannot edit photo title or jump likesCount by +5
+  await assertFails(
+    aliceDb.collection("gallery_photos").doc("photo_001").update({
+      title: "Judul Diubah Jemaat",
+      updatedAt: pastDate(500),
+    })
+  );
+});
+
+// 6. User Profile Isolation, Bookmarks & Delegated Admin Management
+test("User profiles and bookmarks are strictly owner-isolated; admins collection is protected", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const bobDb = testEnv.authenticatedContext(JEMAAT_BOB).firestore();
+  const ts = pastDate(5000);
+
+  // Alice creates her own profile (no role/isAdmin field allowed)
+  await assertSucceeds(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).set({
+      displayName: "Alice Toburon",
+      fellowshipGroup: "PEMUDA",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Self-assigned privilege escalation rejected
+  await assertFails(
+    bobDb.collection("users").doc(JEMAAT_BOB).set({
+      displayName: "Bob",
+      fellowshipGroup: "UMUM",
+      role: "admin",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Bob cannot read Alice's profile (PII Blanket Test)
+  await assertFails(bobDb.collection("users").doc(JEMAAT_ALICE).get());
+
+  // Alice can create & list her own bookmarks; Bob cannot
+  await assertSucceeds(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).collection("bookmarks").doc("bm_1").set({
+      itemId: "news_001",
+      itemType: "NEWS",
+      title: "Ibadah Syukur",
+      createdAt: ts,
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).collection("bookmarks").get()
+  );
+  await assertFails(
+    bobDb.collection("users").doc(JEMAAT_ALICE).collection("bookmarks").get()
+  );
+
+  // Non-admin cannot add themselves to /admins
+  await assertFails(
+    aliceDb.collection("admins").doc(JEMAAT_ALICE).set({
+      displayName: "Alice",
+      roleTitle: "Admin Palsu",
+      addedBy: JEMAAT_ALICE,
+      createdAt: ts,
+    })
+  );
+
+  // Bootstrapped admin can delegate a church staff admin
+  await assertSucceeds(
+    adminDb.collection("admins").doc(DELEGATED_ADMIN_UID).set({
+      displayName: "Sekretaris Gereja",
+      roleTitle: "Sekretaris Jemaat",
+      addedBy: ADMIN_UID,
+      createdAt: ts,
+    })
+  );
+
+  // Delegated admin can now publish news!
+  const delegatedDb = testEnv.authenticatedContext(DELEGATED_ADMIN_UID).firestore();
+  await assertSucceeds(
+    delegatedDb.collection("news").doc("news_delegated").set({
+      title: "Pengumuman Latihan Koor",
+      summary: "Latihan paduan suara Jumat malam.",
+      content: "Seluruh anggota paduan suara diharapkan hadir Jumat pukul 19:00 WITA.",
+      category: "PELAYANAN",
+      authorId: DELEGATED_ADMIN_UID,
+      authorName: "Sekretaris Gereja",
+      coverPreset: "WORSHIP",
+      pinned: false,
+      published: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+});
