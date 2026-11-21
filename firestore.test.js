@@ -60,27 +60,110 @@ beforeEach(async () => {
   }
 });
 
-// 1. Unauthenticated access denied on all collections
-test("Unauthenticated users cannot read or write any collection", async () => {
+// 1. Guest (unauthenticated) read-only access to published bulletin items; drafts, private collections, unfiltered queries & all writes denied
+test("Guest users can read published bulletin items only; drafts, private data, unfiltered queries, and all writes are denied", async () => {
+  const adminDb = adminContext().firestore();
   const unauthDb = testEnv.unauthenticatedContext().firestore();
-  const ts = pastDate();
+  const ts = pastDate(10000);
 
-  await assertFails(unauthDb.collection("news").where("published", "==", true).get());
-  await assertFails(unauthDb.collection("schedules").where("published", "==", true).get());
-  await assertFails(unauthDb.collection("gallery_photos").where("published", "==", true).get());
-  await assertFails(
-    unauthDb.collection("news").doc("news_1").set({
-      title: "Warta Minggu",
-      summary: "Ringkasan ibadah minggu",
-      content: "Isi lengkap warta jemaat SIB Toburon.",
+  // Seed one published news, one draft news, one published schedule, one published photo
+  await assertSucceeds(
+    adminDb.collection("news").doc("pub_news").set({
+      title: "Warta Minggu Terbuka",
+      summary: "Ringkasan ibadah minggu untuk tamu & jemaat.",
+      content: "Isi lengkap warta jemaat SIB Toburon yang dipublikasikan.",
+      category: "WARTA",
+      authorId: ADMIN_UID,
+      authorName: "Admin",
+      coverPreset: "SANCTUARY",
+      pinned: true,
+      published: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("news").doc("draft_news").set({
+      title: "Draf Internal",
+      summary: "Draf belum dipublikasikan.",
+      content: "Tamu tidak boleh dapat membaca draf internal gereja.",
       category: "WARTA",
       authorId: ADMIN_UID,
       authorName: "Admin",
       coverPreset: "SANCTUARY",
       pinned: false,
+      published: false,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("schedules").doc("pub_sched").set({
+      title: "Ibadah Raya Minggu",
+      description: "Ibadah umum SIB Toburon.",
+      category: "IBADAH",
+      dateLabel: "Setiap Minggu",
+      timeLabel: "08:00 - 10:00 WITA",
+      location: "Gedung Utama SIB Toburon",
+      speaker: "Pdt. Markus",
+      sortOrder: 100,
+      recurring: true,
+      published: true,
+      authorId: ADMIN_UID,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("gallery_photos").doc("pub_photo").set({
+      title: "Foto Ibadah",
+      caption: "Dokumentasi ibadah minggu.",
+      category: "IBADAH",
+      eventDate: "Nov 2026",
+      coverPreset: "WORSHIP",
+      likesCount: 0,
+      published: true,
+      authorId: ADMIN_UID,
+      photographerName: "Multimedia",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Guest CAN read published items via filtered queries & direct get
+  await assertSucceeds(unauthDb.collection("news").where("published", "==", true).get());
+  await assertSucceeds(unauthDb.collection("news").doc("pub_news").get());
+  await assertSucceeds(unauthDb.collection("schedules").where("published", "==", true).get());
+  await assertSucceeds(unauthDb.collection("gallery_photos").where("published", "==", true).get());
+
+  // Guest CANNOT run unfiltered queries or read drafts or private user/admin collections
+  await assertFails(unauthDb.collection("news").get());
+  await assertFails(unauthDb.collection("schedules").get());
+  await assertFails(unauthDb.collection("gallery_photos").get());
+  await assertFails(unauthDb.collection("news").doc("draft_news").get());
+  await assertFails(unauthDb.collection("users").doc(JEMAAT_ALICE).get());
+  await assertFails(unauthDb.collection("admins").doc(ADMIN_UID).get());
+
+  // Guest CANNOT create, update, or delete any document
+  await assertFails(
+    unauthDb.collection("news").doc("guest_write").set({
+      title: "Warta Tamu",
+      summary: "Percobaan tulis tamu.",
+      content: "Tamu tidak diizinkan menulis ke Firestore.",
+      category: "WARTA",
+      authorId: "guest",
+      authorName: "Tamu",
+      coverPreset: "SANCTUARY",
+      pinned: false,
       published: true,
       createdAt: ts,
       updatedAt: ts,
+    })
+  );
+  await assertFails(
+    unauthDb.collection("gallery_photos").doc("pub_photo").update({
+      likesCount: 1,
+      updatedAt: pastDate(1000),
     })
   );
 });
@@ -413,3 +496,120 @@ test("User profiles and bookmarks are strictly owner-isolated; admins collection
     })
   );
 });
+
+// 7. FCM Notification Events Outbox & Owner-Isolated FCM Token Storage
+test("FCM notification_events enforces admin creation & filtered reads; fcm_tokens are strictly owner-isolated", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const bobDb = testEnv.authenticatedContext(JEMAAT_BOB).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(3000);
+
+  // Admin atomically publishes news + notification_event (mirrors Kotlin createNews WriteBatch)
+  const publishBatch = adminDb.batch();
+  publishBatch.set(adminDb.collection("news").doc("news_push_01"), {
+    title: "Warta Khusus Akhir Bulan",
+    summary: "Ibadah syukur keluarga diadakan hari Minggu pukul 08:00 WITA.",
+    content: "Seluruh jemaat SIB Toburon diundang menghadiri ibadah syukur akhir bulan.",
+    category: "WARTA",
+    authorId: ADMIN_UID,
+    authorName: "Sekretariat SIB Toburon",
+    coverPreset: "SANCTUARY",
+    pinned: false,
+    published: true,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  publishBatch.set(adminDb.collection("notification_events").doc("notif_01"), {
+    title: "Berita Baru: Warta Khusus Akhir Bulan",
+    body: "Ibadah syukur keluarga diadakan hari Minggu pukul 08:00 WITA.",
+    eventType: "NEWS",
+    targetId: "news_push_01",
+    topic: "sib_toburon_news",
+    published: true,
+    authorId: ADMIN_UID,
+    createdAt: ts,
+  });
+  await assertSucceeds(publishBatch.commit());
+
+  // Guest and Jemaat can read published notification_events via filtered query
+  await assertSucceeds(
+    guestDb.collection("notification_events").where("published", "==", true).get()
+  );
+  await assertSucceeds(
+    aliceDb.collection("notification_events").where("published", "==", true).get()
+  );
+
+  // Guest and Jemaat CANNOT run unfiltered list query on notification_events
+  await assertFails(guestDb.collection("notification_events").get());
+  await assertFails(aliceDb.collection("notification_events").get());
+
+  // Non-admin and Guest CANNOT create or delete notification_events
+  await assertFails(
+    aliceDb.collection("notification_events").doc("notif_fake").set({
+      title: "Notifikasi Palsu",
+      body: "Jemaat tidak boleh menyiarkan notifikasi.",
+      eventType: "NEWS",
+      targetId: "news_push_01",
+      topic: "sib_toburon_news",
+      published: true,
+      authorId: JEMAAT_ALICE,
+      createdAt: ts,
+    })
+  );
+  await assertFails(aliceDb.collection("notification_events").doc("notif_01").delete());
+  await assertFails(guestDb.collection("notification_events").doc("notif_01").delete());
+
+  // Admin CAN delete notification_events
+  await assertSucceeds(adminDb.collection("notification_events").doc("notif_01").delete());
+
+  // Owner (Alice) can save, update, list, and delete her own FCM token record
+  const aliceTokenRef = aliceDb
+    .collection("users")
+    .doc(JEMAAT_ALICE)
+    .collection("fcm_tokens")
+    .doc("token_abc123");
+
+  await assertSucceeds(
+    aliceTokenRef.set({
+      token: "fcm_device_token_example_1234567890",
+      newsEnabled: true,
+      schedulesEnabled: true,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    aliceTokenRef.set({
+      token: "fcm_device_token_example_1234567890",
+      newsEnabled: true,
+      schedulesEnabled: false,
+      updatedAt: pastDate(1000),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).collection("fcm_tokens").get()
+  );
+
+  // Cross-user (Bob) and Guest CANNOT read or write Alice's FCM tokens
+  await assertFails(
+    bobDb.collection("users").doc(JEMAAT_ALICE).collection("fcm_tokens").doc("token_abc123").get()
+  );
+  await assertFails(
+    bobDb.collection("users").doc(JEMAAT_ALICE).collection("fcm_tokens").get()
+  );
+  await assertFails(
+    bobDb.collection("users").doc(JEMAAT_ALICE).collection("fcm_tokens").doc("token_hijack").set({
+      token: "fcm_hijack_token_0987654321",
+      newsEnabled: true,
+      schedulesEnabled: true,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(
+    guestDb.collection("users").doc(JEMAAT_ALICE).collection("fcm_tokens").doc("token_abc123").get()
+  );
+
+  // Owner can delete her token
+  await assertSucceeds(aliceTokenRef.delete());
+});
+

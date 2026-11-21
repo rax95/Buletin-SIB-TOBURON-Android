@@ -2,6 +2,7 @@ package com.example.data
 
 import android.content.Context
 import com.example.R
+import com.example.notifications.BulletinNotificationManager
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -45,8 +46,8 @@ class BulletinRepository(
 
     // --- REAL-TIME STREAMS (snapshots() with ESTIMATE) ---
 
-    fun observeAdminAccess(uid: String, email: String?, emailVerified: Boolean): Flow<Boolean> {
-        if (uid.isBlank()) return flowOf(false)
+    fun observeAdminAccess(uid: String?, email: String?, emailVerified: Boolean): Flow<Boolean> {
+        if (uid.isNullOrBlank()) return flowOf(false)
         if (isBootstrappedAdminEmail(email, emailVerified)) return flowOf(true)
         val path = "admins/$uid"
         return db.collection("admins").document(uid)
@@ -62,19 +63,15 @@ class BulletinRepository(
             }
     }
 
-    fun observeNews(uid: String, isAdmin: Boolean, isBootstrappedAdmin: Boolean): Flow<List<NewsArticle>> = flow {
-        if (uid.isBlank()) {
-            emit(emptyList())
-            return@flow
-        }
+    fun observeNews(uid: String?, isAdmin: Boolean, isBootstrappedAdmin: Boolean): Flow<List<NewsArticle>> = flow {
         val path = "news"
         val sourceFlow: Flow<List<NewsArticle>> = when {
-            isAdmin && isBootstrappedAdmin -> {
+            !uid.isNullOrBlank() && isAdmin && isBootstrappedAdmin -> {
                 db.collection("news").snapshots().map { snapshot ->
                     snapshot.toObjects(NewsArticle::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
             }
-            isAdmin -> {
+            !uid.isNullOrBlank() && isAdmin -> {
                 val publishedFlow = db.collection("news").whereEqualTo("published", true).snapshots().map {
                     it.toObjects(NewsArticle::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
@@ -86,6 +83,7 @@ class BulletinRepository(
                 }
             }
             else -> {
+                // Guest or standard Jemaat: strictly filtered to published == true
                 db.collection("news").whereEqualTo("published", true).snapshots().map { snapshot ->
                     snapshot.toObjects(NewsArticle::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
@@ -106,19 +104,15 @@ class BulletinRepository(
         )
     }
 
-    fun observeSchedules(uid: String, isAdmin: Boolean, isBootstrappedAdmin: Boolean): Flow<List<ChurchSchedule>> = flow {
-        if (uid.isBlank()) {
-            emit(emptyList())
-            return@flow
-        }
+    fun observeSchedules(uid: String?, isAdmin: Boolean, isBootstrappedAdmin: Boolean): Flow<List<ChurchSchedule>> = flow {
         val path = "schedules"
         val sourceFlow: Flow<List<ChurchSchedule>> = when {
-            isAdmin && isBootstrappedAdmin -> {
+            !uid.isNullOrBlank() && isAdmin && isBootstrappedAdmin -> {
                 db.collection("schedules").snapshots().map { snapshot ->
                     snapshot.toObjects(ChurchSchedule::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
             }
-            isAdmin -> {
+            !uid.isNullOrBlank() && isAdmin -> {
                 val publishedFlow = db.collection("schedules").whereEqualTo("published", true).snapshots().map {
                     it.toObjects(ChurchSchedule::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
@@ -150,19 +144,15 @@ class BulletinRepository(
         )
     }
 
-    fun observeGallery(uid: String, isAdmin: Boolean, isBootstrappedAdmin: Boolean): Flow<List<GalleryPhoto>> = flow {
-        if (uid.isBlank()) {
-            emit(emptyList())
-            return@flow
-        }
+    fun observeGallery(uid: String?, isAdmin: Boolean, isBootstrappedAdmin: Boolean): Flow<List<GalleryPhoto>> = flow {
         val path = "gallery_photos"
         val sourceFlow: Flow<List<GalleryPhoto>> = when {
-            isAdmin && isBootstrappedAdmin -> {
+            !uid.isNullOrBlank() && isAdmin && isBootstrappedAdmin -> {
                 db.collection("gallery_photos").snapshots().map { snapshot ->
                     snapshot.toObjects(GalleryPhoto::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
             }
-            isAdmin -> {
+            !uid.isNullOrBlank() && isAdmin -> {
                 val publishedFlow = db.collection("gallery_photos").whereEqualTo("published", true).snapshots().map {
                     it.toObjects(GalleryPhoto::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
                 }
@@ -191,8 +181,8 @@ class BulletinRepository(
         )
     }
 
-    fun observeUserBookmarks(uid: String): Flow<List<UserBookmark>> = flow {
-        if (uid.isBlank()) {
+    fun observeUserBookmarks(uid: String?): Flow<List<UserBookmark>> = flow {
+        if (uid.isNullOrBlank()) {
             emit(emptyList())
             return@flow
         }
@@ -211,8 +201,8 @@ class BulletinRepository(
         )
     }
 
-    fun observeLikedPhotoIds(uid: String): Flow<Set<String>> = flow {
-        if (uid.isBlank()) {
+    fun observeLikedPhotoIds(uid: String?): Flow<Set<String>> = flow {
+        if (uid.isNullOrBlank()) {
             emit(emptySet())
             return@flow
         }
@@ -230,8 +220,8 @@ class BulletinRepository(
         )
     }
 
-    fun observeUserProfile(uid: String): Flow<UserProfile?> = flow {
-        if (uid.isBlank()) {
+    fun observeUserProfile(uid: String?): Flow<UserProfile?> = flow {
+        if (uid.isNullOrBlank()) {
             emit(null)
             return@flow
         }
@@ -251,8 +241,8 @@ class BulletinRepository(
         )
     }
 
-    fun observeAdminMembers(uid: String, isBootstrappedAdmin: Boolean): Flow<List<AdminMember>> = flow {
-        if (uid.isBlank()) {
+    fun observeAdminMembers(uid: String?, isBootstrappedAdmin: Boolean): Flow<List<AdminMember>> = flow {
+        if (uid.isNullOrBlank()) {
             emit(emptyList())
             return@flow
         }
@@ -272,6 +262,80 @@ class BulletinRepository(
                     logStreamErrorIfActive(uid, error, OperationType.LIST, path)
                     throw error
                 }
+        )
+    }
+
+    fun observeNotificationEvents(uid: String?): Flow<List<NotificationEvent>> = flow {
+        val path = "notification_events"
+        emitAll(
+            db.collection("notification_events")
+                .whereEqualTo("published", true)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(
+                        NotificationEvent::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    ).sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
+                }
+                .catch { error ->
+                    logStreamErrorIfActive(uid, error, OperationType.LIST, path)
+                    throw error
+                }
+        )
+    }
+
+    suspend fun saveFcmToken(
+        token: String,
+        newsEnabled: Boolean,
+        schedulesEnabled: Boolean
+    ): Result<Unit> {
+        var docPath = "users/fcm_tokens"
+        return try {
+            val uid = requireUserId()
+            val cleanToken = token.trim()
+            require(cleanToken.length in 10..512) { "Token FCM tidak valid." }
+            val tokenDocId = BulletinNotificationManager.buildTokenDocId(cleanToken)
+            val docRef = db.collection("users")
+                .document(uid)
+                .collection("fcm_tokens")
+                .document(tokenDocId)
+            docPath = docRef.path
+            docRef.set(
+                mapOf(
+                    "token" to cleanToken,
+                    "newsEnabled" to newsEnabled,
+                    "schedulesEnabled" to schedulesEnabled,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    private fun buildNotificationEventPayload(
+        title: String,
+        body: String,
+        eventType: String,
+        targetId: String,
+        topic: String,
+        authorId: String
+    ): Map<String, Any> {
+        val safeTitle = title.trim().take(160).let { if (it.length < 2) "Buletin SIB Toburon" else it }
+        val safeBody = body.trim().take(320).let { if (it.length < 2) "Pembaruan terbaru tersedia." else it }
+        return mapOf(
+            "title" to safeTitle,
+            "body" to safeBody,
+            "eventType" to eventType,
+            "targetId" to targetId,
+            "topic" to topic,
+            "published" to true,
+            "authorId" to authorId,
+            "createdAt" to FieldValue.serverTimestamp()
         )
     }
 
@@ -323,7 +387,25 @@ class BulletinRepository(
                 "updatedAt" to FieldValue.serverTimestamp()
             ).filterValues { it != null }
 
-            docRef.set(payload).await()
+            if (published) {
+                val batch = db.batch()
+                val notifRef = db.collection("notification_events").document()
+                batch.set(docRef, payload)
+                batch.set(
+                    notifRef,
+                    buildNotificationEventPayload(
+                        title = "Berita Baru: $cleanTitle",
+                        body = cleanSummary,
+                        eventType = BulletinNotificationManager.TYPE_NEWS,
+                        targetId = docRef.id,
+                        topic = BulletinNotificationManager.TOPIC_NEWS,
+                        authorId = uid
+                    )
+                )
+                batch.commit().await()
+            } else {
+                docRef.set(payload).await()
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -344,11 +426,12 @@ class BulletinRepository(
         imageUrl: String?,
         imageBase64: String?,
         pinned: Boolean,
-        published: Boolean
+        published: Boolean,
+        notifyOnPublish: Boolean = false
     ): Result<Unit> {
         val docPath = "news/$newsId"
         return try {
-            requireUserId()
+            val uid = requireUserId()
             require(newsId.isNotBlank()) { "ID berita tidak valid." }
             val cleanTitle = title.trim()
             val cleanSummary = summary.trim()
@@ -376,7 +459,26 @@ class BulletinRepository(
                 "published" to published,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            db.collection("news").document(newsId).update(updates).await()
+            val docRef = db.collection("news").document(newsId)
+            if (published && notifyOnPublish) {
+                val batch = db.batch()
+                val notifRef = db.collection("notification_events").document()
+                batch.update(docRef, updates)
+                batch.set(
+                    notifRef,
+                    buildNotificationEventPayload(
+                        title = "Berita Baru: $cleanTitle",
+                        body = cleanSummary,
+                        eventType = BulletinNotificationManager.TYPE_NEWS,
+                        targetId = newsId,
+                        topic = BulletinNotificationManager.TOPIC_NEWS,
+                        authorId = uid
+                    )
+                )
+                batch.commit().await()
+            } else {
+                docRef.update(updates).await()
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -450,7 +552,25 @@ class BulletinRepository(
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            docRef.set(payload).await()
+            if (published) {
+                val batch = db.batch()
+                val notifRef = db.collection("notification_events").document()
+                batch.set(docRef, payload)
+                batch.set(
+                    notifRef,
+                    buildNotificationEventPayload(
+                        title = "Jadwal Baru: $cleanTitle",
+                        body = "$cleanDate • $cleanTime — $cleanLocation",
+                        eventType = BulletinNotificationManager.TYPE_SCHEDULE,
+                        targetId = docRef.id,
+                        topic = BulletinNotificationManager.TOPIC_SCHEDULES,
+                        authorId = uid
+                    )
+                )
+                batch.commit().await()
+            } else {
+                docRef.set(payload).await()
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -471,11 +591,12 @@ class BulletinRepository(
         speaker: String,
         sortOrder: Long,
         recurring: Boolean,
-        published: Boolean
+        published: Boolean,
+        notifyOnPublish: Boolean = false
     ): Result<Unit> {
         val docPath = "schedules/$scheduleId"
         return try {
-            requireUserId()
+            val uid = requireUserId()
             require(scheduleId.isNotBlank()) { "ID jadwal tidak valid." }
             val cleanTitle = title.trim()
             val cleanDesc = description.trim()
@@ -505,7 +626,26 @@ class BulletinRepository(
                 "published" to published,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            db.collection("schedules").document(scheduleId).update(updates).await()
+            val docRef = db.collection("schedules").document(scheduleId)
+            if (published && notifyOnPublish) {
+                val batch = db.batch()
+                val notifRef = db.collection("notification_events").document()
+                batch.update(docRef, updates)
+                batch.set(
+                    notifRef,
+                    buildNotificationEventPayload(
+                        title = "Jadwal Baru: $cleanTitle",
+                        body = "$cleanDate • $cleanTime — $cleanLocation",
+                        eventType = BulletinNotificationManager.TYPE_SCHEDULE,
+                        targetId = scheduleId,
+                        topic = BulletinNotificationManager.TOPIC_SCHEDULES,
+                        authorId = uid
+                    )
+                )
+                batch.commit().await()
+            } else {
+                docRef.update(updates).await()
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -997,7 +1137,7 @@ class BulletinRepository(
             .firstOrNull()
 
     private fun logStreamErrorIfActive(
-        uid: String,
+        uid: String?,
         error: Throwable,
         op: OperationType,
         path: String
@@ -1005,7 +1145,7 @@ class BulletinRepository(
         val firestoreError = unwrapFirestoreException(error)
         if (firestoreError == null && error is CancellationException) throw error
         val exceptionToLog = firestoreError ?: (error as? Exception)
-        if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+        if (exceptionToLog != null && (uid == null || auth.currentUser?.uid == uid)) {
             handleFirestoreError(exceptionToLog, op, path)
         }
     }

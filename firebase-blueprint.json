@@ -323,6 +323,74 @@
         }
       },
       "required": ["photoId", "createdAt"]
+    },
+    "NotificationEvent": {
+      "title": "NotificationEvent",
+      "description": "Antrean/catatan notifikasi push FCM setiap kali admin menerbitkan berita atau jadwal baru.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Judul notifikasi (2-160 karakter)"
+        },
+        "body": {
+          "type": "string",
+          "description": "Ringkasan isi notifikasi (2-320 karakter)"
+        },
+        "eventType": {
+          "type": "string",
+          "enum": ["NEWS", "SCHEDULE"],
+          "description": "Jenis konten yang diterbitkan"
+        },
+        "targetId": {
+          "type": "string",
+          "description": "ID dokumen berita atau jadwal tujuan deep-link"
+        },
+        "topic": {
+          "type": "string",
+          "enum": ["sib_toburon_news", "sib_toburon_schedules"],
+          "description": "Topik FCM tujuan siaran jemaat"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Harus true agar dapat diterima jemaat secara real-time"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID admin yang menerbitkan konten"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu penerbitan notifikasi (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["title", "body", "eventType", "targetId", "topic", "published", "authorId", "createdAt"]
+    },
+    "FcmTokenRecord": {
+      "title": "FcmTokenRecord",
+      "description": "Token perangkat FCM dan preferensi notifikasi pribadi jemaat (terisolasi per pemilik akun).",
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "Registration token Firebase Cloud Messaging perangkat (10-512 karakter)"
+        },
+        "newsEnabled": {
+          "type": "boolean",
+          "description": "Status langganan notifikasi Berita Terkini"
+        },
+        "schedulesEnabled": {
+          "type": "boolean",
+          "description": "Status langganan notifikasi Jadwal Kegiatan Gereja"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan token terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["token", "newsEnabled", "schedulesEnabled", "updatedAt"]
     }
   },
   "firestore": {
@@ -353,6 +421,14 @@
     "/users/{userId}/liked_photos/{photoId}": {
       "schema": { "$ref": "#/entities/PhotoLike" },
       "description": "Status apresiasi foto galeri milik jemaat"
+    },
+    "/users/{userId}/fcm_tokens/{tokenId}": {
+      "schema": { "$ref": "#/entities/FcmTokenRecord" },
+      "description": "Token perangkat FCM dan preferensi notifikasi milik jemaat"
+    },
+    "/notification_events/{eventId}": {
+      "schema": { "$ref": "#/entities/NotificationEvent" },
+      "description": "Catatan & outbox notifikasi push real-time untuk berita dan jadwal baru"
     }
   }
 }

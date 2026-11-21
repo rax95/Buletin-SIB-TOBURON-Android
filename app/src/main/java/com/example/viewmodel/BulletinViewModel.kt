@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AdminMember
+import com.example.data.BulletinAlert
 import com.example.data.BulletinRepository
 import com.example.data.ChurchSchedule
 import com.example.data.CoverPreset
@@ -36,20 +37,60 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class BulletinViewModel(
     private val repository: BulletinRepository,
-    val currentUserId: String,
+    val currentUserId: String?,
     val userEmail: String?,
     val userDisplayName: String?,
     val emailVerified: Boolean
 ) : ViewModel() {
 
+    val isGuest: Boolean = currentUserId.isNullOrBlank()
+
     val isBootstrappedAdmin: Boolean =
-        emailVerified && userEmail?.equals(BulletinRepository.BOOTSTRAPPED_ADMIN_EMAIL, ignoreCase = true) == true
+        !isGuest && emailVerified && userEmail?.equals(BulletinRepository.BOOTSTRAPPED_ADMIN_EMAIL, ignoreCase = true) == true
 
     private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
 
     private val _snackbarMessage = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val snackbarMessage: SharedFlow<String> = _snackbarMessage.asSharedFlow()
+
+    private val _liveAlerts = MutableSharedFlow<BulletinAlert>(extraBufferCapacity = 8)
+    val liveAlerts: SharedFlow<BulletinAlert> = _liveAlerts.asSharedFlow()
+
+    private val seenNotificationEventIds = mutableSetOf<String>()
+    private var notificationStreamHydrated = false
+
+    init {
+        viewModelScope.launch {
+            repository.observeNotificationEvents(currentUserId)
+                .catch { error ->
+                    unwrapOrRethrow("notification_events", error)
+                }
+                .collect { events ->
+                    if (!notificationStreamHydrated) {
+                        seenNotificationEventIds.addAll(events.map { it.id })
+                        notificationStreamHydrated = true
+                    } else {
+                        val newlyPublished = events.filter { it.id.isNotBlank() && seenNotificationEventIds.add(it.id) }
+                        newlyPublished.forEach { event ->
+                            // Skip pinging the publishing admin's own active device
+                            if (currentUserId == null || event.authorId != currentUserId) {
+                                _liveAlerts.tryEmit(
+                                    BulletinAlert(
+                                        eventId = event.id,
+                                        type = event.eventType,
+                                        itemId = event.targetId,
+                                        title = event.title,
+                                        body = event.body,
+                                        authorId = event.authorId
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+        }
+    }
 
     // Search & filter UI states
     private val _newsSearchQuery = MutableStateFlow("")
@@ -214,8 +255,17 @@ class BulletinViewModel(
         published: Boolean,
         onComplete: () -> Unit = {}
     ) {
+        val previouslyDraft = existingId != null &&
+            (newsState.value as? UiState.Success)?.data
+                ?.firstOrNull { it.id == existingId }?.published == false
+        val willNotify = published && (existingId == null || previouslyDraft)
+        val message = when {
+            willNotify -> "Berita dipublikasikan & notifikasi dikirim ke jemaat."
+            existingId == null -> "Draf berita berhasil disimpan."
+            else -> "Berita berhasil diperbarui."
+        }
         runMutation(
-            successMessage = if (existingId == null) "Berita berhasil dipublikasikan secara real-time." else "Berita berhasil diperbarui.",
+            successMessage = message,
             onComplete = onComplete
         ) {
             if (existingId == null) {
@@ -226,7 +276,8 @@ class BulletinViewModel(
             } else {
                 repository.updateNews(
                     existingId, title, summary, content, category, authorName,
-                    coverPreset, imageUrl, imageBase64, pinned, published
+                    coverPreset, imageUrl, imageBase64, pinned, published,
+                    notifyOnPublish = previouslyDraft && published
                 )
             }
         }
@@ -252,8 +303,17 @@ class BulletinViewModel(
         published: Boolean,
         onComplete: () -> Unit = {}
     ) {
+        val previouslyDraft = existingId != null &&
+            (schedulesState.value as? UiState.Success)?.data
+                ?.firstOrNull { it.id == existingId }?.published == false
+        val willNotify = published && (existingId == null || previouslyDraft)
+        val message = when {
+            willNotify -> "Jadwal dipublikasikan & notifikasi dikirim ke jemaat."
+            existingId == null -> "Draf jadwal kegiatan berhasil disimpan."
+            else -> "Jadwal kegiatan berhasil diperbarui."
+        }
         runMutation(
-            successMessage = if (existingId == null) "Jadwal kegiatan berhasil ditambahkan." else "Jadwal kegiatan berhasil diperbarui.",
+            successMessage = message,
             onComplete = onComplete
         ) {
             if (existingId == null) {
@@ -264,7 +324,8 @@ class BulletinViewModel(
             } else {
                 repository.updateSchedule(
                     existingId, title, description, category, dateLabel, timeLabel,
-                    location, speaker, sortOrder, recurring, published
+                    location, speaker, sortOrder, recurring, published,
+                    notifyOnPublish = previouslyDraft && published
                 )
             }
         }
@@ -314,6 +375,10 @@ class BulletinViewModel(
     }
 
     fun togglePhotoLike(photoId: String) {
+        if (isGuest) {
+            _snackbarMessage.tryEmit("Masuk dengan akun Google di tab Akun untuk memberi apresiasi foto.")
+            return
+        }
         val alreadyLiked = likedPhotoIds.value.contains(photoId)
         viewModelScope.launch {
             val result = repository.togglePhotoLike(photoId, alreadyLiked)
@@ -324,6 +389,10 @@ class BulletinViewModel(
     }
 
     fun toggleBookmark(itemId: String, itemType: String, title: String) {
+        if (isGuest) {
+            _snackbarMessage.tryEmit("Masuk dengan akun Google di tab Akun untuk menyimpan warta & jadwal.")
+            return
+        }
         val alreadyBookmarked = bookmarks.value.any { it.itemId == itemId && it.itemType == itemType }
         viewModelScope.launch {
             val result = repository.toggleBookmark(itemId, itemType, title, alreadyBookmarked)
@@ -359,6 +428,16 @@ class BulletinViewModel(
     fun seedStarterData() {
         runMutation("Konten awal Buletin SIB Toburon berhasil dimuat dan disinkronkan!") {
             repository.seedStarterBulletinData(userDisplayName ?: "Sekretariat SIB Toburon")
+        }
+    }
+
+    fun syncFcmToken(token: String, newsEnabled: Boolean, schedulesEnabled: Boolean) {
+        if (isGuest || token.isBlank()) return
+        viewModelScope.launch {
+            repository.saveFcmToken(token, newsEnabled, schedulesEnabled)
+                .onFailure { err ->
+                    Log.w(TAG, "Sinkronisasi token FCM gagal: ${err.message}")
+                }
         }
     }
 

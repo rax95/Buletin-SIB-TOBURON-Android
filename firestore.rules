@@ -125,21 +125,39 @@ service cloud.firestore {
         isValidTimestamp(data.createdAt);
     }
 
+    function isValidNotificationEvent(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 160 &&
+        data.body is string && data.body.size() >= 2 && data.body.size() <= 320 &&
+        data.eventType in ['NEWS', 'SCHEDULE'] &&
+        isValidId(data.targetId) &&
+        data.topic in ['sib_toburon_news', 'sib_toburon_schedules'] &&
+        data.published is bool &&
+        isValidId(data.authorId) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidFcmToken(data) {
+      return data.token is string && data.token.size() >= 10 && data.token.size() <= 512 &&
+        data.newsEnabled is bool &&
+        data.schedulesEnabled is bool &&
+        isValidTimestamp(data.updatedAt);
+    }
+
     // --- COLLECTION RULES ---
 
     // 1. Berita Terkini (/news/{newsId})
     match /news/{newsId} {
-      allow get: if isSignedIn() && isValidId(newsId) && (
+      allow get: if isValidId(newsId) && (
         existing().published == true ||
-        existing().authorId == request.auth.uid ||
-        isAdmin()
+        (isSignedIn() && (existing().authorId == request.auth.uid || isAdmin()))
       );
 
-      // Cost-optimized list check (no get/exists inside allow list)
-      allow list: if isSignedIn() && (
-        resource.data.published == true ||
-        resource.data.authorId == request.auth.uid ||
-        isBootstrappedAdmin()
+      // Cost-optimized list check (no get/exists inside allow list); Guests can query published == true only
+      allow list: if resource.data.published == true || (
+        isSignedIn() && (
+          resource.data.authorId == request.auth.uid ||
+          isBootstrappedAdmin()
+        )
       );
 
       allow create: if isSignedIn() &&
@@ -173,16 +191,16 @@ service cloud.firestore {
 
     // 2. Jadwal Kegiatan Gereja (/schedules/{scheduleId})
     match /schedules/{scheduleId} {
-      allow get: if isSignedIn() && isValidId(scheduleId) && (
+      allow get: if isValidId(scheduleId) && (
         existing().published == true ||
-        existing().authorId == request.auth.uid ||
-        isAdmin()
+        (isSignedIn() && (existing().authorId == request.auth.uid || isAdmin()))
       );
 
-      allow list: if isSignedIn() && (
-        resource.data.published == true ||
-        resource.data.authorId == request.auth.uid ||
-        isBootstrappedAdmin()
+      allow list: if resource.data.published == true || (
+        isSignedIn() && (
+          resource.data.authorId == request.auth.uid ||
+          isBootstrappedAdmin()
+        )
       );
 
       allow create: if isSignedIn() &&
@@ -217,16 +235,16 @@ service cloud.firestore {
 
     // 3. Galeri Foto Interaktif (/gallery_photos/{photoId})
     match /gallery_photos/{photoId} {
-      allow get: if isSignedIn() && isValidId(photoId) && (
+      allow get: if isValidId(photoId) && (
         existing().published == true ||
-        existing().authorId == request.auth.uid ||
-        isAdmin()
+        (isSignedIn() && (existing().authorId == request.auth.uid || isAdmin()))
       );
 
-      allow list: if isSignedIn() && (
-        resource.data.published == true ||
-        resource.data.authorId == request.auth.uid ||
-        isBootstrappedAdmin()
+      allow list: if resource.data.published == true || (
+        isSignedIn() && (
+          resource.data.authorId == request.auth.uid ||
+          isBootstrappedAdmin()
+        )
       );
 
       allow create: if isSignedIn() &&
@@ -335,6 +353,50 @@ service cloud.firestore {
           incoming().keys().hasOnly(['photoId', 'createdAt']) &&
           exists(/databases/$(database)/documents/gallery_photos/$(photoId));
       }
+
+      // 8. Token FCM & Preferensi Notifikasi (/users/{userId}/fcm_tokens/{tokenId})
+      match /fcm_tokens/{tokenId} {
+        allow list: if isOwner(userId);
+        allow get, delete: if isOwner(userId) && isValidId(tokenId);
+
+        allow create, update: if isOwner(userId) &&
+          isValidId(tokenId) &&
+          isValidFcmToken(incoming()) &&
+          incoming().keys().hasAll(['token', 'newsEnabled', 'schedulesEnabled', 'updatedAt']) &&
+          incoming().keys().hasOnly(['token', 'newsEnabled', 'schedulesEnabled', 'updatedAt']);
+      }
+    }
+
+    // 9. Outbox & Stream Notifikasi Push Real-Time (/notification_events/{eventId})
+    match /notification_events/{eventId} {
+      allow get: if isValidId(eventId) && (
+        existing().published == true ||
+        (isSignedIn() && (existing().authorId == request.auth.uid || isAdmin()))
+      );
+
+      allow list: if resource.data.published == true || (
+        isSignedIn() && (
+          resource.data.authorId == request.auth.uid ||
+          isBootstrappedAdmin()
+        )
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(eventId) &&
+        isValidNotificationEvent(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().published == true &&
+        incoming().keys().hasAll([
+          'title', 'body', 'eventType', 'targetId', 'topic',
+          'published', 'authorId', 'createdAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'body', 'eventType', 'targetId', 'topic',
+          'published', 'authorId', 'createdAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isSignedIn() && isValidId(eventId) && isAdmin();
     }
   }
 }

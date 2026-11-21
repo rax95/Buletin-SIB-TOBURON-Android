@@ -1,5 +1,6 @@
 package com.example
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,8 +36,10 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +72,7 @@ import com.example.data.ChurchSchedule
 import com.example.data.GalleryPhoto
 import com.example.data.NewsArticle
 import com.example.data.UiState
+import com.example.notifications.BulletinNotificationManager
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.AdminMemberAddDialog
@@ -86,6 +90,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 
 private enum class BulletinTab(
     val route: String,
@@ -100,42 +105,103 @@ private enum class BulletinTab(
 }
 
 class MainActivity : ComponentActivity() {
+    private var pendingNotificationDeepLink by mutableStateOf<Pair<String, String>?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        BulletinNotificationManager.ensureNotificationChannel(this)
+        pendingNotificationDeepLink = extractNotificationDeepLink(intent)
+
         setContent {
             BuletinSibTheme {
-                AppContent()
+                AppContent(
+                    pendingDeepLink = pendingNotificationDeepLink,
+                    onConsumeDeepLink = { pendingNotificationDeepLink = null }
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        extractNotificationDeepLink(intent)?.let { deepLink ->
+            pendingNotificationDeepLink = deepLink
+        }
+    }
+
+    private fun extractNotificationDeepLink(intent: Intent?): Pair<String, String>? {
+        val extras = intent?.extras ?: return null
+        val type = extras.getString(BulletinNotificationManager.EXTRA_NAV_TYPE)
+            ?: extras.getString("eventType")
+            ?: extras.getString("type")
+            ?: return null
+        val itemId = extras.getString(BulletinNotificationManager.EXTRA_NAV_ITEM_ID)
+            ?: extras.getString("targetId")
+            ?: extras.getString("itemId")
+            ?: ""
+        return type to itemId
     }
 }
 
 @Composable
-fun AppContent() {
+fun AppContent(
+    pendingDeepLink: Pair<String, String>? = null,
+    onConsumeDeepLink: () -> Unit = {}
+) {
     var currentUser by remember { mutableStateOf<FirebaseUser?>(Firebase.auth.currentUser) }
+    var isGuestMode by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             currentUser = auth.currentUser
+            if (auth.currentUser != null) {
+                isGuestMode = false
+            }
         }
         Firebase.auth.addAuthStateListener(listener)
         onDispose { Firebase.auth.removeAuthStateListener(listener) }
     }
 
+    // If user taps a push notification while signed out, enter Guest read-only view directly
+    LaunchedEffect(pendingDeepLink, currentUser) {
+        if (pendingDeepLink != null && currentUser == null) {
+            isGuestMode = true
+        }
+    }
+
     val user = currentUser
-    if (user == null) {
+    if (user == null && !isGuestMode) {
         AuthScreen(
             onAuthSuccess = {
                 currentUser = Firebase.auth.currentUser
+                isGuestMode = false
+            },
+            onContinueAsGuest = {
+                isGuestMode = true
             }
         )
     } else {
-        // Key by uid so account switches cleanly tear down and recreate ViewModel & snapshot listeners
-        key(user.uid) {
+        // Key by uid (or guest session key) so account switches cleanly tear down & recreate ViewModel/listeners
+        val sessionKey = user?.uid ?: "guest_readonly_session"
+        key(sessionKey) {
             BuletinMainShell(
                 currentUser = user,
-                onSignedOut = { currentUser = null }
+                sessionKey = sessionKey,
+                pendingDeepLink = pendingDeepLink,
+                onConsumeDeepLink = onConsumeDeepLink,
+                onGoogleSignInSuccess = {
+                    currentUser = Firebase.auth.currentUser
+                    isGuestMode = false
+                },
+                onExitGuestMode = {
+                    isGuestMode = false
+                },
+                onSignedOut = {
+                    currentUser = null
+                    isGuestMode = false
+                }
             )
         }
     }
@@ -143,7 +209,12 @@ fun AppContent() {
 
 @Composable
 private fun BuletinMainShell(
-    currentUser: FirebaseUser,
+    currentUser: FirebaseUser?,
+    sessionKey: String,
+    pendingDeepLink: Pair<String, String>?,
+    onConsumeDeepLink: () -> Unit,
+    onGoogleSignInSuccess: () -> Unit,
+    onExitGuestMode: () -> Unit,
     onSignedOut: () -> Unit
 ) {
     val context = LocalContext.current
@@ -151,7 +222,7 @@ private fun BuletinMainShell(
     val credentialManager = remember(context) { CredentialManager.create(context) }
 
     val viewModel: BulletinViewModel = viewModel(
-        key = currentUser.uid,
+        key = sessionKey,
         factory = viewModelFactory {
             initializer {
                 val app = checkNotNull(this[APPLICATION_KEY]) {
@@ -161,10 +232,10 @@ private fun BuletinMainShell(
                 val db = FirebaseFirestore.getInstance(databaseId)
                 BulletinViewModel(
                     repository = BulletinRepository(db),
-                    currentUserId = currentUser.uid,
-                    userEmail = currentUser.email,
-                    userDisplayName = currentUser.displayName,
-                    emailVerified = currentUser.isEmailVerified
+                    currentUserId = currentUser?.uid,
+                    userEmail = currentUser?.email,
+                    userDisplayName = currentUser?.displayName,
+                    emailVerified = currentUser?.isEmailVerified ?: false
                 )
             }
         }
@@ -203,6 +274,57 @@ private fun BuletinMainShell(
     LaunchedEffect(viewModel) {
         viewModel.snackbarMessage.collect { msg ->
             snackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    // Apply deep-link from tapped push notification
+    LaunchedEffect(pendingDeepLink) {
+        val deepLink = pendingDeepLink ?: return@LaunchedEffect
+        val (type, itemId) = deepLink
+        if (type.equals(BulletinNotificationManager.TYPE_SCHEDULE, ignoreCase = true)) {
+            if (itemId.isNotBlank()) focusedScheduleId = itemId
+            currentTab = BulletinTab.SCHEDULES
+        } else {
+            if (itemId.isNotBlank()) focusedNewsId = itemId
+            currentTab = BulletinTab.NEWS
+        }
+        onConsumeDeepLink()
+    }
+
+    // Sync FCM topic subscriptions & register token for this session
+    LaunchedEffect(sessionKey) {
+        val newsEnabled = BulletinNotificationManager.isNewsNotificationsEnabled(context)
+        val schedulesEnabled = BulletinNotificationManager.isScheduleNotificationsEnabled(context)
+        BulletinNotificationManager.syncTopicSubscriptions(context, newsEnabled, schedulesEnabled)
+        BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, news, sched ->
+            viewModel.syncFcmToken(token, news, sched)
+        }
+    }
+
+    // Receive live real-time published news/schedule alerts and dispatch Android push notifications + snackbar
+    LaunchedEffect(viewModel) {
+        viewModel.liveAlerts.collect { alert ->
+            BulletinNotificationManager.showBulletinNotification(
+                context = context,
+                type = alert.type,
+                itemId = alert.itemId,
+                title = alert.title,
+                body = alert.body
+            )
+            val result = snackbarHostState.showSnackbar(
+                message = "${alert.title} — ${alert.body}",
+                actionLabel = "Buka",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                if (alert.type.equals(BulletinNotificationManager.TYPE_SCHEDULE, ignoreCase = true)) {
+                    if (alert.itemId.isNotBlank()) focusedScheduleId = alert.itemId
+                    currentTab = BulletinTab.SCHEDULES
+                } else {
+                    if (alert.itemId.isNotBlank()) focusedNewsId = alert.itemId
+                    currentTab = BulletinTab.NEWS
+                }
+            }
         }
     }
 
@@ -393,9 +515,10 @@ private fun BuletinMainShell(
 
                         BulletinTab.ACCOUNT -> {
                             ProfileAdminScreen(
-                                uid = currentUser.uid,
-                                email = currentUser.email,
-                                googleDisplayName = currentUser.displayName,
+                                isGuest = currentUser == null,
+                                uid = currentUser?.uid,
+                                email = currentUser?.email,
+                                googleDisplayName = currentUser?.displayName,
                                 userProfile = userProfile,
                                 bookmarks = bookmarks,
                                 isAdmin = isAdmin,
@@ -432,9 +555,17 @@ private fun BuletinMainShell(
                                 onSeedStarterClick = viewModel::seedStarterData,
                                 onOpenAddAdminDialog = { showAddAdminDialog = true },
                                 onRemoveAdminMember = viewModel::removeAdminMember,
-                                onUidCopied = {
-                                    // Instant confirmation
+                                onUidCopied = {},
+                                onNotificationPrefsUpdated = { newsEnabled, schedulesEnabled ->
+                                    scope.launch {
+                                        BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, _, _ ->
+                                            viewModel.syncFcmToken(token, newsEnabled, schedulesEnabled)
+                                        }
+                                        snackbarHostState.showSnackbar("Preferensi notifikasi FCM diperbarui.")
+                                    }
                                 },
+                                onGoogleSignInSuccess = onGoogleSignInSuccess,
+                                onExitGuestMode = onExitGuestMode,
                                 onSignOutClick = {
                                     signOutUser(
                                         credentialManager = credentialManager,
@@ -451,7 +582,7 @@ private fun BuletinMainShell(
     }
 
     // --- ADMIN EDITOR DIALOGS ---
-    if (showNewsEditor) {
+    if (showNewsEditor && currentUser != null) {
         AdminNewsEditorDialog(
             initial = editingNews,
             defaultAuthorName = userProfile?.displayName ?: currentUser.displayName ?: "Sekretariat SIB Toburon",
@@ -476,7 +607,7 @@ private fun BuletinMainShell(
         )
     }
 
-    if (showScheduleEditor) {
+    if (showScheduleEditor && currentUser != null) {
         AdminScheduleEditorDialog(
             initial = editingSchedule,
             isBusy = isBusy,
@@ -500,7 +631,7 @@ private fun BuletinMainShell(
         )
     }
 
-    if (showPhotoEditor) {
+    if (showPhotoEditor && currentUser != null) {
         AdminPhotoEditorDialog(
             initial = editingPhoto,
             defaultPhotographer = userProfile?.displayName ?: currentUser.displayName ?: "Tim Multimedia SIB Toburon",
@@ -524,7 +655,7 @@ private fun BuletinMainShell(
         )
     }
 
-    if (showAddAdminDialog) {
+    if (showAddAdminDialog && currentUser != null) {
         AdminMemberAddDialog(
             isBusy = isBusy,
             onDismiss = { showAddAdminDialog = false },

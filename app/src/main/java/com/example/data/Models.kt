@@ -182,3 +182,27 @@ data class PhotoLike(
     val photoId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null
 )
+
+@Keep
+@IgnoreExtraProperties
+data class NotificationEvent(
+    @DocumentId val id: String = "",
+    val title: String = "",
+    val body: String = "",
+    val eventType: String = "NEWS",
+    val targetId: String = "",
+    val topic: String = "sib_toburon_news",
+    val published: Boolean = true,
+    val authorId: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null
+)
+
+data class BulletinAlert(
+    val eventId: String,
+    val type: String,
+    val itemId: String,
+    val title: String,
+    val body: String,
+    val authorId: String
+)
+
