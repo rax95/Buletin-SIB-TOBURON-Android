@@ -87,7 +87,7 @@ fun NewsScreen(
     onToggleBookmark: (NewsArticle) -> Unit,
     onEditNews: (NewsArticle) -> Unit,
     onDeleteNews: (NewsArticle) -> Unit,
-    onSeedStarter: () -> Unit,
+    onAddNews: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedArticleId by remember { mutableStateOf<String?>(null) }
@@ -153,7 +153,7 @@ fun NewsScreen(
                 onSelectCategory = onSelectCategory,
                 onArticleClick = { selectedArticleId = it.id },
                 onToggleBookmark = onToggleBookmark,
-                onSeedStarter = onSeedStarter,
+                onAddNews = onAddNews,
                 modifier = Modifier
                     .weight(0.46f)
                     .fillMaxHeight()
@@ -202,7 +202,7 @@ fun NewsScreen(
             onSelectCategory = onSelectCategory,
             onArticleClick = { selectedArticleId = it.id },
             onToggleBookmark = onToggleBookmark,
-            onSeedStarter = onSeedStarter,
+            onAddNews = onAddNews,
             modifier = modifier.fillMaxSize()
         )
     }
@@ -221,7 +221,7 @@ private fun NewsListPane(
     onSelectCategory: (NewsCategory?) -> Unit,
     onArticleClick: (NewsArticle) -> Unit,
     onToggleBookmark: (NewsArticle) -> Unit,
-    onSeedStarter: () -> Unit,
+    onAddNews: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -280,7 +280,8 @@ private fun NewsListPane(
                             description = if (newsState.data.isEmpty()) stringResource(R.string.empty_news_desc)
                             else "Coba ubah kata kunci pencarian atau pilih kategori lain.",
                             isAdmin = isAdmin && newsState.data.isEmpty(),
-                            onSeedStarter = onSeedStarter
+                            primaryActionLabel = stringResource(R.string.action_add_news),
+                            onPrimaryAction = onAddNews
                         )
                     }
                 } else {

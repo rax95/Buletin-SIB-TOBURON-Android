@@ -391,6 +391,80 @@
         }
       },
       "required": ["token", "newsEnabled", "schedulesEnabled", "updatedAt"]
+    },
+    "ChurchMemberPublic": {
+      "title": "ChurchMemberPublic",
+      "description": "Direktori awam senarai nama penuh ahli jemaat SIB Toburon (hanya nama penuh sahaja).",
+      "type": "object",
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "description": "Nama penuh ahli jemaat (2-120 karakter)"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Status paparan dalam senarai ahli jemaat"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID admin yang mendaftarkan ahli"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pendaftaran (FieldValue.serverTimestamp(), immutable)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu kemas kini terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["fullName", "published", "authorId", "createdAt", "updatedAt"]
+    },
+    "ChurchMemberDetail": {
+      "title": "ChurchMemberDetail",
+      "description": "Maklumat peribadi lengkap ahli jemaat SIB Toburon (hanya boleh diakses dan diedit oleh Admin).",
+      "type": "object",
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "description": "Nama penuh ahli jemaat (2-120 karakter)"
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["LELAKI", "PEREMPUAN"],
+          "description": "Jantina ahli jemaat"
+        },
+        "birthDate": {
+          "type": "string",
+          "description": "Tarikh lahir dalam format YYYY-MM-DD (umur dikira secara automatik)"
+        },
+        "baptismStatus": {
+          "type": "string",
+          "enum": ["DIBAPTIS", "BELUM_DIBAPTIS"],
+          "description": "Status baptisan ahli jemaat"
+        },
+        "denomination": {
+          "type": "string",
+          "description": "Denominasi gereja (1-80 karakter)"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID admin yang mendaftarkan ahli"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pendaftaran (FieldValue.serverTimestamp(), immutable)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu kemas kini terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["fullName", "gender", "birthDate", "baptismStatus", "denomination", "authorId", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -429,6 +503,14 @@
     "/notification_events/{eventId}": {
       "schema": { "$ref": "#/entities/NotificationEvent" },
       "description": "Catatan & outbox notifikasi push real-time untuk berita dan jadwal baru"
+    },
+    "/church_members/{memberId}": {
+      "schema": { "$ref": "#/entities/ChurchMemberPublic" },
+      "description": "Senarai nama penuh ahli jemaat SIB Toburon yang dapat dilihat semua jemaat & tamu"
+    },
+    "/church_member_details/{memberId}": {
+      "schema": { "$ref": "#/entities/ChurchMemberDetail" },
+      "description": "Rekod maklumat lengkap ahli jemaat khusus untuk pengurusan Admin"
     }
   }
 }

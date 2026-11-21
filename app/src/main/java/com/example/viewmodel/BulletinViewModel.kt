@@ -4,13 +4,17 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AdminMember
+import com.example.data.BaptismStatus
 import com.example.data.BulletinAlert
 import com.example.data.BulletinRepository
+import com.example.data.ChurchMemberDetail
+import com.example.data.ChurchMemberPublic
 import com.example.data.ChurchSchedule
 import com.example.data.CoverPreset
 import com.example.data.FellowshipGroup
 import com.example.data.GalleryCategory
 import com.example.data.GalleryPhoto
+import com.example.data.MemberGender
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
 import com.example.data.ScheduleCategory
@@ -108,6 +112,15 @@ class BulletinViewModel(
     private val _selectedGalleryCategory = MutableStateFlow<GalleryCategory?>(null)
     val selectedGalleryCategory: StateFlow<GalleryCategory?> = _selectedGalleryCategory.asStateFlow()
 
+    private val _memberSearchQuery = MutableStateFlow("")
+    val memberSearchQuery: StateFlow<String> = _memberSearchQuery.asStateFlow()
+
+    private val _selectedMemberDetail = MutableStateFlow<ChurchMemberDetail?>(null)
+    val selectedMemberDetail: StateFlow<ChurchMemberDetail?> = _selectedMemberDetail.asStateFlow()
+
+    private val _isLoadingMemberDetail = MutableStateFlow(false)
+    val isLoadingMemberDetail: StateFlow<Boolean> = _isLoadingMemberDetail.asStateFlow()
+
     // Live admin privilege stream
     val isAdmin: StateFlow<Boolean> = repository
         .observeAdminAccess(currentUserId, userEmail, emailVerified)
@@ -155,6 +168,19 @@ class BulletinViewModel(
                 .catch { error ->
                     emit(toErrorState("Gagal memuat galeri foto", error))
                 }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = UiState.Loading
+        )
+
+    // Real-time Church Members directory stream (public full names only)
+    val membersState: StateFlow<UiState<List<ChurchMemberPublic>>> = repository
+        .observeChurchMembers(currentUserId)
+        .map<List<ChurchMemberPublic>, UiState<List<ChurchMemberPublic>>> { UiState.Success(it) }
+        .catch { error ->
+            emit(toErrorState("Gagal memuat senarai ahli jemaat", error))
         }
         .stateIn(
             scope = viewModelScope,
@@ -237,6 +263,35 @@ class BulletinViewModel(
 
     fun selectGalleryCategory(category: GalleryCategory?) {
         _selectedGalleryCategory.value = category
+    }
+
+    fun setMemberSearchQuery(query: String) {
+        _memberSearchQuery.value = query
+    }
+
+    fun loadMemberDetail(memberId: String) {
+        if (!isAdmin.value) return
+        viewModelScope.launch {
+            _isLoadingMemberDetail.value = true
+            try {
+                val result = repository.getChurchMemberDetail(memberId)
+                result.onSuccess { detail ->
+                    if (detail != null) {
+                        _selectedMemberDetail.value = detail
+                    } else {
+                        _snackbarMessage.tryEmit("Maklumat lengkap ahli tidak dijumpai.")
+                    }
+                }.onFailure { err ->
+                    _snackbarMessage.tryEmit(err.localizedMessage ?: "Gagal memuat maklumat ahli.")
+                }
+            } finally {
+                _isLoadingMemberDetail.value = false
+            }
+        }
+    }
+
+    fun clearSelectedMemberDetail() {
+        _selectedMemberDetail.value = null
     }
 
     // --- MUTATIONS ---
@@ -425,9 +480,53 @@ class BulletinViewModel(
         }
     }
 
-    fun seedStarterData() {
-        runMutation("Konten awal Buletin SIB Toburon berhasil dimuat dan disinkronkan!") {
-            repository.seedStarterBulletinData(userDisplayName ?: "Sekretariat SIB Toburon")
+    fun saveChurchMember(
+        existingId: String?,
+        fullName: String,
+        gender: MemberGender,
+        birthDateIso: String,
+        baptismStatus: BaptismStatus,
+        denomination: String,
+        onComplete: () -> Unit = {}
+    ) {
+        runMutation(
+            successMessage = if (existingId == null) "Ahli jemaat berjaya didaftarkan." else "Maklumat ahli berjaya dikemas kini.",
+            onComplete = {
+                if (existingId != null && _selectedMemberDetail.value?.id == existingId) {
+                    _selectedMemberDetail.value = _selectedMemberDetail.value?.copy(
+                        fullName = fullName.trim(),
+                        gender = gender.code,
+                        birthDate = birthDateIso.trim(),
+                        baptismStatus = baptismStatus.code,
+                        denomination = denomination.trim()
+                    )
+                }
+                onComplete()
+            }
+        ) {
+            if (existingId == null) {
+                repository.createChurchMember(
+                    fullName, gender, birthDateIso, baptismStatus, denomination
+                )
+            } else {
+                repository.updateChurchMember(
+                    existingId, fullName, gender, birthDateIso, baptismStatus, denomination
+                )
+            }
+        }
+    }
+
+    fun deleteChurchMember(memberId: String, onComplete: () -> Unit = {}) {
+        runMutation(
+            successMessage = "Ahli jemaat telah dipadam daripada senarai.",
+            onComplete = {
+                if (_selectedMemberDetail.value?.id == memberId) {
+                    _selectedMemberDetail.value = null
+                }
+                onComplete()
+            }
+        ) {
+            repository.deleteChurchMember(memberId)
         }
     }
 

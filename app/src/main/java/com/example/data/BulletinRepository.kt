@@ -753,6 +753,8 @@ class BulletinRepository(
             require(cleanTitle.length in 2..120) { "Judul foto harus 2-120 karakter." }
             require(cleanCaption.length <= 600) { "Keterangan foto maksimal 600 karakter." }
             require(cleanDate.length in 2..50) { "Tanggal acara harus diisi." }
+            if (cleanUrl != null) require(cleanUrl.length <= 1000) { "URL gambar terlalu panjang." }
+            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) { "Ukuran gambar terlalu besar." }
 
             val updates = mapOf<String, Any?>(
                 "title" to cleanTitle,
@@ -954,179 +956,183 @@ class BulletinRepository(
         }
     }
 
-    // --- ADMIN STARTER CONTENT SEEDER ---
+    // --- CHURCH MEMBERS DIRECTORY (/church_members & /church_member_details) ---
 
-    suspend fun seedStarterBulletinData(authorName: String): Result<Unit> {
+    fun observeChurchMembers(uid: String?): Flow<List<ChurchMemberPublic>> = flow {
+        if (uid.isNullOrBlank()) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "church_members"
+        emitAll(
+            db.collection("church_members")
+                .whereEqualTo("published", true)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(
+                        ChurchMemberPublic::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    ).sortedBy { it.fullName.lowercase() }
+                }
+                .catch { error ->
+                    logStreamErrorIfActive(uid, error, OperationType.LIST, path)
+                    throw error
+                }
+        )
+    }
+
+    suspend fun getChurchMemberDetail(memberId: String): Result<ChurchMemberDetail?> {
+        val docPath = "church_member_details/$memberId"
+        return try {
+            requireUserId()
+            require(memberId.isNotBlank()) { "ID ahli tidak valid." }
+            val snap = db.collection("church_member_details").document(memberId).get().await()
+            val detail = if (snap.exists()) {
+                snap.toObject(ChurchMemberDetail::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            } else {
+                null
+            }
+            Result.success(detail)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.GET, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createChurchMember(
+        fullName: String,
+        gender: MemberGender,
+        birthDateIso: String,
+        baptismStatus: BaptismStatus,
+        denomination: String
+    ): Result<Unit> {
+        var docPath = "church_members"
         return try {
             val uid = requireUserId()
-            val cleanAuthor = authorName.trim().ifBlank { "Sekretariat SIB Toburon" }.take(80)
+            val cleanName = fullName.trim()
+            val cleanBirth = birthDateIso.trim()
+            val cleanDenom = denomination.trim()
+
+            require(cleanName.length in 2..120) { "Nama penuh harus 2 hingga 120 karakter." }
+            require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
+                "Format tarikh lahir tidak sah (YYYY-MM-DD)."
+            }
+            require(calculateAgeFromIsoDate(cleanBirth) != null) {
+                "Tarikh lahir tidak sah atau melebihi tarikh hari ini."
+            }
+            require(cleanDenom.length in 1..80) { "Denominasi harus diisi (maks 80 karakter)." }
+
+            val publicRef = db.collection("church_members").document()
+            val detailRef = db.collection("church_member_details").document(publicRef.id)
+            docPath = publicRef.path
+
             val batch = db.batch()
-
-            val starterNews = listOf(
+            batch.set(
+                publicRef,
                 mapOf(
-                    "title" to "Ibadah Syukur & Perjamuan Kasih Jemaat SIB Toburon",
-                    "summary" to "Seluruh jemaat diundang hadir dalam Ibadah Raya Minggu yang disertai perjamuan kasih bersama di halaman gereja.",
-                    "content" to "Shalom jemaat yang dikasihi Tuhan,\n\nDengan penuh ucapan syukur, Majelis Jemaat SIB Toburon mengundang seluruh keluarga, pemuda, dan anak Sekolah Minggu untuk menghadiri Ibadah Raya Syukur hari Minggu ini pukul 08:00 WITA.\n\nUsai ibadah, kita akan melanjutkan kebersamaan melalui Perjamuan Kasih dan ramah tamah di balai persekutuan. Mari datang dengan hati yang rindu memuji Tuhan dan saling menguatkan satu sama lain.",
-                    "category" to NewsCategory.WARTA.code,
-                    "authorId" to uid,
-                    "authorName" to cleanAuthor,
-                    "coverPreset" to CoverPreset.SANCTUARY.code,
-                    "pinned" to true,
-                    "published" to true,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Latihan Gabungan Tim Pujian & Paduan Suara Jemaat",
-                    "summary" to "Persiapan pujian khusus menyambut minggu pelayanan dan perayaan bulan keluarga SIB Toburon.",
-                    "content" to "Diinformasikan kepada seluruh anggota tim musik, singers, dan paduan suara SIB Toburon bahwa latihan gabungan akan diadakan pada hari Jumat pukul 19:00 WITA di ruang ibadah utama.\n\nDiharapkan seluruh pelayan pujian hadir tepat waktu membawa catatan lagu terbaru. Tuhan memberkati pelayanan kita bersama.",
-                    "category" to NewsCategory.PELAYANAN.code,
-                    "authorId" to uid,
-                    "authorName" to cleanAuthor,
-                    "coverPreset" to CoverPreset.WORSHIP.code,
-                    "pinned" to false,
-                    "published" to true,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Persekutuan Padang & Bakti Sosial Pemuda SIB Toburon",
-                    "summary" to "Kaum muda SIB Toburon menggelar aksi kasih dan persekutuan alam terbuka bersama jemaat.",
-                    "content" to "Persekutuan Pemuda & Remaja (PPR) SIB Toburon akan melaksanakan kegiatan Persekutuan Padang sekaligus penyaluran paket kasih bagi warga sekitar.\n\nPendaftaran dibuka hingga hari Kamis melalui koordinator sektor masing-masing. Mari ambil bagian membawa sukacita Kristus bagi sesama.",
-                    "category" to NewsCategory.PEMUDA.code,
-                    "authorId" to uid,
-                    "authorName" to cleanAuthor,
-                    "coverPreset" to CoverPreset.FELLOWSHIP.code,
-                    "pinned" to false,
-                    "published" to true,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            )
-
-            starterNews.forEach { payload ->
-                batch.set(db.collection("news").document(), payload)
-            }
-
-            val starterSchedules = listOf(
-                mapOf(
-                    "title" to "Ibadah Raya Minggu",
-                    "description" to "Ibadah utama seluruh jemaat SIB Toburon disertai pujian paduan suara dan pemberitaan Firman Tuhan.",
-                    "category" to ScheduleCategory.IBADAH.code,
-                    "dateLabel" to "Setiap Minggu",
-                    "timeLabel" to "08:00 - 10:00 WITA",
-                    "location" to "Gedung Utama SIB Toburon",
-                    "speaker" to "Pdt. Markus L. T.",
-                    "sortOrder" to 100L,
-                    "recurring" to true,
-                    "published" to true,
-                    "authorId" to uid,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Sekolah Minggu Anak & Tunas",
-                    "description" to "Pembelajaran Alkitab interaktif, pujian ceria, dan kreativitas untuk anak-anak jemaat.",
-                    "category" to ScheduleCategory.SEKOLAH_MINGGU.code,
-                    "dateLabel" to "Setiap Minggu",
-                    "timeLabel" to "08:30 - 10:00 WITA",
-                    "location" to "Ruang Sekolah Minggu SIB Toburon",
-                    "speaker" to "Tim Guru Sekolah Minggu",
-                    "sortOrder" to 200L,
-                    "recurring" to true,
-                    "published" to true,
-                    "authorId" to uid,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Persekutuan Doa Malam Jemaat",
-                    "description" to "Mendoakan pertumbuhan iman jemaat, keluarga, pelayanan misi, dan kesejahteraan masyarakat.",
-                    "category" to ScheduleCategory.DOA.code,
-                    "dateLabel" to "Setiap Rabu",
-                    "timeLabel" to "19:00 - 20:30 WITA",
-                    "location" to "Gedung Utama SIB Toburon",
-                    "speaker" to "Majelis & Tim Doa",
-                    "sortOrder" to 300L,
-                    "recurring" to true,
-                    "published" to true,
-                    "authorId" to uid,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Ibadah Pemuda & Remaja (PPR)",
-                    "description" to "Pujian akustik, diskusi firman yang relevan bagi generasi muda, dan persekutuan akrab.",
-                    "category" to ScheduleCategory.PEMUDA.code,
-                    "dateLabel" to "Setiap Sabtu",
-                    "timeLabel" to "18:30 - 20:30 WITA",
-                    "location" to "Balai Pemuda SIB Toburon",
-                    "speaker" to "Pengurus PPR SIB Toburon",
-                    "sortOrder" to 400L,
-                    "recurring" to true,
+                    "fullName" to cleanName,
                     "published" to true,
                     "authorId" to uid,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
-
-            starterSchedules.forEach { payload ->
-                batch.set(db.collection("schedules").document(), payload)
-            }
-
-            val starterPhotos = listOf(
+            batch.set(
+                detailRef,
                 mapOf(
-                    "title" to "Pagi Cerah di Gedung Ibadah SIB Toburon",
-                    "caption" to "Suasana teduh gedung gereja SIB Toburon menyambut jemaat sebelum Ibadah Raya dimulai.",
-                    "category" to GalleryCategory.IBADAH.code,
-                    "eventDate" to "November 2026",
-                    "coverPreset" to CoverPreset.SANCTUARY.code,
-                    "likesCount" to 0L,
-                    "published" to true,
+                    "fullName" to cleanName,
+                    "gender" to gender.code,
+                    "birthDate" to cleanBirth,
+                    "baptismStatus" to baptismStatus.code,
+                    "denomination" to cleanDenom,
                     "authorId" to uid,
-                    "photographerName" to "Tim Multimedia SIB Toburon",
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Pujian & Penyembahan Jemaat",
-                    "caption" to "Kebersamaan tim pujian dan seluruh jemaat mengangkat pujian syukur di hari Minggu.",
-                    "category" to GalleryCategory.IBADAH.code,
-                    "eventDate" to "November 2026",
-                    "coverPreset" to CoverPreset.WORSHIP.code,
-                    "likesCount" to 0L,
-                    "published" to true,
-                    "authorId" to uid,
-                    "photographerName" to "Tim Multimedia SIB Toburon",
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                ),
-                mapOf(
-                    "title" to "Persekutuan Padang & Ramah Tamah Keluarga",
-                    "caption" to "Momen hangat makan bersama dan persekutuan keluarga besar SIB Toburon di alam terbuka.",
-                    "category" to GalleryCategory.PEMUDA.code,
-                    "eventDate" to "November 2026",
-                    "coverPreset" to CoverPreset.FELLOWSHIP.code,
-                    "likesCount" to 0L,
-                    "published" to true,
-                    "authorId" to uid,
-                    "photographerName" to "Tim Dokumentasi PPR",
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
-
-            starterPhotos.forEach { payload ->
-                batch.set(db.collection("gallery_photos").document(), payload)
-            }
-
             batch.commit().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.WRITE, "seed_starter_bulletin")
+            handleFirestoreError(e, OperationType.CREATE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateChurchMember(
+        memberId: String,
+        fullName: String,
+        gender: MemberGender,
+        birthDateIso: String,
+        baptismStatus: BaptismStatus,
+        denomination: String
+    ): Result<Unit> {
+        val docPath = "church_members/$memberId"
+        return try {
+            requireUserId()
+            require(memberId.isNotBlank()) { "ID ahli tidak valid." }
+            val cleanName = fullName.trim()
+            val cleanBirth = birthDateIso.trim()
+            val cleanDenom = denomination.trim()
+
+            require(cleanName.length in 2..120) { "Nama penuh harus 2 hingga 120 karakter." }
+            require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
+                "Format tarikh lahir tidak sah (YYYY-MM-DD)."
+            }
+            require(calculateAgeFromIsoDate(cleanBirth) != null) {
+                "Tarikh lahir tidak sah atau melebihi tarikh hari ini."
+            }
+            require(cleanDenom.length in 1..80) { "Denominasi harus diisi (maks 80 karakter)." }
+
+            val publicRef = db.collection("church_members").document(memberId)
+            val detailRef = db.collection("church_member_details").document(memberId)
+
+            val batch = db.batch()
+            batch.update(
+                publicRef,
+                mapOf(
+                    "fullName" to cleanName,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
+            batch.update(
+                detailRef,
+                mapOf(
+                    "fullName" to cleanName,
+                    "gender" to gender.code,
+                    "birthDate" to cleanBirth,
+                    "baptismStatus" to baptismStatus.code,
+                    "denomination" to cleanDenom,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteChurchMember(memberId: String): Result<Unit> {
+        val docPath = "church_members/$memberId"
+        return try {
+            requireUserId()
+            require(memberId.isNotBlank()) { "ID ahli tidak valid." }
+            val batch = db.batch()
+            batch.delete(db.collection("church_members").document(memberId))
+            batch.delete(db.collection("church_member_details").document(memberId))
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docPath)
             Result.failure(e)
         }
     }

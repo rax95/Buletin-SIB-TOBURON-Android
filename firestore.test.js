@@ -613,3 +613,103 @@ test("FCM notification_events enforces admin creation & filtered reads; fcm_toke
   await assertSucceeds(aliceTokenRef.delete());
 });
 
+// 8. Church Members Directory (Public Names Only) & Admin-Only Member Details (PII Protection)
+test("Church members directory exposes full names only; personal details are strictly Admin-only", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(5000);
+
+  // Admin atomically registers a member across /church_members and /church_member_details
+  const createBatch = adminDb.batch();
+  createBatch.set(adminDb.collection("church_members").doc("member_001"), {
+    fullName: "Daniel Petrus Toburon",
+    published: true,
+    authorId: ADMIN_UID,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  createBatch.set(adminDb.collection("church_member_details").doc("member_001"), {
+    fullName: "Daniel Petrus Toburon",
+    gender: "LELAKI",
+    birthDate: "1995-06-14",
+    baptismStatus: "DIBAPTIS",
+    denomination: "SIB",
+    authorId: ADMIN_UID,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  await assertSucceeds(createBatch.commit());
+
+  // Guest CANNOT read church_members list or doc (members hidden from Guest mode)
+  await assertFails(
+    guestDb.collection("church_members").where("published", "==", true).get()
+  );
+  await assertFails(
+    guestDb.collection("church_members").doc("member_001").get()
+  );
+
+  // Signed-in Jemaat CAN read public full-name list via filtered query
+  await assertSucceeds(
+    aliceDb.collection("church_members").where("published", "==", true).get()
+  );
+
+  // Guest and Jemaat CANNOT read private member details (birthDate, gender, baptismStatus, denomination)
+  await assertFails(
+    guestDb.collection("church_member_details").doc("member_001").get()
+  );
+  await assertFails(
+    aliceDb.collection("church_member_details").doc("member_001").get()
+  );
+  await assertFails(
+    aliceDb.collection("church_member_details").get()
+  );
+
+  // Non-admin CANNOT create, update, or delete members
+  await assertFails(
+    aliceDb.collection("church_members").doc("member_fake").set({
+      fullName: "Jemaat Palsu",
+      published: true,
+      authorId: JEMAAT_ALICE,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(aliceDb.collection("church_members").doc("member_001").delete());
+
+  // Admin CAN read details, update atomically, and delete atomically
+  await assertSucceeds(
+    adminDb.collection("church_member_details").doc("member_001").get()
+  );
+
+  const updateBatch = adminDb.batch();
+  const updateTs = pastDate(1000);
+  updateBatch.update(adminDb.collection("church_members").doc("member_001"), {
+    fullName: "Daniel Petrus Sibin",
+    updatedAt: updateTs,
+  });
+  updateBatch.update(adminDb.collection("church_member_details").doc("member_001"), {
+    fullName: "Daniel Petrus Sibin",
+    gender: "LELAKI",
+    birthDate: "1995-06-14",
+    baptismStatus: "DIBAPTIS",
+    denomination: "SIB",
+    updatedAt: updateTs,
+  });
+  await assertSucceeds(updateBatch.commit());
+
+  // Reject invalid birthDate format
+  await assertFails(
+    adminDb.collection("church_member_details").doc("member_001").update({
+      birthDate: "14/06/1995",
+      updatedAt: pastDate(500),
+    })
+  );
+
+  const deleteBatch = adminDb.batch();
+  deleteBatch.delete(adminDb.collection("church_members").doc("member_001"));
+  deleteBatch.delete(adminDb.collection("church_member_details").doc("member_001"));
+  await assertSucceeds(deleteBatch.commit());
+});
+
+

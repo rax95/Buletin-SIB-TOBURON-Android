@@ -21,10 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -68,6 +70,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.BulletinRepository
+import com.example.data.ChurchMemberDetail
 import com.example.data.ChurchSchedule
 import com.example.data.GalleryPhoto
 import com.example.data.NewsArticle
@@ -76,10 +79,12 @@ import com.example.notifications.BulletinNotificationManager
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.AdminMemberAddDialog
+import com.example.ui.components.AdminMemberEditorDialog
 import com.example.ui.components.AdminNewsEditorDialog
 import com.example.ui.components.AdminPhotoEditorDialog
 import com.example.ui.components.AdminScheduleEditorDialog
 import com.example.ui.screens.GalleryScreen
+import com.example.ui.screens.MembersScreen
 import com.example.ui.screens.NewsScreen
 import com.example.ui.screens.ProfileAdminScreen
 import com.example.ui.screens.SchedulesScreen
@@ -101,6 +106,7 @@ private enum class BulletinTab(
     NEWS("news", R.string.nav_news, Icons.Filled.Newspaper, Icons.Outlined.Newspaper),
     SCHEDULES("schedules", R.string.nav_schedules, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     GALLERY("gallery", R.string.nav_gallery, Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
+    MEMBERS("members", R.string.nav_members, Icons.Filled.Groups, Icons.Outlined.Groups),
     ACCOUNT("account", R.string.nav_account, Icons.Filled.Person, Icons.Outlined.Person)
 }
 
@@ -244,6 +250,7 @@ private fun BuletinMainShell(
     val newsState by viewModel.newsState.collectAsStateWithLifecycle()
     val schedulesState by viewModel.schedulesState.collectAsStateWithLifecycle()
     val galleryState by viewModel.galleryState.collectAsStateWithLifecycle()
+    val membersState by viewModel.membersState.collectAsStateWithLifecycle()
     val isAdmin by viewModel.isAdmin.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
@@ -256,8 +263,21 @@ private fun BuletinMainShell(
     val scheduleSearchQuery by viewModel.scheduleSearchQuery.collectAsStateWithLifecycle()
     val selectedScheduleCategory by viewModel.selectedScheduleCategory.collectAsStateWithLifecycle()
     val selectedGalleryCategory by viewModel.selectedGalleryCategory.collectAsStateWithLifecycle()
+    val memberSearchQuery by viewModel.memberSearchQuery.collectAsStateWithLifecycle()
+    val selectedMemberDetail by viewModel.selectedMemberDetail.collectAsStateWithLifecycle()
+    val isLoadingMemberDetail by viewModel.isLoadingMemberDetail.collectAsStateWithLifecycle()
 
     var currentTab by rememberSaveable { mutableStateOf(BulletinTab.NEWS) }
+    val isGuest = currentUser == null
+    val visibleTabs = remember(isGuest) {
+        if (isGuest) BulletinTab.entries.filter { it != BulletinTab.MEMBERS }
+        else BulletinTab.entries
+    }
+    LaunchedEffect(isGuest, currentTab) {
+        if (isGuest && currentTab == BulletinTab.MEMBERS) {
+            currentTab = BulletinTab.NEWS
+        }
+    }
     var focusedNewsId by remember { mutableStateOf<String?>(null) }
     var focusedScheduleId by remember { mutableStateOf<String?>(null) }
 
@@ -268,6 +288,8 @@ private fun BuletinMainShell(
     var editingSchedule by remember { mutableStateOf<ChurchSchedule?>(null) }
     var showPhotoEditor by remember { mutableStateOf(false) }
     var editingPhoto by remember { mutableStateOf<GalleryPhoto?>(null) }
+    var showMemberEditor by remember { mutableStateOf(false) }
+    var editingMember by remember { mutableStateOf<ChurchMemberDetail?>(null) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -345,7 +367,7 @@ private fun BuletinMainShell(
             bottomBar = {
                 if (!useNavRail) {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                        BulletinTab.entries.forEach { tab ->
+                        visibleTabs.forEach { tab ->
                             val selected = currentTab == tab
                             val label = stringResource(tab.labelRes)
                             NavigationBarItem(
@@ -378,6 +400,10 @@ private fun BuletinMainShell(
                         BulletinTab.GALLERY -> Pair(stringResource(R.string.action_add_photo)) {
                             editingPhoto = null
                             showPhotoEditor = true
+                        }
+                        BulletinTab.MEMBERS -> Pair(stringResource(R.string.action_add_member)) {
+                            editingMember = null
+                            showMemberEditor = true
                         }
                         BulletinTab.ACCOUNT -> Pair("", {})
                     }
@@ -419,7 +445,7 @@ private fun BuletinMainShell(
                         modifier = Modifier.fillMaxHeight()
                     ) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        BulletinTab.entries.forEach { tab ->
+                        visibleTabs.forEach { tab ->
                             val selected = currentTab == tab
                             val label = stringResource(tab.labelRes)
                             NavigationRailItem(
@@ -462,7 +488,10 @@ private fun BuletinMainShell(
                                 onDeleteNews = { article ->
                                     viewModel.deleteNews(article.id)
                                 },
-                                onSeedStarter = viewModel::seedStarterData
+                                onAddNews = {
+                                    editingNews = null
+                                    showNewsEditor = true
+                                }
                             )
                         }
 
@@ -488,7 +517,10 @@ private fun BuletinMainShell(
                                 onDeleteSchedule = { schedule ->
                                     viewModel.deleteSchedule(schedule.id)
                                 },
-                                onSeedStarter = viewModel::seedStarterData
+                                onAddSchedule = {
+                                    editingSchedule = null
+                                    showScheduleEditor = true
+                                }
                             )
                         }
 
@@ -509,8 +541,39 @@ private fun BuletinMainShell(
                                 onDeletePhoto = { photo ->
                                     viewModel.deleteGalleryPhoto(photo.id)
                                 },
-                                onSeedStarter = viewModel::seedStarterData
+                                onAddPhoto = {
+                                    editingPhoto = null
+                                    showPhotoEditor = true
+                                }
                             )
+                        }
+
+                        BulletinTab.MEMBERS -> {
+                            if (!isGuest) {
+                                MembersScreen(
+                                    membersState = membersState,
+                                    searchQuery = memberSearchQuery,
+                                    isAdmin = isAdmin,
+                                    isBusy = isBusy,
+                                    selectedMemberDetail = selectedMemberDetail,
+                                    isLoadingDetail = isLoadingMemberDetail,
+                                    onSearchQueryChange = viewModel::setMemberSearchQuery,
+                                    onMemberClick = viewModel::loadMemberDetail,
+                                    onDismissMemberDetail = viewModel::clearSelectedMemberDetail,
+                                    onAddMember = {
+                                        editingMember = null
+                                        showMemberEditor = true
+                                    },
+                                    onEditMember = { detail ->
+                                        viewModel.clearSelectedMemberDetail()
+                                        editingMember = detail
+                                        showMemberEditor = true
+                                    },
+                                    onDeleteMember = { memberId ->
+                                        viewModel.deleteChurchMember(memberId)
+                                    }
+                                )
+                            }
                         }
 
                         BulletinTab.ACCOUNT -> {
@@ -526,6 +589,7 @@ private fun BuletinMainShell(
                                 newsCount = (newsState as? UiState.Success)?.data?.size ?: 0,
                                 schedulesCount = (schedulesState as? UiState.Success)?.data?.size ?: 0,
                                 galleryCount = (galleryState as? UiState.Success)?.data?.size ?: 0,
+                                membersCount = (membersState as? UiState.Success)?.data?.size ?: 0,
                                 isBusy = isBusy,
                                 onSaveProfile = viewModel::saveProfile,
                                 onOpenBookmark = { bm ->
@@ -552,7 +616,10 @@ private fun BuletinMainShell(
                                     editingPhoto = null
                                     showPhotoEditor = true
                                 },
-                                onSeedStarterClick = viewModel::seedStarterData,
+                                onAddMemberClick = {
+                                    editingMember = null
+                                    showMemberEditor = true
+                                },
                                 onOpenAddAdminDialog = { showAddAdminDialog = true },
                                 onRemoveAdminMember = viewModel::removeAdminMember,
                                 onUidCopied = {},
@@ -650,6 +717,25 @@ private fun BuletinMainShell(
                     photographerName = photographer,
                     published = published,
                     onComplete = { showPhotoEditor = false }
+                )
+            }
+        )
+    }
+
+    if (showMemberEditor && currentUser != null) {
+        AdminMemberEditorDialog(
+            initial = editingMember,
+            isBusy = isBusy,
+            onDismiss = { showMemberEditor = false },
+            onSave = { fullName, gender, birthDateIso, baptismStatus, denomination ->
+                viewModel.saveChurchMember(
+                    existingId = editingMember?.id,
+                    fullName = fullName,
+                    gender = gender,
+                    birthDateIso = birthDateIso,
+                    baptismStatus = baptismStatus,
+                    denomination = denomination,
+                    onComplete = { showMemberEditor = false }
                 )
             }
         )

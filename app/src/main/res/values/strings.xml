@@ -8,6 +8,7 @@
     <string name="nav_news">Berita</string>
     <string name="nav_schedules">Jadwal</string>
     <string name="nav_gallery">Galeri</string>
+    <string name="nav_members">Ahli</string>
     <string name="nav_account">Akun</string>
 
     <!-- Auth -->
@@ -27,16 +28,17 @@
     <string name="guest_badge">Mode Tamu (Baca Saja)</string>
     <string name="search_news_hint">Cari warta atau pengumuman…</string>
     <string name="search_schedule_hint">Cari kegiatan atau lokasi…</string>
+    <string name="search_members_hint">Cari nama ahli jemaat…</string>
     <string name="action_add_news">Tulis Berita</string>
     <string name="action_add_schedule">Tambah Jadwal</string>
     <string name="action_add_photo">Unggah Foto</string>
+    <string name="action_add_member">Tambah Ahli</string>
     <string name="action_save">Simpan</string>
     <string name="action_cancel">Batal</string>
     <string name="action_delete">Hapus</string>
     <string name="action_edit">Ubah</string>
     <string name="action_close">Tutup</string>
     <string name="action_retry">Coba Lagi</string>
-    <string name="action_seed_starter">Muat Konten Awal Buletin</string>
 
     <!-- Empty States -->
     <string name="empty_news_title">Belum Ada Berita Terkini</string>
@@ -45,6 +47,8 @@
     <string name="empty_schedules_desc">Jadwal ibadah raya, doa, pemuda, dan persekutuan akan segera diperbarui secara real-time.</string>
     <string name="empty_gallery_title">Galeri Foto Masih Kosong</string>
     <string name="empty_gallery_desc">Dokumentasi momen kebersamaan jemaat SIB Toburon akan tampil otomatis begitu admin mengunggahnya.</string>
+    <string name="empty_members_title">Belum Ada Ahli Terdaftar</string>
+    <string name="empty_members_desc">Senarai nama penuh jemaat SIB Toburon yang didaftarkan oleh admin akan terpapar secara automatik di sini.</string>
 
     <!-- Content Descriptions -->
     <string name="cd_sanctuary_banner">Foto gedung ibadah SIB Toburon bermandikan cahaya pagi</string>

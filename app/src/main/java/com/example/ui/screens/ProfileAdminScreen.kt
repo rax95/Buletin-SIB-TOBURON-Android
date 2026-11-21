@@ -23,11 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -92,6 +92,7 @@ fun ProfileAdminScreen(
     newsCount: Int,
     schedulesCount: Int,
     galleryCount: Int,
+    membersCount: Int,
     isBusy: Boolean,
     onSaveProfile: (String, FellowshipGroup) -> Unit,
     onOpenBookmark: (UserBookmark) -> Unit,
@@ -99,7 +100,7 @@ fun ProfileAdminScreen(
     onAddNewsClick: () -> Unit,
     onAddScheduleClick: () -> Unit,
     onAddPhotoClick: () -> Unit,
-    onSeedStarterClick: () -> Unit,
+    onAddMemberClick: () -> Unit,
     onOpenAddAdminDialog: () -> Unit,
     onRemoveAdminMember: (String) -> Unit,
     onUidCopied: () -> Unit,
@@ -293,6 +294,7 @@ fun ProfileAdminScreen(
                                 AdminStatPill("Berita", newsCount, Modifier.weight(1f))
                                 AdminStatPill("Jadwal", schedulesCount, Modifier.weight(1f))
                                 AdminStatPill("Galeri", galleryCount, Modifier.weight(1f))
+                                AdminStatPill("Ahli", membersCount, Modifier.weight(1f))
                             }
 
                             FlowRow(
@@ -324,13 +326,13 @@ fun ProfileAdminScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text("Unggah Foto")
                                 }
-                                OutlinedButton(
-                                    onClick = onSeedStarterClick,
-                                    enabled = !isBusy
+                                Button(
+                                    onClick = onAddMemberClick,
+                                    modifier = Modifier.testTag("admin_add_member_button")
                                 ) {
-                                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Muat Konten Awal")
+                                    Text("Tambah Ahli")
                                 }
                             }
 
@@ -651,7 +653,7 @@ private fun GuestAccountView(
                         }
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Anda sedang membaca Berita Terkini, Jadwal Kegiatan, dan Galeri Foto SIB Toburon secara real-time tanpa perlu mendaftar. Masuk dengan Google kapan saja untuk menyimpan warta, memberi apresiasi foto, atau mengakses Panel Admin.",
+                            text = "Anda sedang membaca Berita Terkini, Jadwal Kegiatan, dan Galeri Foto SIB Toburon secara real-time tanpa perlu mendaftar. Masuk dengan Google kapan saja untuk melihat Senarai Ahli Jemaat, menyimpan warta, memberi apresiasi foto, atau mengakses Panel Admin.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center

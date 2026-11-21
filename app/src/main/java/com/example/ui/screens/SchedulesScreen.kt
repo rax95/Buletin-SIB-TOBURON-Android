@@ -90,7 +90,7 @@ fun SchedulesScreen(
     onToggleBookmark: (ChurchSchedule) -> Unit,
     onEditSchedule: (ChurchSchedule) -> Unit,
     onDeleteSchedule: (ChurchSchedule) -> Unit,
-    onSeedStarter: () -> Unit,
+    onAddSchedule: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedScheduleId by remember { mutableStateOf<String?>(null) }
@@ -155,7 +155,7 @@ fun SchedulesScreen(
                 onSelectCategory = onSelectCategory,
                 onScheduleClick = { selectedScheduleId = it.id },
                 onToggleBookmark = onToggleBookmark,
-                onSeedStarter = onSeedStarter,
+                onAddSchedule = onAddSchedule,
                 modifier = Modifier
                     .weight(0.48f)
                     .fillMaxHeight()
@@ -204,7 +204,7 @@ fun SchedulesScreen(
             onSelectCategory = onSelectCategory,
             onScheduleClick = { selectedScheduleId = it.id },
             onToggleBookmark = onToggleBookmark,
-            onSeedStarter = onSeedStarter,
+            onAddSchedule = onAddSchedule,
             modifier = modifier.fillMaxSize()
         )
     }
@@ -223,7 +223,7 @@ private fun ScheduleListPane(
     onSelectCategory: (ScheduleCategory?) -> Unit,
     onScheduleClick: (ChurchSchedule) -> Unit,
     onToggleBookmark: (ChurchSchedule) -> Unit,
-    onSeedStarter: () -> Unit,
+    onAddSchedule: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -285,7 +285,8 @@ private fun ScheduleListPane(
                             description = if (schedulesState.data.isEmpty()) stringResource(R.string.empty_schedules_desc)
                             else "Coba ubah filter kategori atau kata pencarian.",
                             isAdmin = isAdmin && schedulesState.data.isEmpty(),
-                            onSeedStarter = onSeedStarter
+                            primaryActionLabel = stringResource(R.string.action_add_schedule),
+                            onPrimaryAction = onAddSchedule
                         )
                     }
                 } else {

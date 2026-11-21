@@ -5,6 +5,10 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.ServerTimestamp
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
@@ -205,4 +209,134 @@ data class BulletinAlert(
     val body: String,
     val authorId: String
 )
+
+enum class MemberGender(val code: String, val label: String) {
+    LELAKI("LELAKI", "Lelaki"),
+    PEREMPUAN("PEREMPUAN", "Perempuan");
+
+    companion object {
+        fun fromCode(raw: String?): MemberGender =
+            entries.firstOrNull { it.code == raw } ?: LELAKI
+    }
+}
+
+enum class BaptismStatus(val code: String, val label: String) {
+    DIBAPTIS("DIBAPTIS", "Dibaptis"),
+    BELUM_DIBAPTIS("BELUM_DIBAPTIS", "Belum Dibaptis");
+
+    companion object {
+        fun fromCode(raw: String?): BaptismStatus =
+            entries.firstOrNull { it.code == raw } ?: BELUM_DIBAPTIS
+    }
+}
+
+@Keep
+@IgnoreExtraProperties
+data class ChurchMemberPublic(
+    @DocumentId val id: String = "",
+    val fullName: String = "",
+    val published: Boolean = true,
+    val authorId: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class ChurchMemberDetail(
+    @DocumentId val id: String = "",
+    val fullName: String = "",
+    val gender: String = MemberGender.LELAKI.code,
+    val birthDate: String = "",
+    val baptismStatus: String = BaptismStatus.BELUM_DIBAPTIS.code,
+    val denomination: String = "SIB",
+    val authorId: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    fun resolvedGender(): MemberGender = MemberGender.fromCode(gender)
+    fun resolvedBaptismStatus(): BaptismStatus = BaptismStatus.fromCode(baptismStatus)
+    fun calculatedAge(): Int? = calculateAgeFromIsoDate(birthDate)
+}
+
+/**
+ * Calculates age in completed years from an ISO date string ("YYYY-MM-DD").
+ * Returns null if the string is invalid or in the future.
+ */
+fun calculateAgeFromIsoDate(isoDate: String): Int? {
+    val parts = isoDate.trim().split("-")
+    if (parts.size != 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull() ?: return null
+    val day = parts[2].toIntOrNull() ?: return null
+    if (year < 1900 || month !in 1..12 || day !in 1..31) return null
+
+    val today = Calendar.getInstance()
+    val birth = Calendar.getInstance().apply {
+        isLenient = false
+        try {
+            set(year, month - 1, day, 0, 0, 0)
+            time
+        } catch (_: Exception) {
+            return null
+        }
+    }
+    if (birth.after(today)) return null
+
+    var age = today.get(Calendar.YEAR) - birth.get(Calendar.YEAR)
+    val todayMonth = today.get(Calendar.MONTH)
+    val birthMonth = birth.get(Calendar.MONTH)
+    if (todayMonth < birthMonth ||
+        (todayMonth == birthMonth && today.get(Calendar.DAY_OF_MONTH) < birth.get(Calendar.DAY_OF_MONTH))
+    ) {
+        age -= 1
+    }
+    return age.coerceAtLeast(0)
+}
+
+/**
+ * Formats an ISO date ("YYYY-MM-DD") into a readable date string (e.g. "14 Jun 1995").
+ */
+fun formatBirthDateReadable(isoDate: String): String {
+    val parts = isoDate.trim().split("-")
+    if (parts.size != 3) return isoDate
+    val year = parts[0].toIntOrNull() ?: return isoDate
+    val month = parts[1].toIntOrNull() ?: return isoDate
+    val day = parts[2].toIntOrNull() ?: return isoDate
+    if (month !in 1..12 || day !in 1..31) return isoDate
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        set(year, month - 1, day, 0, 0, 0)
+    }
+    val fmt = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+    return fmt.format(cal.time)
+}
+
+fun epochMillisToIsoDate(utcMillis: Long): String {
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = utcMillis
+    }
+    return String.format(
+        Locale.US,
+        "%04d-%02d-%02d",
+        cal.get(Calendar.YEAR),
+        cal.get(Calendar.MONTH) + 1,
+        cal.get(Calendar.DAY_OF_MONTH)
+    )
+}
+
+fun isoDateToEpochMillis(isoDate: String): Long? {
+    val parts = isoDate.trim().split("-")
+    if (parts.size != 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull() ?: return null
+    val day = parts[2].toIntOrNull() ?: return null
+    if (year < 1900 || month !in 1..12 || day !in 1..31) return null
+    return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        set(year, month - 1, day, 0, 0, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
 

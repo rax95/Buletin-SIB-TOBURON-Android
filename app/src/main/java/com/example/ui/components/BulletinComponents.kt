@@ -24,7 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Search
@@ -258,7 +258,6 @@ fun EmptyBulletinState(
     title: String,
     description: String,
     isAdmin: Boolean,
-    onSeedStarter: (() -> Unit)? = null,
     primaryActionLabel: String? = null,
     onPrimaryAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -302,23 +301,15 @@ fun EmptyBulletinState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            if (isAdmin && onSeedStarter != null) {
+            if (isAdmin && primaryActionLabel != null && onPrimaryAction != null) {
                 Spacer(modifier = Modifier.height(20.dp))
-                Button(
-                    onClick = onSeedStarter,
-                    modifier = Modifier.testTag("seed_starter_button")
-                ) {
+                Button(onClick = onPrimaryAction) {
                     Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
+                        imageVector = Icons.Filled.Add,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(R.string.action_seed_starter))
-                }
-            } else if (isAdmin && primaryActionLabel != null && onPrimaryAction != null) {
-                Spacer(modifier = Modifier.height(20.dp))
-                Button(onClick = onPrimaryAction) {
                     Text(primaryActionLabel)
                 }
             }
