@@ -86,6 +86,7 @@ fun MembersScreen(
     modifier: Modifier = Modifier
 ) {
     var pendingDeleteMember by remember { mutableStateOf<ChurchMemberDetail?>(null) }
+    var selectedPublicMember by remember { mutableStateOf<ChurchMemberPublic?>(null) }
 
     val allMembers = (membersState as? UiState.Success)?.data.orEmpty()
     val filteredMembers = remember(allMembers, searchQuery) {
@@ -154,7 +155,7 @@ fun MembersScreen(
                                         text = if (isAdmin) {
                                             "Ketuk nama ahli untuk lihat, edit, atau padam maklumat."
                                         } else {
-                                            "SIB Toburon • Senarai nama ahli berdaftar"
+                                            "Ketuk nama ahli untuk lihat jantina & status baptisan."
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -262,10 +263,11 @@ fun MembersScreen(
                             MemberNameRow(
                                 index = index + 1,
                                 fullName = member.fullName,
-                                isAdmin = isAdmin,
                                 onClick = {
                                     if (isAdmin) {
                                         onMemberClick(member.id)
+                                    } else {
+                                        selectedPublicMember = member
                                     }
                                 },
                                 modifier = Modifier.testTag("member_row_${member.id}")
@@ -297,6 +299,15 @@ fun MembersScreen(
                 }
             }
         }
+    }
+
+    // Regular user (Jemaat) Member Info Dialog — ONLY Jantina & Status Baptisan
+    val publicMember = selectedPublicMember
+    if (!isAdmin && publicMember != null) {
+        JemaatMemberInfoDialog(
+            member = publicMember,
+            onDismiss = { selectedPublicMember = null }
+        )
     }
 
     // Admin Member Detail Dialog (only visible to Admin)
@@ -354,26 +365,17 @@ fun MembersScreen(
 private fun MemberNameRow(
     index: Int,
     fullName: String,
-    isAdmin: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val rowModifier = if (isAdmin) {
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clickable(onClick = onClick)
-    } else {
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-    }
-
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         tonalElevation = 1.dp,
-        modifier = rowModifier
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -404,14 +406,103 @@ private fun MemberNameRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            if (isAdmin) {
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Lihat maklumat $fullName",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
-                )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Lihat maklumat $fullName",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun JemaatMemberInfoDialog(
+    member: ChurchMemberPublic,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            tonalElevation = 4.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .widthIn(max = 460.dp)
+                .testTag("jemaat_member_info_dialog")
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Maklumat Ahli",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = member.fullName,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Tutup"
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Strictly ONLY Jantina & Status Baptisan for regular users
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    MemberDetailInfoRow(
+                        icon = Icons.Filled.Wc,
+                        label = "Jantina",
+                        value = member.resolvedGenderLabel()
+                    )
+                    MemberDetailInfoRow(
+                        icon = Icons.Filled.WaterDrop,
+                        label = "Status Baptisan",
+                        value = member.resolvedBaptismLabel()
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("jemaat_member_close_button")
+                    ) {
+                        Text("Tutup")
+                    }
+                }
             }
         }
     }

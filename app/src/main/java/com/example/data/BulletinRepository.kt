@@ -1001,6 +1001,40 @@ class BulletinRepository(
         }
     }
 
+    suspend fun getAllChurchMemberDetails(
+        memberIds: List<String>,
+        isBootstrappedAdmin: Boolean
+    ): Result<List<ChurchMemberDetail>> {
+        val path = "church_member_details"
+        return try {
+            requireUserId()
+            val details = if (isBootstrappedAdmin) {
+                val snap = db.collection("church_member_details").get().await()
+                snap.toObjects(
+                    ChurchMemberDetail::class.java,
+                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                )
+            } else {
+                memberIds.mapNotNull { id ->
+                    if (id.isBlank()) return@mapNotNull null
+                    val snap = db.collection("church_member_details").document(id).get().await()
+                    if (snap.exists()) {
+                        snap.toObject(
+                            ChurchMemberDetail::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    } else null
+                }
+            }
+            Result.success(details.sortedBy { it.fullName.lowercase() })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.LIST, path)
+            Result.failure(e)
+        }
+    }
+
     suspend fun createChurchMember(
         fullName: String,
         gender: MemberGender,
@@ -1033,6 +1067,8 @@ class BulletinRepository(
                 publicRef,
                 mapOf(
                     "fullName" to cleanName,
+                    "gender" to gender.code,
+                    "baptismStatus" to baptismStatus.code,
                     "published" to true,
                     "authorId" to uid,
                     "createdAt" to FieldValue.serverTimestamp(),
@@ -1095,6 +1131,8 @@ class BulletinRepository(
                 publicRef,
                 mapOf(
                     "fullName" to cleanName,
+                    "gender" to gender.code,
+                    "baptismStatus" to baptismStatus.code,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )

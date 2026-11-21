@@ -235,11 +235,19 @@ enum class BaptismStatus(val code: String, val label: String) {
 data class ChurchMemberPublic(
     @DocumentId val id: String = "",
     val fullName: String = "",
+    val gender: String = "",
+    val baptismStatus: String = "",
     val published: Boolean = true,
     val authorId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
-)
+) {
+    fun resolvedGenderLabel(): String =
+        MemberGender.entries.firstOrNull { it.code == gender }?.label ?: "Belum dikemas kini"
+
+    fun resolvedBaptismLabel(): String =
+        BaptismStatus.entries.firstOrNull { it.code == baptismStatus }?.label ?: "Belum dikemas kini"
+}
 
 @Keep
 @IgnoreExtraProperties

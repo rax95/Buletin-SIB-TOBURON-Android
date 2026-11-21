@@ -25,13 +25,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -42,8 +47,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,8 +77,10 @@ import com.example.data.NewsCategory
 import com.example.data.ScheduleCategory
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -333,7 +344,42 @@ fun AdminNewsEditorDialog(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private fun formatScheduleDateLabel(utcMillis: Long): String {
+    val fmt = SimpleDateFormat("EEEE, dd MMM yyyy", Locale("id", "ID")).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+    return fmt.format(Date(utcMillis))
+}
+
+private fun buildScheduleSortOrder(utcMillis: Long, startHour: Int, startMinute: Int): Long {
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = utcMillis
+    }
+    val year = cal.get(Calendar.YEAR).toLong()
+    val month = (cal.get(Calendar.MONTH) + 1).toLong()
+    val day = cal.get(Calendar.DAY_OF_MONTH).toLong()
+    return year * 100000000L + month * 1000000L + day * 10000L + startHour * 100L + startMinute
+}
+
+private fun formatHourMinute(hour: Int, minute: Int): String =
+    String.format(Locale.US, "%02d:%02d", hour, minute)
+
+private fun parseInitialTimeRange(raw: String?): List<Int> {
+    if (raw.isNullOrBlank()) return listOf(8, 0, 10, 0, 1)
+    val matches = Regex("(\\d{1,2})[:.](\\d{2})").findAll(raw).toList()
+    if (matches.isEmpty()) return listOf(8, 0, 10, 0, 1)
+    val sh = matches[0].groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: 8
+    val sm = matches[0].groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
+    return if (matches.size >= 2) {
+        val eh = matches[1].groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: ((sh + 2) % 24)
+        val em = matches[1].groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: sm
+        listOf(sh, sm, eh, em, 1)
+    } else {
+        listOf(sh, sm, (sh + 2) % 24, sm, 0)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScheduleEditorDialog(
     initial: ChurchSchedule?,
@@ -352,17 +398,54 @@ fun AdminScheduleEditorDialog(
         published: Boolean
     ) -> Unit
 ) {
+    val defaultUtcToday = remember {
+        val local = Calendar.getInstance()
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    val parsedTimes = remember(initial?.timeLabel) { parseInitialTimeRange(initial?.timeLabel) }
+
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var description by remember { mutableStateOf(initial?.description ?: "") }
     var category by remember { mutableStateOf(initial?.resolvedCategory() ?: ScheduleCategory.IBADAH) }
-    var dateLabel by remember { mutableStateOf(initial?.dateLabel ?: "Setiap Minggu") }
-    var timeLabel by remember { mutableStateOf(initial?.timeLabel ?: "08:00 - 10:00 WITA") }
+    var selectedDateMillis by remember { mutableStateOf(defaultUtcToday) }
+    var dateLabel by remember {
+        mutableStateOf(
+            initial?.dateLabel?.ifBlank { formatScheduleDateLabel(defaultUtcToday) }
+                ?: formatScheduleDateLabel(defaultUtcToday)
+        )
+    }
+    var startHour by remember { mutableIntStateOf(parsedTimes[0]) }
+    var startMinute by remember { mutableIntStateOf(parsedTimes[1]) }
+    var endHour by remember { mutableIntStateOf(parsedTimes[2]) }
+    var endMinute by remember { mutableIntStateOf(parsedTimes[3]) }
+    var useEndTime by remember { mutableStateOf(parsedTimes[4] == 1) }
+
+    val formattedTimeLabel = remember(startHour, startMinute, endHour, endMinute, useEndTime) {
+        val startStr = formatHourMinute(startHour, startMinute)
+        if (useEndTime) {
+            "$startStr - ${formatHourMinute(endHour, endMinute)} WITA"
+        } else {
+            "$startStr WITA"
+        }
+    }
+
     var location by remember { mutableStateOf(initial?.location ?: "Gedung Utama SIB Toburon") }
     var speaker by remember { mutableStateOf(initial?.speaker ?: "") }
-    var sortOrderText by remember { mutableStateOf((initial?.sortOrder ?: 100L).toString()) }
-    var recurring by remember { mutableStateOf(initial?.recurring ?: true) }
+    var sortOrderText by remember {
+        mutableStateOf(
+            (initial?.sortOrder ?: buildScheduleSortOrder(defaultUtcToday, parsedTimes[0], parsedTimes[1])).toString()
+        )
+    }
+    var recurring by remember { mutableStateOf(initial?.recurring ?: false) }
     var published by remember { mutableStateOf(initial?.published ?: true) }
     var validationError by remember { mutableStateOf<String?>(null) }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -386,20 +469,166 @@ fun AdminScheduleEditorDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("schedule_title_input")
                 )
-                OutlinedTextField(
-                    value = dateLabel,
-                    onValueChange = { dateLabel = it; validationError = null },
-                    label = { Text("Hari / Tanggal * (cth: Minggu, 22 Nov)") },
-                    singleLine = true,
+
+                // Hari / Tanggal — Material 3 Date Picker
+                Text("Hari / Tanggal *", style = MaterialTheme.typography.labelLarge)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true }
+                        .testTag("schedule_date_picker_field")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = dateLabel,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Ketuk untuk pilih tarikh",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "Pilih",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Waktu — Material 3 Time Picker (Mula & Tamat)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = timeLabel,
-                    onValueChange = { timeLabel = it; validationError = null },
-                    label = { Text("Waktu * (cth: 08:00 - 10:00 WITA)") },
-                    singleLine = true,
+                ) {
+                    Text("Waktu Kegiatan *", style = MaterialTheme.typography.labelLarge)
+                    FilterChip(
+                        selected = useEndTime,
+                        onClick = { useEndTime = !useEndTime },
+                        label = {
+                            Text(
+                                text = if (useEndTime) "Ada Waktu Tamat" else "Waktu Mula Sahaja",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { showStartTimePicker = true }
+                            .testTag("schedule_start_time_picker")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AccessTime,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Mula",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = formatHourMinute(startHour, startMinute),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    if (useEndTime) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { showEndTimePicker = true }
+                                .testTag("schedule_end_time_picker")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AccessTime,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Tamat",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = formatHourMinute(endHour, endMinute),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = "Paparan waktu: $formattedTimeLabel",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
+
                 OutlinedTextField(
                     value = location,
                     onValueChange = { location = it; validationError = null },
@@ -479,13 +708,13 @@ fun AdminScheduleEditorDialog(
                     val t = title.trim()
                     val d = description.trim()
                     val dt = dateLabel.trim()
-                    val tm = timeLabel.trim()
+                    val tm = formattedTimeLabel.trim()
                     val loc = location.trim()
                     val order = sortOrderText.toLongOrNull() ?: 500L
                     when {
                         t.length < 3 -> validationError = "Nama kegiatan minimal 3 karakter."
-                        dt.length < 3 -> validationError = "Hari/tanggal minimal 3 karakter."
-                        tm.length < 3 -> validationError = "Waktu kegiatan minimal 3 karakter."
+                        dt.length < 3 -> validationError = "Sila pilih hari / tarikh kegiatan."
+                        tm.length < 3 -> validationError = "Sila pilih waktu kegiatan."
                         loc.length < 2 -> validationError = "Lokasi kegiatan minimal 2 karakter."
                         d.isEmpty() -> validationError = "Keterangan kegiatan wajib diisi."
                         else -> onSave(t, d, category, dt, tm, loc, speaker.trim(), order, recurring, published)
@@ -500,6 +729,104 @@ fun AdminScheduleEditorDialog(
             TextButton(onClick = onDismiss) { Text("Batal") }
         }
     )
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDateMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            selectedDateMillis = millis
+                            dateLabel = formatScheduleDateLabel(millis)
+                            sortOrderText = buildScheduleSortOrder(millis, startHour, startMinute).toString()
+                            validationError = null
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("Pilih")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showStartTimePicker) {
+        val timeState = rememberTimePickerState(
+            initialHour = startHour,
+            initialMinute = startMinute,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showStartTimePicker = false },
+            title = { Text("Pilih Waktu Mula", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TimePicker(state = timeState)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        startHour = timeState.hour
+                        startMinute = timeState.minute
+                        sortOrderText = buildScheduleSortOrder(selectedDateMillis, startHour, startMinute).toString()
+                        showStartTimePicker = false
+                    }
+                ) {
+                    Text("Pilih")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartTimePicker = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    if (showEndTimePicker) {
+        val timeState = rememberTimePickerState(
+            initialHour = endHour,
+            initialMinute = endMinute,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showEndTimePicker = false },
+            title = { Text("Pilih Waktu Tamat", style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TimePicker(state = timeState)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        endHour = timeState.hour
+                        endMinute = timeState.minute
+                        showEndTimePicker = false
+                    }
+                ) {
+                    Text("Pilih")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndTimePicker = false }) { Text("Batal") }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

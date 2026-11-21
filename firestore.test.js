@@ -624,6 +624,8 @@ test("Church members directory exposes full names only; personal details are str
   const createBatch = adminDb.batch();
   createBatch.set(adminDb.collection("church_members").doc("member_001"), {
     fullName: "Daniel Petrus Toburon",
+    gender: "LELAKI",
+    baptismStatus: "DIBAPTIS",
     published: true,
     authorId: ADMIN_UID,
     createdAt: ts,
@@ -649,12 +651,12 @@ test("Church members directory exposes full names only; personal details are str
     guestDb.collection("church_members").doc("member_001").get()
   );
 
-  // Signed-in Jemaat CAN read public full-name list via filtered query
+  // Signed-in Jemaat CAN read church_members (fullName, gender, baptismStatus only) via filtered query
   await assertSucceeds(
     aliceDb.collection("church_members").where("published", "==", true).get()
   );
 
-  // Guest and Jemaat CANNOT read private member details (birthDate, gender, baptismStatus, denomination)
+  // Guest and Jemaat CANNOT read private member details (birthDate, denomination)
   await assertFails(
     guestDb.collection("church_member_details").doc("member_001").get()
   );
@@ -665,10 +667,26 @@ test("Church members directory exposes full names only; personal details are str
     aliceDb.collection("church_member_details").get()
   );
 
+  // Reject leaking birthDate or denomination into /church_members
+  await assertFails(
+    adminDb.collection("church_members").doc("member_leak").set({
+      fullName: "Leak Test",
+      gender: "LELAKI",
+      baptismStatus: "DIBAPTIS",
+      birthDate: "1995-06-14",
+      published: true,
+      authorId: ADMIN_UID,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
   // Non-admin CANNOT create, update, or delete members
   await assertFails(
     aliceDb.collection("church_members").doc("member_fake").set({
       fullName: "Jemaat Palsu",
+      gender: "LELAKI",
+      baptismStatus: "BELUM_DIBAPTIS",
       published: true,
       authorId: JEMAAT_ALICE,
       createdAt: ts,
@@ -677,15 +695,20 @@ test("Church members directory exposes full names only; personal details are str
   );
   await assertFails(aliceDb.collection("church_members").doc("member_001").delete());
 
-  // Admin CAN read details, update atomically, and delete atomically
+  // Admin CAN read single detail & list all details (for Excel/PDF export), update atomically, and delete atomically
   await assertSucceeds(
     adminDb.collection("church_member_details").doc("member_001").get()
+  );
+  await assertSucceeds(
+    adminDb.collection("church_member_details").get()
   );
 
   const updateBatch = adminDb.batch();
   const updateTs = pastDate(1000);
   updateBatch.update(adminDb.collection("church_members").doc("member_001"), {
     fullName: "Daniel Petrus Sibin",
+    gender: "LELAKI",
+    baptismStatus: "DIBAPTIS",
     updatedAt: updateTs,
   });
   updateBatch.update(adminDb.collection("church_member_details").doc("member_001"), {

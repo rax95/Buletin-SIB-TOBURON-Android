@@ -3,9 +3,12 @@ package com.example
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -21,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Person
@@ -54,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -73,6 +78,8 @@ import com.example.data.BulletinRepository
 import com.example.data.ChurchMemberDetail
 import com.example.data.ChurchSchedule
 import com.example.data.GalleryPhoto
+import com.example.data.MemberExportFormat
+import com.example.data.MemberExportUtils
 import com.example.data.NewsArticle
 import com.example.data.UiState
 import com.example.notifications.BulletinNotificationManager
@@ -80,6 +87,7 @@ import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.AdminMemberAddDialog
 import com.example.ui.components.AdminMemberEditorDialog
+import com.example.ui.components.AdminMemberExportDialog
 import com.example.ui.components.AdminNewsEditorDialog
 import com.example.ui.components.AdminPhotoEditorDialog
 import com.example.ui.components.AdminScheduleEditorDialog
@@ -290,7 +298,62 @@ private fun BuletinMainShell(
     var editingPhoto by remember { mutableStateOf<GalleryPhoto?>(null) }
     var showMemberEditor by remember { mutableStateOf(false) }
     var editingMember by remember { mutableStateOf<ChurchMemberDetail?>(null) }
+    var showMemberExportDialog by remember { mutableStateOf(false) }
+    var isExportingFile by remember { mutableStateOf(false) }
+    var pendingExportMembers by remember { mutableStateOf<List<ChurchMemberDetail>>(emptyList()) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
+
+    val excelExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(MemberExportFormat.EXCEL.mimeType)
+    ) { uri ->
+        val membersToExport = pendingExportMembers
+        if (uri != null && membersToExport.isNotEmpty()) {
+            scope.launch {
+                isExportingFile = true
+                val res = MemberExportUtils.exportMembersToUri(
+                    context = context,
+                    uri = uri,
+                    members = membersToExport,
+                    format = MemberExportFormat.EXCEL
+                )
+                isExportingFile = false
+                pendingExportMembers = emptyList()
+                res.onSuccess { count ->
+                    viewModel.showSnackbar("Fail Excel ($count ahli) berjaya disimpan ke storan peranti.")
+                }.onFailure { err ->
+                    viewModel.showSnackbar(err.localizedMessage ?: "Gagal menyimpan fail Excel.")
+                }
+            }
+        } else {
+            pendingExportMembers = emptyList()
+        }
+    }
+
+    val pdfExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(MemberExportFormat.PDF.mimeType)
+    ) { uri ->
+        val membersToExport = pendingExportMembers
+        if (uri != null && membersToExport.isNotEmpty()) {
+            scope.launch {
+                isExportingFile = true
+                val res = MemberExportUtils.exportMembersToUri(
+                    context = context,
+                    uri = uri,
+                    members = membersToExport,
+                    format = MemberExportFormat.PDF
+                )
+                isExportingFile = false
+                pendingExportMembers = emptyList()
+                res.onSuccess { count ->
+                    viewModel.showSnackbar("Fail PDF ($count ahli) berjaya disimpan ke storan peranti.")
+                }.onFailure { err ->
+                    viewModel.showSnackbar(err.localizedMessage ?: "Gagal menyimpan fail PDF.")
+                }
+            }
+        } else {
+            pendingExportMembers = emptyList()
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
@@ -388,33 +451,56 @@ private fun BuletinMainShell(
             },
             floatingActionButton = {
                 if (isAdmin && currentTab != BulletinTab.ACCOUNT) {
-                    val (fabLabel, onFabClick) = when (currentTab) {
-                        BulletinTab.NEWS -> Pair(stringResource(R.string.action_add_news)) {
-                            editingNews = null
-                            showNewsEditor = true
+                    if (currentTab == BulletinTab.MEMBERS) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ExtendedFloatingActionButton(
+                                onClick = { showMemberExportDialog = true },
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                icon = { Icon(Icons.Filled.Download, contentDescription = null) },
+                                text = { Text("Export") },
+                                modifier = Modifier.testTag("admin_export_members_button")
+                            )
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    editingMember = null
+                                    showMemberEditor = true
+                                },
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary,
+                                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                text = { Text(stringResource(R.string.action_add_member)) },
+                                modifier = Modifier.testTag("admin_fab_members")
+                            )
                         }
-                        BulletinTab.SCHEDULES -> Pair(stringResource(R.string.action_add_schedule)) {
-                            editingSchedule = null
-                            showScheduleEditor = true
+                    } else {
+                        val (fabLabel, onFabClick) = when (currentTab) {
+                            BulletinTab.NEWS -> Pair(stringResource(R.string.action_add_news)) {
+                                editingNews = null
+                                showNewsEditor = true
+                            }
+                            BulletinTab.SCHEDULES -> Pair(stringResource(R.string.action_add_schedule)) {
+                                editingSchedule = null
+                                showScheduleEditor = true
+                            }
+                            BulletinTab.GALLERY -> Pair(stringResource(R.string.action_add_photo)) {
+                                editingPhoto = null
+                                showPhotoEditor = true
+                            }
+                            BulletinTab.MEMBERS, BulletinTab.ACCOUNT -> Pair("", {})
                         }
-                        BulletinTab.GALLERY -> Pair(stringResource(R.string.action_add_photo)) {
-                            editingPhoto = null
-                            showPhotoEditor = true
-                        }
-                        BulletinTab.MEMBERS -> Pair(stringResource(R.string.action_add_member)) {
-                            editingMember = null
-                            showMemberEditor = true
-                        }
-                        BulletinTab.ACCOUNT -> Pair("", {})
+                        ExtendedFloatingActionButton(
+                            onClick = onFabClick,
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = MaterialTheme.colorScheme.onSecondary,
+                            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                            text = { Text(fabLabel) },
+                            modifier = Modifier.testTag("admin_fab_${currentTab.route}")
+                        )
                     }
-                    ExtendedFloatingActionButton(
-                        onClick = onFabClick,
-                        containerColor = MaterialTheme.colorScheme.secondary,
-                        contentColor = MaterialTheme.colorScheme.onSecondary,
-                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                        text = { Text(fabLabel) },
-                        modifier = Modifier.testTag("admin_fab_${currentTab.route}")
-                    )
                 }
             }
         ) { innerPadding ->
@@ -737,6 +823,26 @@ private fun BuletinMainShell(
                     denomination = denomination,
                     onComplete = { showMemberEditor = false }
                 )
+            }
+        )
+    }
+
+    if (showMemberExportDialog && isAdmin && currentUser != null) {
+        val currentMembersCount = (membersState as? UiState.Success)?.data?.size ?: 0
+        AdminMemberExportDialog(
+            membersCount = currentMembersCount,
+            isBusy = isBusy || isExportingFile,
+            onDismiss = { showMemberExportDialog = false },
+            onSelectFormat = { format ->
+                viewModel.prepareMembersForExport { details ->
+                    showMemberExportDialog = false
+                    pendingExportMembers = details
+                    val fileName = MemberExportUtils.suggestedFileName(format)
+                    when (format) {
+                        MemberExportFormat.EXCEL -> excelExportLauncher.launch(fileName)
+                        MemberExportFormat.PDF -> pdfExportLauncher.launch(fileName)
+                    }
+                }
             }
         )
     }

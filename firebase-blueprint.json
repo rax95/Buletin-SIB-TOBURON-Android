@@ -394,12 +394,22 @@
     },
     "ChurchMemberPublic": {
       "title": "ChurchMemberPublic",
-      "description": "Direktori awam senarai nama penuh ahli jemaat SIB Toburon (hanya nama penuh sahaja).",
+      "description": "Direktori senarai ahli jemaat SIB Toburon untuk jemaat berdaftar (nama penuh dalam senarai; jantina & status baptisan bila diklik; Guest disekat).",
       "type": "object",
       "properties": {
         "fullName": {
           "type": "string",
           "description": "Nama penuh ahli jemaat (2-120 karakter)"
+        },
+        "gender": {
+          "type": "string",
+          "enum": ["LELAKI", "PEREMPUAN"],
+          "description": "Jantina ahli jemaat"
+        },
+        "baptismStatus": {
+          "type": "string",
+          "enum": ["DIBAPTIS", "BELUM_DIBAPTIS"],
+          "description": "Status baptisan ahli jemaat"
         },
         "published": {
           "type": "boolean",
@@ -420,7 +430,7 @@
           "description": "Waktu kemas kini terakhir (FieldValue.serverTimestamp())"
         }
       },
-      "required": ["fullName", "published", "authorId", "createdAt", "updatedAt"]
+      "required": ["fullName", "gender", "baptismStatus", "published", "authorId", "createdAt", "updatedAt"]
     },
     "ChurchMemberDetail": {
       "title": "ChurchMemberDetail",
@@ -506,7 +516,7 @@
     },
     "/church_members/{memberId}": {
       "schema": { "$ref": "#/entities/ChurchMemberPublic" },
-      "description": "Senarai nama penuh ahli jemaat SIB Toburon yang dapat dilihat semua jemaat & tamu"
+      "description": "Senarai ahli jemaat SIB Toburon untuk pengguna log masuk (nama penuh, jantina, dan status baptisan; Guest disekat)"
     },
     "/church_member_details/{memberId}": {
       "schema": { "$ref": "#/entities/ChurchMemberDetail" },

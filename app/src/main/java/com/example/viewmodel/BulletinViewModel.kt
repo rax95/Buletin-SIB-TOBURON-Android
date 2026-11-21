@@ -294,6 +294,32 @@ class BulletinViewModel(
         _selectedMemberDetail.value = null
     }
 
+    fun prepareMembersForExport(onReady: (List<ChurchMemberDetail>) -> Unit) {
+        if (!isAdmin.value) return
+        val memberIds = (membersState.value as? UiState.Success)?.data?.map { it.id }.orEmpty()
+        viewModelScope.launch {
+            _isBusy.value = true
+            try {
+                val result = repository.getAllChurchMemberDetails(memberIds, isBootstrappedAdmin)
+                result.onSuccess { details ->
+                    if (details.isEmpty()) {
+                        _snackbarMessage.tryEmit("Tiada senarai ahli untuk dieksport.")
+                    } else {
+                        onReady(details)
+                    }
+                }.onFailure { err ->
+                    _snackbarMessage.tryEmit(err.localizedMessage ?: "Gagal menyediakan data eksport ahli.")
+                }
+            } finally {
+                _isBusy.value = false
+            }
+        }
+    }
+
+    fun showSnackbar(message: String) {
+        _snackbarMessage.tryEmit(message)
+    }
+
     // --- MUTATIONS ---
 
     fun saveNews(

@@ -145,6 +145,8 @@ service cloud.firestore {
 
     function isValidChurchMemberPublic(data) {
       return data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+        data.gender in ['LELAKI', 'PEREMPUAN'] &&
+        data.baptismStatus in ['DIBAPTIS', 'BELUM_DIBAPTIS'] &&
         data.published is bool &&
         isValidId(data.authorId) &&
         isValidTimestamp(data.createdAt) &&
@@ -437,8 +439,8 @@ service cloud.firestore {
         isValidChurchMemberPublic(incoming()) &&
         incoming().authorId == request.auth.uid &&
         incoming().published == true &&
-        incoming().keys().hasAll(['fullName', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
-        incoming().keys().hasOnly(['fullName', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasAll(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
         isAdmin();
 
       allow update: if isSignedIn() &&
@@ -446,7 +448,7 @@ service cloud.firestore {
         isValidChurchMemberPublic(incoming()) &&
         incoming().authorId == existing().authorId &&
         incoming().createdAt == existing().createdAt &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'published', 'updatedAt']) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'gender', 'baptismStatus', 'published', 'updatedAt']) &&
         isAdmin();
 
       allow delete: if isSignedIn() && isValidId(memberId) && isAdmin();
