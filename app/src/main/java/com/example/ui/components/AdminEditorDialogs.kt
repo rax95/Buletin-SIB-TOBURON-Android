@@ -20,15 +20,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
@@ -907,6 +912,7 @@ fun AdminPhotoEditorDialog(
         coverPreset: CoverPreset,
         imageUrl: String?,
         imageBase64: String?,
+        extraImagesBase64: List<String>,
         photographerName: String,
         published: Boolean
     ) -> Unit
@@ -926,72 +932,162 @@ fun AdminPhotoEditorDialog(
     var photographerName by remember { mutableStateOf(initial?.photographerName?.ifBlank { defaultPhotographer } ?: defaultPhotographer) }
     var coverPreset by remember { mutableStateOf(initial?.resolvedCoverPreset() ?: CoverPreset.CUSTOM) }
     var imageUrl by remember { mutableStateOf(initial?.imageUrl ?: "") }
-    var imageBase64 by remember { mutableStateOf(initial?.imageBase64) }
-    var presetExplicitlyChosen by remember { mutableStateOf(initial != null && initial.imageBase64.isNullOrBlank() && initial.imageUrl.isNullOrBlank()) }
+    var selectedImagesBase64 by remember { mutableStateOf(initial?.allBase64Images() ?: emptyList()) }
+    var previewIndex by remember { mutableIntStateOf(0) }
+    var presetExplicitlyChosen by remember {
+        mutableStateOf(
+            initial != null && initial.allBase64Images().isEmpty() && initial.imageUrl.isNullOrBlank()
+        )
+    }
     var published by remember { mutableStateOf(initial?.published ?: true) }
     var validationError by remember { mutableStateOf<String?>(null) }
     var isEncodingPhoto by remember { mutableStateOf(false) }
+    var encodingProgressText by remember { mutableStateOf<String?>(null) }
     var photoStatusNote by remember {
         mutableStateOf(
-            if (!initial?.imageBase64.isNullOrBlank()) {
-                AppLanguageManager.tr("Foto peranti disimpan", "Device photo saved")
-            } else null
+            initial?.allBase64Images()?.takeIf { it.isNotEmpty() }?.let { imgs ->
+                if (imgs.size > 1) {
+                    AppLanguageManager.tr("${imgs.size} foto peranti disimpan", "${imgs.size} device photos saved")
+                } else {
+                    AppLanguageManager.tr("1 foto peranti disimpan", "1 device photo saved")
+                }
+            }
         )
     }
 
-    fun handlePickedPhotoUri(uri: Uri?) {
-        if (uri == null) return
+    fun handlePickedPhotoUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val maxAllowed = ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD
+        val remainingSlots = (maxAllowed - selectedImagesBase64.size).coerceAtLeast(0)
+        if (remainingSlots <= 0) {
+            validationError = AppLanguageManager.tr(
+                "Maksimum $maxAllowed gambar bagi setiap muat naik galeri.",
+                "Maximum $maxAllowed photos per gallery upload."
+            )
+            return
+        }
+
+        val urisToProcess = uris.take(remainingSlots)
+        val trimmedCount = uris.size - urisToProcess.size
+
         isEncodingPhoto = true
         validationError = null
         scope.launch {
-            val res = ImageUtils.encodeUriToBase64(context, uri)
+            val updatedList = selectedImagesBase64.toMutableList()
+            var usedBytes = updatedList.sumOf { it.length }
+            var failedCount = 0
+            var skippedForBudget = 0
+
+            val plannedTotal = updatedList.size + urisToProcess.size
+            val targetDim = when {
+                plannedTotal <= 1 -> 960
+                plannedTotal <= 3 -> 840
+                else -> 720
+            }
+
+            urisToProcess.forEachIndexed { idx, uri ->
+                encodingProgressText = AppLanguageManager.tr(
+                    "Memproses foto ${idx + 1} / ${urisToProcess.size}…",
+                    "Processing photo ${idx + 1} / ${urisToProcess.size}…"
+                )
+                val remainingToEncode = (urisToProcess.size - idx).coerceAtLeast(1)
+                val remainingBudget = (ImageUtils.MAX_GALLERY_TOTAL_BASE64_LENGTH - usedBytes).coerceAtLeast(0)
+                if (remainingBudget < 48_000) {
+                    skippedForBudget++
+                    return@forEachIndexed
+                }
+                val perPhotoBudget = if (plannedTotal == 1) {
+                    240_000
+                } else {
+                    (remainingBudget / remainingToEncode).coerceIn(55_000, 165_000)
+                }
+
+                val res = ImageUtils.encodeUriToBase64(
+                    context = context,
+                    uri = uri,
+                    maxBase64Length = perPhotoBudget,
+                    initialMaxDimensionPx = targetDim
+                )
+                res.onSuccess { encoded ->
+                    if (usedBytes + encoded.base64.length <= ImageUtils.MAX_GALLERY_TOTAL_BASE64_LENGTH + 40_000) {
+                        updatedList.add(encoded.base64)
+                        usedBytes += encoded.base64.length
+                    } else {
+                        skippedForBudget++
+                    }
+                }.onFailure {
+                    failedCount++
+                }
+            }
+
             isEncodingPhoto = false
-            res.onSuccess { encoded ->
-                imageBase64 = encoded.base64
+            encodingProgressText = null
+
+            if (updatedList.isNotEmpty()) {
+                selectedImagesBase64 = updatedList
+                previewIndex = previewIndex.coerceIn(0, updatedList.lastIndex)
                 imageUrl = ""
                 coverPreset = CoverPreset.CUSTOM
                 presetExplicitlyChosen = false
+                val totalKb = (usedBytes * 3 / 4 / 1024).coerceAtLeast(1)
                 photoStatusNote = AppLanguageManager.tr(
-                    "Foto peranti sedia dimuat naik (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})",
-                    "Device photo ready to upload (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})"
+                    "${updatedList.size} foto sedia dimuat naik (≈$totalKb KB)",
+                    "${updatedList.size} photos ready to upload (≈$totalKb KB)"
                 )
-            }.onFailure { err ->
-                validationError = err.localizedMessage ?: AppLanguageManager.tr(
+            }
+
+            validationError = when {
+                failedCount > 0 && updatedList.isEmpty() -> AppLanguageManager.tr(
                     "Gagal memproses foto daripada peranti.",
-                    "Failed to process photo from device."
+                    "Failed to process selected photos from device."
                 )
+                skippedForBudget > 0 -> AppLanguageManager.tr(
+                    "$skippedForBudget foto dilangkau kerana melebihi had saiz album.",
+                    "$skippedForBudget photo(s) skipped due to album size limit."
+                )
+                trimmedCount > 0 -> AppLanguageManager.tr(
+                    "Hanya $maxAllowed gambar pertama dipilih (had maksimum per muat naik).",
+                    "Only the first $maxAllowed photos were added (max per upload)."
+                )
+                failedCount > 0 -> AppLanguageManager.tr(
+                    "$failedCount foto gagal diproses; foto selebihnya sedia dimuat naik.",
+                    "$failedCount photo(s) could not be processed; remaining photos are ready."
+                )
+                else -> null
             }
         }
     }
 
-    val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri -> handlePickedPhotoUri(uri) }
+    val openMultipleDocumentsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> handlePickedPhotoUris(uris) }
 
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri -> handlePickedPhotoUri(uri) }
+    val multiPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD)
+    ) { uris -> handlePickedPhotoUris(uris) }
 
     fun launchGalleryPhotoPicker() {
         try {
-            photoPickerLauncher.launch(
+            multiPhotoPickerLauncher.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )
         } catch (_: ActivityNotFoundException) {
-            openDocumentLauncher.launch(arrayOf("image/*"))
+            openMultipleDocumentsLauncher.launch(arrayOf("image/*"))
         }
     }
 
-    val hasSelectedPhoto = !imageBase64.isNullOrBlank() || imageUrl.trim().isNotBlank() || presetExplicitlyChosen
+    val safePreviewIdx = previewIndex.coerceIn(0, (selectedImagesBase64.size - 1).coerceAtLeast(0))
+    val activePreviewBase64 = selectedImagesBase64.getOrNull(safePreviewIdx)
+    val hasSelectedPhoto = selectedImagesBase64.isNotEmpty() || imageUrl.trim().isNotBlank() || presetExplicitlyChosen
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
                 text = if (initial == null) {
-                    tr("Muat Naik Foto Galeri", "Upload Gallery Photo")
+                    tr("Muat Naik Foto Galeri", "Upload Gallery Photos")
                 } else {
-                    tr("Edit Maklumat Foto", "Edit Photo Info")
+                    tr("Edit Maklumat Foto", "Edit Photo Album")
                 },
                 style = MaterialTheme.typography.headlineSmall
             )
@@ -1024,10 +1120,27 @@ fun AdminPhotoEditorDialog(
                             BulletinCoverImage(
                                 coverPreset = coverPreset,
                                 imageUrl = imageUrl.trim().takeIf { it.isNotBlank() },
-                                imageBase64 = imageBase64,
+                                imageBase64 = activePreviewBase64,
                                 contentDescription = tr("Pratonton foto galeri", "Gallery photo preview"),
                                 modifier = Modifier.fillMaxWidth().height(170.dp)
                             )
+                            if (selectedImagesBase64.size > 1) {
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = Color.Black.copy(alpha = 0.62f),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                ) {
+                                    Text(
+                                        text = "${safePreviewIdx + 1} / ${selectedImagesBase64.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
                         } else {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1043,8 +1156,8 @@ fun AdminPhotoEditorDialog(
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     text = tr(
-                                        "Ketik untuk Pilih Foto daripada Peranti",
-                                        "Tap to Choose Photo from Device"
+                                        "Ketik untuk Pilih 1 atau Banyak Foto",
+                                        "Tap to Choose 1 or Multiple Photos"
                                     ),
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -1052,8 +1165,8 @@ fun AdminPhotoEditorDialog(
                                 )
                                 Text(
                                     text = tr(
-                                        "Menyokong JPG, PNG, WebP, & HEIC (dimampatkan automatik)",
-                                        "Supports JPG, PNG, WebP, & HEIC (auto-compressed)"
+                                        "Pilih sehingga ${ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD} gambar sekaligus (dimampatkan automatik)",
+                                        "Select up to ${ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD} photos at once (auto-compressed)"
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1068,7 +1181,7 @@ fun AdminPhotoEditorDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(170.dp)
-                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .background(Color.Black.copy(alpha = 0.58f))
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     CircularProgressIndicator(
@@ -1078,10 +1191,121 @@ fun AdminPhotoEditorDialog(
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        text = tr("Memproses foto…", "Processing photo…"),
+                                        text = encodingProgressText ?: tr("Memproses foto…", "Processing photos…"),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = Color.White
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Multi-photo thumbnail strip (when >= 1 device photo selected)
+                if (selectedImagesBase64.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("selected_photos_thumbnail_strip")
+                    ) {
+                        itemsIndexed(selectedImagesBase64) { idx, b64 ->
+                            val isActive = idx == safePreviewIdx
+                            Box(modifier = Modifier.size(66.dp)) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(
+                                        width = if (isActive) 2.5.dp else 1.dp,
+                                        color = if (isActive) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier
+                                        .size(66.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { previewIndex = idx }
+                                ) {
+                                    Box {
+                                        BulletinCoverImage(
+                                            coverPreset = CoverPreset.CUSTOM,
+                                            imageUrl = null,
+                                            imageBase64 = b64,
+                                            contentDescription = tr("Foto ${idx + 1}", "Photo ${idx + 1}"),
+                                            modifier = Modifier.size(66.dp)
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(topEnd = 6.dp),
+                                            color = Color.Black.copy(alpha = 0.65f),
+                                            modifier = Modifier.align(Alignment.BottomStart)
+                                        ) {
+                                            Text(
+                                                text = if (idx == 0) tr("1", "1") else "${idx + 1}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(2.dp)
+                                        .size(20.dp)
+                                        .clickable {
+                                            val updated = selectedImagesBase64.toMutableList().apply { removeAt(idx) }
+                                            selectedImagesBase64 = updated
+                                            previewIndex = previewIndex.coerceIn(0, (updated.size - 1).coerceAtLeast(0))
+                                            photoStatusNote = if (updated.isEmpty()) null else {
+                                                val totalKb = (updated.sumOf { it.length } * 3 / 4 / 1024).coerceAtLeast(1)
+                                                AppLanguageManager.tr(
+                                                    "${updated.size} foto sedia dimuat naik (≈$totalKb KB)",
+                                                    "${updated.size} photos ready to upload (≈$totalKb KB)"
+                                                )
+                                            }
+                                        }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = tr("Buang foto", "Remove photo"),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (selectedImagesBase64.size < ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD) {
+                            item(key = "add_more_photo_tile") {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .size(66.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable(enabled = !isEncodingPhoto) { launchGalleryPhotoPicker() }
+                                        .testTag("add_more_photos_tile")
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Add,
+                                            contentDescription = tr("Tambah foto lagi", "Add more photos"),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Text(
+                                            text = tr("Tambah", "Add"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1111,7 +1335,7 @@ fun AdminPhotoEditorDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(
                         onClick = { launchGalleryPhotoPicker() },
-                        enabled = !isEncodingPhoto,
+                        enabled = !isEncodingPhoto && selectedImagesBase64.size < ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD,
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
@@ -1120,39 +1344,40 @@ fun AdminPhotoEditorDialog(
                         Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (imageBase64 != null) {
-                                tr("Tukar Foto", "Change Photo")
+                            if (selectedImagesBase64.isNotEmpty()) {
+                                tr("Tambah Foto", "Add Photos")
                             } else {
-                                tr("Pilih dari Galeri", "Choose from Gallery")
+                                tr("Pilih Foto", "Pick Photos")
                             }
                         )
                     }
                     OutlinedButton(
-                        onClick = { openDocumentLauncher.launch(arrayOf("image/*")) },
-                        enabled = !isEncodingPhoto,
+                        onClick = { openMultipleDocumentsLauncher.launch(arrayOf("image/*")) },
+                        enabled = !isEncodingPhoto && selectedImagesBase64.size < ImageUtils.MAX_GALLERY_PHOTOS_PER_UPLOAD,
                         modifier = Modifier
                             .height(48.dp)
                             .testTag("pick_file_photo_button")
                     ) {
                         Icon(
                             Icons.Filled.FolderOpen,
-                            contentDescription = tr("Pilih foto daripada fail peranti", "Choose photo from device files"),
+                            contentDescription = tr("Pilih foto daripada fail peranti", "Choose photos from device files"),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(tr("Fail", "File"))
+                        Text(tr("Fail", "Files"))
                     }
-                    if (!imageBase64.isNullOrBlank()) {
+                    if (selectedImagesBase64.isNotEmpty()) {
                         OutlinedButton(
                             onClick = {
-                                imageBase64 = null
+                                selectedImagesBase64 = emptyList()
+                                previewIndex = 0
                                 photoStatusNote = null
                             },
                             modifier = Modifier.height(48.dp)
                         ) {
                             Icon(
                                 Icons.Filled.Delete,
-                                contentDescription = tr("Padam foto", "Remove photo"),
+                                contentDescription = tr("Padam semua foto", "Clear all photos"),
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -1165,7 +1390,8 @@ fun AdminPhotoEditorDialog(
                         imageUrl = it
                         validationError = null
                         if (it.isNotBlank()) {
-                            imageBase64 = null
+                            selectedImagesBase64 = emptyList()
+                            previewIndex = 0
                             photoStatusNote = null
                             coverPreset = CoverPreset.CUSTOM
                         }
@@ -1177,7 +1403,7 @@ fun AdminPhotoEditorDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it; validationError = null },
-                    label = { Text(tr("Tajuk Foto *", "Photo Title *")) },
+                    label = { Text(tr("Tajuk Album / Foto *", "Album / Photo Title *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("photo_title_input")
                 )
@@ -1243,11 +1469,13 @@ fun AdminPhotoEditorDialog(
                     val t = title.trim()
                     val dt = eventDate.trim()
                     val cleanUrl = imageUrl.trim().takeIf { it.isNotBlank() }
+                    val primaryBase64 = selectedImagesBase64.firstOrNull()
+                    val extraBase64 = if (selectedImagesBase64.size > 1) selectedImagesBase64.drop(1) else emptyList()
                     when {
-                        imageBase64.isNullOrBlank() && cleanUrl == null && !presetExplicitlyChosen ->
+                        primaryBase64.isNullOrBlank() && cleanUrl == null && !presetExplicitlyChosen ->
                             validationError = AppLanguageManager.tr(
-                                "Sila pilih foto daripada peranti atau masukkan URL foto terlebih dahulu.",
-                                "Please pick a photo from your device or enter a photo URL first."
+                                "Sila pilih sekurang-kurangnya satu foto daripada peranti atau masukkan URL foto.",
+                                "Please pick at least one photo from your device or enter a photo URL."
                             )
                         t.length < 2 -> validationError = AppLanguageManager.tr(
                             "Tajuk foto minimum 2 aksara.",
@@ -1260,7 +1488,9 @@ fun AdminPhotoEditorDialog(
                         else -> onSave(
                             t, caption.trim(), category, dt, coverPreset,
                             cleanUrl,
-                            imageBase64, photographerName, published
+                            primaryBase64,
+                            extraBase64,
+                            photographerName, published
                         )
                     }
                 },

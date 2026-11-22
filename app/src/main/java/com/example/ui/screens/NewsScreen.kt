@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -50,15 +51,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -72,16 +76,21 @@ import com.example.R
 import com.example.data.ChurchSchedule
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
+import com.example.data.NewsComment
 import com.example.data.UiState
 import com.example.ui.components.BulletinCoverImage
 import com.example.ui.components.CategoryFilterRow
+import com.example.ui.components.CommentReplyTarget
 import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.LiveSyncStatusPill
+import com.example.ui.components.NewsCommentComposerBar
+import com.example.ui.components.NewsCommentsSection
 import com.example.ui.components.formatIndonesianTimestamp
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
+import kotlinx.coroutines.launch
 
 @Composable
 fun NewsScreen(
@@ -90,6 +99,10 @@ fun NewsScreen(
     searchQuery: String,
     selectedCategory: NewsCategory?,
     bookmarkedIds: Set<String>,
+    commentsState: UiState<List<NewsComment>>,
+    isPostingComment: Boolean,
+    currentUserId: String?,
+    isGuest: Boolean,
     isAdmin: Boolean,
     isExpandedScreen: Boolean,
     focusedNewsId: String?,
@@ -97,6 +110,10 @@ fun NewsScreen(
     onSearchQueryChange: (String) -> Unit,
     onSelectCategory: (NewsCategory?) -> Unit,
     onToggleBookmark: (NewsArticle) -> Unit,
+    onObserveComments: (String?) -> Unit,
+    onPostComment: (newsId: String, text: String, parentCommentId: String?, replyToAuthorName: String?, onComplete: () -> Unit) -> Unit,
+    onDeleteComment: (newsId: String, commentId: String) -> Unit,
+    onDetailVisibilityChange: (Boolean) -> Unit,
     onOpenFeaturedSchedule: (ChurchSchedule) -> Unit,
     onRemoveFeaturedSchedule: (ChurchSchedule) -> Unit,
     onEditNews: (NewsArticle) -> Unit,
@@ -132,16 +149,41 @@ fun NewsScreen(
             ?: if (isExpandedScreen) filteredArticles.firstOrNull() else null
     }
 
+    val isCompactDetailVisible = !isExpandedScreen && selectedArticleId != null && activeArticle != null
+
+    LaunchedEffect(activeArticle?.id) {
+        onObserveComments(activeArticle?.id)
+    }
+    LaunchedEffect(isCompactDetailVisible) {
+        onDetailVisibilityChange(isCompactDetailVisible)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onObserveComments(null)
+            onDetailVisibilityChange(false)
+        }
+    }
+
     // BackHandler on compact/medium detail view
-    if (!isExpandedScreen && selectedArticleId != null && activeArticle != null) {
+    if (isCompactDetailVisible && activeArticle != null) {
         BackHandler { selectedArticleId = null }
         NewsDetailPane(
             article = activeArticle,
             isBookmarked = bookmarkedIds.contains(activeArticle.id),
+            commentsState = commentsState,
+            isPostingComment = isPostingComment,
+            currentUserId = currentUserId,
+            isGuest = isGuest,
             isAdmin = isAdmin,
             showBackButton = true,
             onBack = { selectedArticleId = null },
             onToggleBookmark = { onToggleBookmark(activeArticle) },
+            onPostComment = { text, parentId, replyToName, onDone ->
+                onPostComment(activeArticle.id, text, parentId, replyToName, onDone)
+            },
+            onDeleteComment = { commentId ->
+                onDeleteComment(activeArticle.id, commentId)
+            },
             onEdit = { onEditNews(activeArticle) },
             onDelete = {
                 onDeleteNews(activeArticle)
@@ -185,10 +227,20 @@ fun NewsScreen(
                     NewsDetailPane(
                         article = activeArticle,
                         isBookmarked = bookmarkedIds.contains(activeArticle.id),
+                        commentsState = commentsState,
+                        isPostingComment = isPostingComment,
+                        currentUserId = currentUserId,
+                        isGuest = isGuest,
                         isAdmin = isAdmin,
                         showBackButton = false,
                         onBack = {},
                         onToggleBookmark = { onToggleBookmark(activeArticle) },
+                        onPostComment = { text, parentId, replyToName, onDone ->
+                            onPostComment(activeArticle.id, text, parentId, replyToName, onDone)
+                        },
+                        onDeleteComment = { commentId ->
+                            onDeleteComment(activeArticle.id, commentId)
+                        },
                         onEdit = { onEditNews(activeArticle) },
                         onDelete = {
                             onDeleteNews(activeArticle)
@@ -784,162 +836,280 @@ private fun NewsArticleCard(
 private fun NewsDetailPane(
     article: NewsArticle,
     isBookmarked: Boolean,
+    commentsState: UiState<List<NewsComment>>,
+    isPostingComment: Boolean,
+    currentUserId: String?,
+    isGuest: Boolean,
     isAdmin: Boolean,
     showBackButton: Boolean,
     onBack: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onPostComment: (text: String, parentCommentId: String?, replyToAuthorName: String?, onComplete: () -> Unit) -> Unit,
+    onDeleteComment: (commentId: String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 80.dp)
-    ) {
-        Box(
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val commentFocusRequester = remember { FocusRequester() }
+    var commentDraft by remember(article.id) { mutableStateOf("") }
+    var replyTarget by remember(article.id) { mutableStateOf<CommentReplyTarget?>(null) }
+
+    val commentCount = (commentsState as? UiState.Success)?.data?.size ?: 0
+    val usePinnedComposer = showBackButton
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .height(250.dp)
+                .verticalScroll(scrollState)
+                .padding(bottom = if (usePinnedComposer) 20.dp else 96.dp)
         ) {
-            BulletinCoverImage(
-                coverPreset = article.resolvedCoverPreset(),
-                imageUrl = article.imageUrl,
-                imageBase64 = article.imageBase64,
-                contentDescription = article.title,
-                modifier = Modifier.fillMaxSize()
-            )
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent, Color.Black.copy(alpha = 0.35f))
-                        )
-                    )
-            )
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .height(250.dp)
             ) {
-                if (showBackButton) {
-                    Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.5f)) {
-                        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                BulletinCoverImage(
+                    coverPreset = article.resolvedCoverPreset(),
+                    imageUrl = article.imageUrl,
+                    imageBase64 = article.imageBase64,
+                    contentDescription = article.title,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent, Color.Black.copy(alpha = 0.35f))
+                            )
+                        )
+                )
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    if (showBackButton) {
+                        Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.5f)) {
+                            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = tr("Kembali", "Back"),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(Modifier.width(1.dp))
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.5f)) {
+                            IconButton(onClick = onToggleBookmark, modifier = Modifier.size(48.dp)) {
+                                Icon(
+                                    imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                    contentDescription = tr("Simpan penanda buku", "Toggle bookmark"),
+                                    tint = if (isBookmarked) MaterialTheme.colorScheme.secondaryContainer else Color.White
+                                )
+                            }
+                        }
+                        if (isAdmin) {
+                            Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.5f)) {
+                                IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = tr("Edit", "Edit"),
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)) {
+                                IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = tr("Padam", "Delete"),
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(modifier = Modifier.padding(20.dp)) {
+                val lang = LocalAppLanguage.current
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = article.resolvedCategory().localizedLabel(lang),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable {
+                                scope.launch {
+                                    scrollState.animateScrollTo(scrollState.maxValue)
+                                }
+                            }
+                            .testTag("news_comment_count_chip")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = tr("Kembali", "Back"),
-                                tint = Color.White
+                                imageVector = Icons.Filled.ChatBubbleOutline,
+                                contentDescription = tr("Pergi ke komen", "Jump to comments"),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = tr("$commentCount Komen", "$commentCount Comments"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
-                } else {
-                    Spacer(Modifier.width(1.dp))
+                    if (!article.published) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+                        ) {
+                            Text(
+                                text = tr("Belum Diterbitkan (Draf)", "Unpublished (Draft)"),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.5f)) {
-                        IconButton(onClick = onToggleBookmark, modifier = Modifier.size(48.dp)) {
-                            Icon(
-                                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = tr("Simpan penanda buku", "Toggle bookmark"),
-                                tint = if (isBookmarked) MaterialTheme.colorScheme.secondaryContainer else Color.White
-                            )
-                        }
-                    }
-                    if (isAdmin) {
-                        Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.5f)) {
-                            IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    imageVector = Icons.Filled.Edit,
-                                    contentDescription = tr("Edit", "Edit"),
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)) {
-                            IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = tr("Padam", "Delete"),
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                    }
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = article.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                val defaultAuthor = tr("Setiausaha SIB Toburon", "SIB Toburon Secretariat")
+                val byPrefix = tr("Oleh", "By")
+                Text(
+                    text = "$byPrefix ${article.authorName.ifBlank { defaultAuthor }} • ${formatIndonesianTimestamp(article.updatedAt ?: article.createdAt, lang)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = article.summary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(14.dp)
+                    )
                 }
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = article.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // On expanded split-pane, place inline composer right above comments so it never collides with the Admin FAB
+                if (!usePinnedComposer) {
+                    NewsCommentComposerBar(
+                        commentText = commentDraft,
+                        onCommentTextChange = { commentDraft = it },
+                        replyTarget = replyTarget,
+                        onClearReplyTarget = { replyTarget = null },
+                        isGuest = isGuest,
+                        isPosting = isPostingComment,
+                        onSendClick = {
+                            onPostComment(
+                                commentDraft,
+                                replyTarget?.rootParentCommentId,
+                                replyTarget?.replyToAuthorName
+                            ) {
+                                commentDraft = ""
+                                replyTarget = null
+                            }
+                        },
+                        inputFocusRequester = commentFocusRequester,
+                        isInline = true
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                NewsCommentsSection(
+                    commentsState = commentsState,
+                    currentUserId = currentUserId,
+                    isGuest = isGuest,
+                    isAdmin = isAdmin,
+                    onReplyClick = { target ->
+                        replyTarget = target
+                        runCatching { commentFocusRequester.requestFocus() }
+                    },
+                    onDeleteComment = { comment ->
+                        onDeleteComment(comment.id)
+                    }
+                )
             }
         }
 
-        Column(modifier = Modifier.padding(20.dp)) {
-            val lang = LocalAppLanguage.current
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = article.resolvedCategory().localizedLabel(lang),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                    )
-                }
-                if (!article.published) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+        // On compact phones, pin the comment composer cleanly at the bottom (with keyboard inset padding)
+        if (usePinnedComposer) {
+            NewsCommentComposerBar(
+                commentText = commentDraft,
+                onCommentTextChange = { commentDraft = it },
+                replyTarget = replyTarget,
+                onClearReplyTarget = { replyTarget = null },
+                isGuest = isGuest,
+                isPosting = isPostingComment,
+                onSendClick = {
+                    onPostComment(
+                        commentDraft,
+                        replyTarget?.rootParentCommentId,
+                        replyTarget?.replyToAuthorName
                     ) {
-                        Text(
-                            text = tr("Belum Diterbitkan (Draf)", "Unpublished (Draft)"),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
+                        commentDraft = ""
+                        replyTarget = null
+                        scope.launch {
+                            scrollState.animateScrollTo(scrollState.maxValue)
+                        }
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = article.title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            val defaultAuthor = tr("Setiausaha SIB Toburon", "SIB Toburon Secretariat")
-            val byPrefix = tr("Oleh", "By")
-            Text(
-                text = "$byPrefix ${article.authorName.ifBlank { defaultAuthor }} • ${formatIndonesianTimestamp(article.updatedAt ?: article.createdAt, lang)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = article.summary,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(14.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = article.content,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                },
+                inputFocusRequester = commentFocusRequester,
+                isInline = false
             )
         }
     }

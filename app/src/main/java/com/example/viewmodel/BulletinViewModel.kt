@@ -13,11 +13,13 @@ import com.example.data.ChurchSchedule
 import com.example.data.CoverPreset
 import com.example.data.FellowshipGroup
 import com.example.data.GalleryCategory
+import com.example.data.GalleryComment
 import com.example.data.GalleryPhoto
 import com.example.data.MaritalStatus
 import com.example.data.MemberGender
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
+import com.example.data.NewsComment
 import com.example.data.ScheduleCategory
 import com.example.data.UiState
 import com.example.data.UserBookmark
@@ -131,6 +133,14 @@ class BulletinViewModel(
     private val _isLoadingMemberDetail = MutableStateFlow(false)
     val isLoadingMemberDetail: StateFlow<Boolean> = _isLoadingMemberDetail.asStateFlow()
 
+    private val _activeGalleryPhotoId = MutableStateFlow<String?>(null)
+    private val _isPostingComment = MutableStateFlow(false)
+    val isPostingComment: StateFlow<Boolean> = _isPostingComment.asStateFlow()
+
+    private val _activeNewsArticleId = MutableStateFlow<String?>(null)
+    private val _isPostingNewsComment = MutableStateFlow(false)
+    val isPostingNewsComment: StateFlow<Boolean> = _isPostingNewsComment.asStateFlow()
+
     // Live admin privilege stream
     val isAdmin: StateFlow<Boolean> = repository
         .observeAdminAccess(currentUserId, userEmail, emailVerified)
@@ -183,6 +193,54 @@ class BulletinViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = UiState.Loading
+        )
+
+    // Real-time Gallery Comments stream for the currently opened gallery post
+    val activePhotoComments: StateFlow<UiState<List<GalleryComment>>> = _activeGalleryPhotoId
+        .flatMapLatest { photoId ->
+            if (photoId.isNullOrBlank()) {
+                flowOf<UiState<List<GalleryComment>>>(UiState.Success(emptyList()))
+            } else {
+                repository.observeGalleryComments(photoId, currentUserId)
+                    .map<List<GalleryComment>, UiState<List<GalleryComment>>> { UiState.Success(it) }
+                    .catch { error ->
+                        emit(
+                            toErrorState(
+                                AppLanguageManager.tr("Gagal memuat komen foto", "Failed to load photo comments"),
+                                error
+                            )
+                        )
+                    }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = UiState.Success(emptyList())
+        )
+
+    // Real-time News Comments stream for the currently opened news article
+    val activeNewsComments: StateFlow<UiState<List<NewsComment>>> = _activeNewsArticleId
+        .flatMapLatest { newsId ->
+            if (newsId.isNullOrBlank()) {
+                flowOf<UiState<List<NewsComment>>>(UiState.Success(emptyList()))
+            } else {
+                repository.observeNewsComments(newsId, currentUserId)
+                    .map<List<NewsComment>, UiState<List<NewsComment>>> { UiState.Success(it) }
+                    .catch { error ->
+                        emit(
+                            toErrorState(
+                                AppLanguageManager.tr("Gagal memuat komen berita", "Failed to load news comments"),
+                                error
+                            )
+                        )
+                    }
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = UiState.Success(emptyList())
         )
 
     // Real-time Church Members directory stream (public full names only)
@@ -425,6 +483,78 @@ class BulletinViewModel(
         }
     }
 
+    fun observeCommentsForNews(newsId: String?) {
+        _activeNewsArticleId.value = newsId
+    }
+
+    fun postNewsComment(
+        newsId: String,
+        text: String,
+        parentCommentId: String? = null,
+        replyToAuthorName: String? = null,
+        onComplete: () -> Unit = {}
+    ) {
+        if (isGuest) {
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Log masuk dengan akaun Google di tab Akaun untuk menulis komen atau membalas.",
+                    "Sign in with Google in the Account tab to comment or reply."
+                )
+            )
+            return
+        }
+        val cleanText = text.trim()
+        if (cleanText.isEmpty()) return
+        val resolvedAuthor = userProfile.value?.displayName?.trim()?.takeIf { it.isNotBlank() }
+            ?: userDisplayName?.trim()?.takeIf { it.isNotBlank() }
+            ?: userEmail?.substringBefore("@")?.takeIf { it.isNotBlank() }
+            ?: "Jemaat SIB Toburon"
+
+        viewModelScope.launch {
+            _isPostingNewsComment.value = true
+            try {
+                val result = repository.addNewsComment(
+                    newsId = newsId,
+                    authorName = resolvedAuthor,
+                    text = cleanText,
+                    parentCommentId = parentCommentId,
+                    replyToAuthorName = replyToAuthorName
+                )
+                result.onSuccess {
+                    onComplete()
+                }.onFailure { err ->
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menghantar komen.",
+                            "Failed to post comment."
+                        )
+                    )
+                }
+            } finally {
+                _isPostingNewsComment.value = false
+            }
+        }
+    }
+
+    fun deleteNewsComment(newsId: String, commentId: String) {
+        if (isGuest) return
+        viewModelScope.launch {
+            val result = repository.deleteNewsComment(newsId, commentId)
+            result.onSuccess {
+                _snackbarMessage.tryEmit(
+                    AppLanguageManager.tr("Komen telah dipadam.", "Comment deleted.")
+                )
+            }.onFailure { err ->
+                _snackbarMessage.tryEmit(
+                    err.localizedMessage ?: AppLanguageManager.tr(
+                        "Gagal memadam komen.",
+                        "Failed to delete comment."
+                    )
+                )
+            }
+        }
+    }
+
     fun saveSchedule(
         existingId: String?,
         title: String,
@@ -510,16 +640,25 @@ class BulletinViewModel(
         coverPreset: CoverPreset,
         imageUrl: String?,
         imageBase64: String?,
+        extraImagesBase64: List<String> = emptyList(),
         photographerName: String,
         published: Boolean,
         onComplete: () -> Unit = {}
     ) {
+        val totalCount = (if (!imageBase64.isNullOrBlank()) 1 else 0) + extraImagesBase64.count { it.isNotBlank() }
         runMutation(
             successMessage = if (existingId == null) {
-                AppLanguageManager.tr(
-                    "Foto berjaya ditambah ke galeri masa nyata.",
-                    "Photo added to the live gallery."
-                )
+                if (totalCount > 1) {
+                    AppLanguageManager.tr(
+                        "$totalCount foto berjaya dimuat naik ke galeri masa nyata.",
+                        "$totalCount photos uploaded to the live gallery."
+                    )
+                } else {
+                    AppLanguageManager.tr(
+                        "Foto berjaya ditambah ke galeri masa nyata.",
+                        "Photo added to the live gallery."
+                    )
+                }
             } else {
                 AppLanguageManager.tr(
                     "Maklumat foto berjaya dikemas kini.",
@@ -531,12 +670,12 @@ class BulletinViewModel(
             if (existingId == null) {
                 repository.createGalleryPhoto(
                     title, caption, category, eventDate, coverPreset,
-                    imageUrl, imageBase64, photographerName, published
+                    imageUrl, imageBase64, extraImagesBase64, photographerName, published
                 )
             } else {
                 repository.updateGalleryPhoto(
                     existingId, title, caption, category, eventDate, coverPreset,
-                    imageUrl, imageBase64, photographerName, published
+                    imageUrl, imageBase64, extraImagesBase64, photographerName, published
                 )
             }
         }
@@ -566,6 +705,78 @@ class BulletinViewModel(
                     err.localizedMessage ?: AppLanguageManager.tr(
                         "Gagal mengemas kini tanda suka foto.",
                         "Failed to update photo like."
+                    )
+                )
+            }
+        }
+    }
+
+    fun observeCommentsForPhoto(photoId: String?) {
+        _activeGalleryPhotoId.value = photoId
+    }
+
+    fun postGalleryComment(
+        photoId: String,
+        text: String,
+        parentCommentId: String? = null,
+        replyToAuthorName: String? = null,
+        onComplete: () -> Unit = {}
+    ) {
+        if (isGuest) {
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Log masuk dengan akaun Google di tab Akaun untuk menulis komen atau membalas.",
+                    "Sign in with Google in the Account tab to comment or reply."
+                )
+            )
+            return
+        }
+        val cleanText = text.trim()
+        if (cleanText.isEmpty()) return
+        val resolvedAuthor = userProfile.value?.displayName?.trim()?.takeIf { it.isNotBlank() }
+            ?: userDisplayName?.trim()?.takeIf { it.isNotBlank() }
+            ?: userEmail?.substringBefore("@")?.takeIf { it.isNotBlank() }
+            ?: "Jemaat SIB Toburon"
+
+        viewModelScope.launch {
+            _isPostingComment.value = true
+            try {
+                val result = repository.addGalleryComment(
+                    photoId = photoId,
+                    authorName = resolvedAuthor,
+                    text = cleanText,
+                    parentCommentId = parentCommentId,
+                    replyToAuthorName = replyToAuthorName
+                )
+                result.onSuccess {
+                    onComplete()
+                }.onFailure { err ->
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menghantar komen.",
+                            "Failed to post comment."
+                        )
+                    )
+                }
+            } finally {
+                _isPostingComment.value = false
+            }
+        }
+    }
+
+    fun deleteGalleryComment(photoId: String, commentId: String) {
+        if (isGuest) return
+        viewModelScope.launch {
+            val result = repository.deleteGalleryComment(photoId, commentId)
+            result.onSuccess {
+                _snackbarMessage.tryEmit(
+                    AppLanguageManager.tr("Komen telah dipadam.", "Comment deleted.")
+                )
+            }.onFailure { err ->
+                _snackbarMessage.tryEmit(
+                    err.localizedMessage ?: AppLanguageManager.tr(
+                        "Gagal memadam komen.",
+                        "Failed to delete comment."
                     )
                 )
             }
@@ -610,9 +821,51 @@ class BulletinViewModel(
         }
     }
 
-    fun saveProfile(displayName: String, fellowshipGroup: FellowshipGroup) {
-        runMutation(AppLanguageManager.tr("Profil jemaat berjaya disimpan.", "Member profile saved successfully.")) {
+    fun saveProfile(
+        displayName: String,
+        fellowshipGroup: FellowshipGroup,
+        onComplete: () -> Unit = {}
+    ) {
+        runMutation(
+            successMessage = AppLanguageManager.tr("Profil jemaat berjaya disimpan.", "Member profile saved successfully."),
+            onComplete = onComplete
+        ) {
             repository.saveUserProfile(displayName, fellowshipGroup, userProfile.value, userEmail)
+        }
+    }
+
+    fun updateProfilePhoto(
+        photoBase64: String?,
+        onComplete: () -> Unit = {}
+    ) {
+        val message = if (photoBase64.isNullOrBlank()) {
+            AppLanguageManager.tr("Gambar profil telah dipadam.", "Profile photo removed.")
+        } else {
+            AppLanguageManager.tr("Gambar profil berjaya dikemas kini.", "Profile photo updated successfully.")
+        }
+        viewModelScope.launch {
+            _isBusy.value = true
+            try {
+                val result = repository.updateUserProfilePhoto(
+                    photoBase64 = photoBase64,
+                    existingProfile = userProfile.value,
+                    defaultDisplayName = userDisplayName,
+                    userEmail = userEmail
+                )
+                result.onSuccess {
+                    _snackbarMessage.tryEmit(message)
+                }.onFailure { err ->
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Ralat berlaku semasa menyimpan gambar profil.",
+                            "An error occurred while saving profile photo."
+                        )
+                    )
+                }
+            } finally {
+                _isBusy.value = false
+                onComplete()
+            }
         }
     }
 

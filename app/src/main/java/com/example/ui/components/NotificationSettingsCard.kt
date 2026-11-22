@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,10 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.R
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.notifications.BulletinNotificationManager
 import com.example.ui.i18n.tr
 
@@ -51,6 +53,8 @@ fun NotificationSettingsCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     var hasPermission by remember {
         mutableStateOf(BulletinNotificationManager.hasNotificationPermission(context))
     }
@@ -61,15 +65,70 @@ fun NotificationSettingsCard(
         mutableStateOf(BulletinNotificationManager.isScheduleNotificationsEnabled(context))
     }
 
+    // Refresh permission & saved preferences whenever user returns from Android system settings
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = BulletinNotificationManager.hasNotificationPermission(context)
+                newsEnabled = BulletinNotificationManager.isNewsNotificationsEnabled(context)
+                schedulesEnabled = BulletinNotificationManager.isScheduleNotificationsEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        hasPermission = granted
-        if (granted) {
+        hasPermission = granted && BulletinNotificationManager.hasNotificationPermission(context)
+        if (hasPermission) {
             BulletinNotificationManager.ensureNotificationChannel(context)
             BulletinNotificationManager.syncTopicSubscriptions(context, newsEnabled, schedulesEnabled)
             onPreferencesUpdated(newsEnabled, schedulesEnabled)
         }
+    }
+
+    val anyTopicEnabled = newsEnabled || schedulesEnabled
+    val isPushActive = hasPermission && anyTopicEnabled
+
+    val statusBadgeText = when {
+        !hasPermission -> tr("Belum Aktif", "Inactive")
+        !anyTopicEnabled -> tr("Dinyahaktifkan", "Disabled")
+        else -> tr("Aktif", "Active")
+    }
+    val statusBadgeBg = when {
+        isPushActive -> MaterialTheme.colorScheme.primaryContainer
+        !hasPermission -> MaterialTheme.colorScheme.errorContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val statusBadgeFg = when {
+        isPushActive -> MaterialTheme.colorScheme.onPrimaryContainer
+        !hasPermission -> MaterialTheme.colorScheme.onErrorContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val statusDescription = when {
+        !hasPermission -> tr(
+            "Aktifkan kebenaran notifikasi peranti agar tidak terlepas warta jemaat dan jadual ibadah terbaharu SIB Toburon.",
+            "Enable device notification permission so you never miss the latest SIB Toburon news and worship schedules."
+        )
+        !anyTopicEnabled -> tr(
+            "Semua notifikasi dinyahaktifkan. Hidupkan sekurang-kurangnya satu kategori di bawah untuk menerima makluman.",
+            "All push notifications are disabled. Turn on at least one category below to receive alerts."
+        )
+        newsEnabled && schedulesEnabled -> tr(
+            "Notifikasi aktif untuk Berita & Jadual Kegiatan.",
+            "Notifications active for News & Event Schedules."
+        )
+        newsEnabled -> tr(
+            "Notifikasi aktif untuk Berita & Warta sahaja.",
+            "Notifications active for News & Bulletin only."
+        )
+        else -> tr(
+            "Notifikasi aktif untuk Jadual Kegiatan sahaja.",
+            "Notifications active for Event Schedules only."
+        )
     }
 
     Card(
@@ -93,10 +152,10 @@ fun NotificationSettingsCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = if (hasPermission) Icons.Filled.NotificationsActive
+                        imageVector = if (isPushActive) Icons.Filled.NotificationsActive
                         else Icons.Filled.NotificationsOff,
                         contentDescription = null,
-                        tint = if (hasPermission) MaterialTheme.colorScheme.primary
+                        tint = if (isPushActive) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
@@ -107,30 +166,25 @@ fun NotificationSettingsCard(
                     )
                 }
 
+                Spacer(Modifier.width(8.dp))
+
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (hasPermission) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.errorContainer
+                    color = statusBadgeBg,
+                    modifier = Modifier.testTag("notif_status_badge")
                 ) {
                     Text(
-                        text = if (hasPermission) tr("Aktif", "Active") else tr("Belum Aktif", "Inactive"),
+                        text = statusBadgeText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (hasPermission) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.SemiBold,
+                        color = statusBadgeFg,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
             }
 
             Text(
-                text = if (hasPermission) {
-                    tr("Kebenaran Notifikasi Aktif", "Notification Permission Active")
-                } else {
-                    tr(
-                        "Aktifkan kebenaran notifikasi peranti agar tidak terlepas warta jemaat dan jadual ibadah terbaharu SIB Toburon.",
-                        "Enable device notification permission so you never miss the latest SIB Toburon news and worship schedules."
-                    )
-                },
+                text = statusDescription,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -174,17 +228,24 @@ fun NotificationSettingsCard(
                     Icon(
                         imageVector = Icons.Filled.Newspaper,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (newsEnabled && hasPermission) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(
                             text = tr("Berita & Warta Terkini", "Latest Church News"),
-                            style = MaterialTheme.typography.titleSmall
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (newsEnabled) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = tr("Topik FCM: ", "FCM Topic: ") + BulletinNotificationManager.TOPIC_NEWS,
+                            text = if (newsEnabled && hasPermission) {
+                                tr("Aktif • ", "Active • ") + BulletinNotificationManager.TOPIC_NEWS
+                            } else {
+                                tr("Dinyahaktifkan • ", "Disabled • ") + BulletinNotificationManager.TOPIC_NEWS
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -215,17 +276,24 @@ fun NotificationSettingsCard(
                     Icon(
                         imageVector = Icons.Filled.CalendarMonth,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
+                        tint = if (schedulesEnabled && hasPermission) MaterialTheme.colorScheme.secondary
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(
                             text = tr("Jadual Kegiatan Gereja", "Church Event Schedules"),
-                            style = MaterialTheme.typography.titleSmall
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (schedulesEnabled) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = tr("Topik FCM: ", "FCM Topic: ") + BulletinNotificationManager.TOPIC_SCHEDULES,
+                            text = if (schedulesEnabled && hasPermission) {
+                                tr("Aktif • ", "Active • ") + BulletinNotificationManager.TOPIC_SCHEDULES
+                            } else {
+                                tr("Dinyahaktifkan • ", "Disabled • ") + BulletinNotificationManager.TOPIC_SCHEDULES
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

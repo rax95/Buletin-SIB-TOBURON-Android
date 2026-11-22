@@ -429,6 +429,52 @@ test("Gallery photos enforce atomic likesCount updates paired with user liked_ph
       updatedAt: pastDate(500),
     })
   );
+
+  // Admin can upload a multi-photo album (1 primary + up to 7 extraImagesBase64)
+  await assertSucceeds(
+    adminDb.collection("gallery_photos").doc("photo_multi_01").set({
+      title: "Album Retret Belia",
+      caption: "Kumpulan gambar kebersamaan belia SIB Toburon.",
+      category: "PEMUDA",
+      eventDate: "20 Nov 2026",
+      coverPreset: "CUSTOM",
+      imageBase64: "dGVzdF9pbWFnZV8x",
+      extraImagesBase64: ["dGVzdF9pbWFnZV8y", "dGVzdF9pbWFnZV8z", "dGVzdF9pbWFnZV80"],
+      likesCount: 0,
+      published: true,
+      authorId: ADMIN_UID,
+      photographerName: "Multimedia",
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  // Admin can update extraImagesBase64 on an existing gallery album
+  await assertSucceeds(
+    adminDb.collection("gallery_photos").doc("photo_multi_01").update({
+      extraImagesBase64: ["dGVzdF9pbWFnZV8y"],
+      updatedAt: pastDate(400),
+    })
+  );
+
+  // Reject exceeding 7 extraImagesBase64 items (> 8 total photos per upload)
+  await assertFails(
+    adminDb.collection("gallery_photos").doc("photo_multi_too_many").set({
+      title: "Album Terlalu Banyak",
+      caption: "Melebihi had 8 gambar.",
+      category: "UMUM",
+      eventDate: "20 Nov 2026",
+      coverPreset: "CUSTOM",
+      imageBase64: "img0",
+      extraImagesBase64: ["1", "2", "3", "4", "5", "6", "7", "8"],
+      likesCount: 0,
+      published: true,
+      authorId: ADMIN_UID,
+      photographerName: "Multimedia",
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
 });
 
 // 6. User Profile Isolation, Bookmarks & Delegated Admin Management
@@ -466,6 +512,32 @@ test("User profiles and bookmarks are strictly owner-isolated; admins collection
   await assertFails(bobDb.collection("users").doc(JEMAAT_ALICE).get());
   await assertFails(bobDb.collection("users").get());
   await assertFails(guestDb.collection("users").get());
+
+  // Alice can update and clear her own profile photoBase64; oversized photoBase64 and cross-user writes fail
+  await assertSucceeds(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).update({
+      photoBase64: "dGVzdF9hdmF0YXJfYmFzZTY0",
+      updatedAt: pastDate(2000),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).update({
+      photoBase64: null,
+      updatedAt: pastDate(1500),
+    })
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(JEMAAT_ALICE).update({
+      photoBase64: "a".repeat(160001),
+      updatedAt: pastDate(1200),
+    })
+  );
+  await assertFails(
+    bobDb.collection("users").doc(JEMAAT_ALICE).update({
+      photoBase64: "aGlqYWNr",
+      updatedAt: pastDate(1000),
+    })
+  );
 
   // Admin CAN list signed-in Google users and inspect user profiles
   await assertSucceeds(adminDb.collection("users").get());
@@ -771,5 +843,384 @@ test("Church members directory exposes full names only; personal details are str
   deleteBatch.delete(adminDb.collection("church_member_details").doc("member_001"));
   await assertSucceeds(deleteBatch.commit());
 });
+
+// 9. Gallery Comments & Threaded Replies (/gallery_photos/{photoId}/comments/{commentId})
+test("Gallery comments support signed-in comments and replies, guest read on published posts, and owner/admin deletion", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const bobDb = testEnv.authenticatedContext(JEMAAT_BOB).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(5000);
+
+  // Seed published gallery photo and draft gallery photo
+  await assertSucceeds(
+    adminDb.collection("gallery_photos").doc("photo_comment_pub").set({
+      title: "Ibadah Pujian",
+      caption: "Malam pujian dan penyembahan SIB Toburon.",
+      category: "IBADAH",
+      eventDate: "21 Nov 2026",
+      coverPreset: "WORSHIP",
+      likesCount: 0,
+      published: true,
+      authorId: ADMIN_UID,
+      photographerName: "Multimedia",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("gallery_photos").doc("photo_comment_draft").set({
+      title: "Draf Galeri",
+      caption: "Belum diterbitkan.",
+      category: "UMUM",
+      eventDate: "21 Nov 2026",
+      coverPreset: "FELLOWSHIP",
+      likesCount: 0,
+      published: false,
+      authorId: ADMIN_UID,
+      photographerName: "Multimedia",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Signed-in Alice posts a top-level comment
+  await assertSucceeds(
+    aliceDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("comment_1")
+      .set({
+        photoId: "photo_comment_pub",
+        authorId: JEMAAT_ALICE,
+        authorName: "Alice Toburon",
+        text: "Puji Tuhan, gambar yang sangat indah!",
+        createdAt: pastDate(4000),
+      })
+  );
+
+  // Signed-in Bob posts a reply referencing parentCommentId = comment_1
+  await assertSucceeds(
+    bobDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("reply_1")
+      .set({
+        photoId: "photo_comment_pub",
+        authorId: JEMAAT_BOB,
+        authorName: "Bob Toburon",
+        text: "Amin! Terima kasih pasukan multimedia.",
+        parentCommentId: "comment_1",
+        replyToAuthorName: "Alice Toburon",
+        createdAt: pastDate(3000),
+      })
+  );
+
+  // Guest & signed-in users CAN read comments on published photo
+  await assertSucceeds(
+    guestDb.collection("gallery_photos").doc("photo_comment_pub").collection("comments").get()
+  );
+  await assertSucceeds(
+    aliceDb.collection("gallery_photos").doc("photo_comment_pub").collection("comments").get()
+  );
+
+  // Guest & non-admin CANNOT read or comment on unpublished draft photo
+  await assertFails(
+    guestDb.collection("gallery_photos").doc("photo_comment_draft").collection("comments").get()
+  );
+  await assertFails(
+    aliceDb
+      .collection("gallery_photos")
+      .doc("photo_comment_draft")
+      .collection("comments")
+      .doc("draft_comment")
+      .set({
+        photoId: "photo_comment_draft",
+        authorId: JEMAAT_ALICE,
+        authorName: "Alice",
+        text: "Tidak dibenarkan pada draf.",
+        createdAt: pastDate(2000),
+      })
+  );
+
+  // Guest CANNOT post a comment
+  await assertFails(
+    guestDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("guest_comment")
+      .set({
+        photoId: "photo_comment_pub",
+        authorId: "guest",
+        authorName: "Guest",
+        text: "Komen tetamu",
+        createdAt: pastDate(2000),
+      })
+  );
+
+  // Reject spoofed authorId, non-existent parentCommentId, and oversized text (> 500 chars)
+  await assertFails(
+    bobDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("spoof_comment")
+      .set({
+        photoId: "photo_comment_pub",
+        authorId: JEMAAT_ALICE,
+        authorName: "Alice",
+        text: "Spoofing authorId",
+        createdAt: pastDate(2000),
+      })
+  );
+  await assertFails(
+    bobDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("bad_parent_reply")
+      .set({
+        photoId: "photo_comment_pub",
+        authorId: JEMAAT_BOB,
+        authorName: "Bob",
+        text: "Balasan kepada komen tiada",
+        parentCommentId: "missing_parent_id",
+        createdAt: pastDate(2000),
+      })
+  );
+  await assertFails(
+    bobDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("too_long_comment")
+      .set({
+        photoId: "photo_comment_pub",
+        authorId: JEMAAT_BOB,
+        authorName: "Bob",
+        text: "x".repeat(501),
+        createdAt: pastDate(2000),
+      })
+  );
+
+  // Bob CANNOT delete Alice's comment; Alice CAN delete her own comment; Admin CAN delete Bob's reply
+  await assertFails(
+    bobDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("comment_1")
+      .delete()
+  );
+  await assertSucceeds(
+    aliceDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("comment_1")
+      .delete()
+  );
+  await assertSucceeds(
+    adminDb
+      .collection("gallery_photos")
+      .doc("photo_comment_pub")
+      .collection("comments")
+      .doc("reply_1")
+      .delete()
+  );
+});
+
+// 10. News Comments & Threaded Replies (/news/{newsId}/comments/{commentId})
+test("News comments support signed-in comments and replies, guest read on published news, and owner/admin deletion", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const bobDb = testEnv.authenticatedContext(JEMAAT_BOB).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(5000);
+
+  // Seed published news article and unpublished draft news article
+  await assertSucceeds(
+    adminDb.collection("news").doc("news_comment_pub").set({
+      title: "Warta Minggu Kebangkitan",
+      summary: "Jadual ibadah dan kegiatan pelayanan minggu ini.",
+      content: "Shalom jemaat SIB Toburon, marilah kita bersama menghadiri ibadah minggu ini.",
+      category: "WARTA",
+      authorId: ADMIN_UID,
+      authorName: "Sekretariat",
+      coverPreset: "SANCTUARY",
+      pinned: false,
+      published: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("news").doc("news_comment_draft").set({
+      title: "Draf Warta Dalaman",
+      summary: "Masih dalam semakan admin.",
+      content: "Draf ini belum diterbitkan untuk tatapan umum.",
+      category: "PENGUMUMAN",
+      authorId: ADMIN_UID,
+      authorName: "Sekretariat",
+      coverPreset: "WORSHIP",
+      pinned: false,
+      published: false,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Signed-in Alice posts a top-level comment on published news
+  await assertSucceeds(
+    aliceDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("news_c1")
+      .set({
+        newsId: "news_comment_pub",
+        authorId: JEMAAT_ALICE,
+        authorName: "Alice Toburon",
+        text: "Terima kasih atas makluman ini, Tuhan memberkati!",
+        createdAt: pastDate(4000),
+      })
+  );
+
+  // Signed-in Bob posts a reply referencing parentCommentId = news_c1
+  await assertSucceeds(
+    bobDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("news_r1")
+      .set({
+        newsId: "news_comment_pub",
+        authorId: JEMAAT_BOB,
+        authorName: "Bob Toburon",
+        text: "Amin, jumpa di gereja hari Ahad ini!",
+        parentCommentId: "news_c1",
+        replyToAuthorName: "Alice Toburon",
+        createdAt: pastDate(3000),
+      })
+  );
+
+  // Guest & signed-in users CAN read comments on published news
+  await assertSucceeds(
+    guestDb.collection("news").doc("news_comment_pub").collection("comments").get()
+  );
+  await assertSucceeds(
+    aliceDb.collection("news").doc("news_comment_pub").collection("comments").get()
+  );
+
+  // Guest & non-admin CANNOT read or comment on unpublished draft news
+  await assertFails(
+    guestDb.collection("news").doc("news_comment_draft").collection("comments").get()
+  );
+  await assertFails(
+    aliceDb
+      .collection("news")
+      .doc("news_comment_draft")
+      .collection("comments")
+      .doc("draft_c1")
+      .set({
+        newsId: "news_comment_draft",
+        authorId: JEMAAT_ALICE,
+        authorName: "Alice",
+        text: "Tidak dibenarkan pada draf berita.",
+        createdAt: pastDate(2000),
+      })
+  );
+
+  // Guest CANNOT post a comment
+  await assertFails(
+    guestDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("guest_c1")
+      .set({
+        newsId: "news_comment_pub",
+        authorId: "guest",
+        authorName: "Guest",
+        text: "Komen tetamu",
+        createdAt: pastDate(2000),
+      })
+  );
+
+  // Reject spoofed authorId, non-existent parentCommentId, and oversized text (> 500 chars)
+  await assertFails(
+    bobDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("spoof_c1")
+      .set({
+        newsId: "news_comment_pub",
+        authorId: JEMAAT_ALICE,
+        authorName: "Alice",
+        text: "Spoofing authorId",
+        createdAt: pastDate(2000),
+      })
+  );
+  await assertFails(
+    bobDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("bad_parent_r1")
+      .set({
+        newsId: "news_comment_pub",
+        authorId: JEMAAT_BOB,
+        authorName: "Bob",
+        text: "Balasan kepada komen tiada",
+        parentCommentId: "missing_parent_id",
+        createdAt: pastDate(2000),
+      })
+  );
+  await assertFails(
+    bobDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("too_long_c1")
+      .set({
+        newsId: "news_comment_pub",
+        authorId: JEMAAT_BOB,
+        authorName: "Bob",
+        text: "x".repeat(501),
+        createdAt: pastDate(2000),
+      })
+  );
+
+  // Bob CANNOT delete Alice's comment; Alice CAN delete her own comment; Admin CAN delete Bob's reply
+  await assertFails(
+    bobDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("news_c1")
+      .delete()
+  );
+  await assertSucceeds(
+    aliceDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("news_c1")
+      .delete()
+  );
+  await assertSucceeds(
+    adminDb
+      .collection("news")
+      .doc("news_comment_pub")
+      .collection("comments")
+      .doc("news_r1")
+      .delete()
+  );
+});
+
 
 

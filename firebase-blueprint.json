@@ -76,6 +76,43 @@
         "updatedAt"
       ]
     },
+    "NewsComment": {
+      "title": "NewsComment",
+      "description": "Komen dan balasan jemaat pada artikel berita dan warta gereja.",
+      "type": "object",
+      "properties": {
+        "newsId": {
+          "type": "string",
+          "description": "ID dokumen berita induk"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID pengguna yang menulis komen"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Nama paparan penulis komen (1-80 karakter)"
+        },
+        "text": {
+          "type": "string",
+          "description": "Kandungan komen atau balasan (1-500 karakter)"
+        },
+        "parentCommentId": {
+          "type": "string",
+          "description": "ID komen induk sekiranya ini merupakan balasan (pilihan)"
+        },
+        "replyToAuthorName": {
+          "type": "string",
+          "description": "Nama pengguna yang dibalas (pilihan, 1-80 karakter)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Masa komen dihantar (FieldValue.serverTimestamp(), immutable)"
+        }
+      },
+      "required": ["newsId", "authorId", "authorName", "text", "createdAt"]
+    },
     "ChurchSchedule": {
       "title": "ChurchSchedule",
       "description": "Jadwal ibadah dan kegiatan pelayanan SIB Toburon.",
@@ -190,7 +227,12 @@
         },
         "imageBase64": {
           "type": "string",
-          "description": "Gambar terkompresi Base64 opsional (maks 260000 karakter)"
+          "description": "Gambar utama terkompresi Base64 opsional (maks 260000 karakter)"
+        },
+        "extraImagesBase64": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Senarai gambar tambahan Base64 dalam satu muat naik album galeri (maks 7 gambar tambahan, jumlah maks 8 gambar)"
         },
         "likesCount": {
           "type": "integer",
@@ -232,6 +274,43 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "GalleryComment": {
+      "title": "GalleryComment",
+      "description": "Komen dan balasan jemaat pada foto atau album dalam galeri.",
+      "type": "object",
+      "properties": {
+        "photoId": {
+          "type": "string",
+          "description": "ID dokumen foto galeri induk"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID pengguna yang menulis komen"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Nama paparan penulis komen (1-80 karakter)"
+        },
+        "text": {
+          "type": "string",
+          "description": "Kandungan komen atau balasan (1-500 karakter)"
+        },
+        "parentCommentId": {
+          "type": "string",
+          "description": "ID komen induk sekiranya ini merupakan balasan (pilihan)"
+        },
+        "replyToAuthorName": {
+          "type": "string",
+          "description": "Nama pengguna yang dibalas (pilihan, 1-80 karakter)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Masa komen dihantar (FieldValue.serverTimestamp(), immutable)"
+        }
+      },
+      "required": ["photoId", "authorId", "authorName", "text", "createdAt"]
     },
     "AdminMember": {
       "title": "AdminMember",
@@ -275,6 +354,10 @@
           "type": "string",
           "enum": ["UMUM", "PEMUDA", "KAUM_IBU", "KAUM_BAPAK", "SEKOLAH_MINGGU", "PELAYAN"],
           "description": "Kelompok persekutuan jemaat"
+        },
+        "photoBase64": {
+          "type": "string",
+          "description": "Foto profil jemaat terkompresi Base64 opsional (maks 160000 karakter)"
         },
         "createdAt": {
           "type": "string",
@@ -500,6 +583,10 @@
       "schema": { "$ref": "#/entities/NewsArticle" },
       "description": "Koleksi berita terkini & warta jemaat SIB Toburon"
     },
+    "/news/{newsId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/NewsComment" },
+      "description": "Komen dan balasan berutas pada setiap artikel berita gereja"
+    },
     "/schedules/{scheduleId}": {
       "schema": { "$ref": "#/entities/ChurchSchedule" },
       "description": "Koleksi jadwal ibadah dan kegiatan gereja SIB Toburon"
@@ -507,6 +594,10 @@
     "/gallery_photos/{photoId}": {
       "schema": { "$ref": "#/entities/GalleryPhoto" },
       "description": "Koleksi galeri foto interaktif gereja SIB Toburon"
+    },
+    "/gallery_photos/{photoId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/GalleryComment" },
+      "description": "Komen dan balasan berutas pada setiap siaran galeri foto"
     },
     "/admins/{adminUid}": {
       "schema": { "$ref": "#/entities/AdminMember" },

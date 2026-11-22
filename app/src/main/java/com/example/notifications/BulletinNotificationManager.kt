@@ -65,13 +65,27 @@ object BulletinNotificationManager {
     }
 
     fun hasNotificationPermission(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val runtimeGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
             true
+        }
+        return runtimeGranted && NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    fun isAlertEnabledForType(context: Context, type: String): Boolean {
+        val normalizedType = if (type.equals(TYPE_SCHEDULE, ignoreCase = true)) {
+            TYPE_SCHEDULE
+        } else {
+            TYPE_NEWS
+        }
+        return if (normalizedType == TYPE_SCHEDULE) {
+            isScheduleNotificationsEnabled(context)
+        } else {
+            isNewsNotificationsEnabled(context)
         }
     }
 

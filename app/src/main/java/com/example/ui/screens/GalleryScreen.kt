@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -24,10 +25,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +38,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -53,15 +59,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -75,25 +84,50 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.CoverPreset
 import com.example.data.GalleryCategory
+import com.example.data.GalleryComment
 import com.example.data.GalleryPhoto
 import com.example.data.UiState
 import com.example.ui.components.BulletinCoverImage
 import com.example.ui.components.CategoryFilterRow
+import com.example.ui.components.CommentReplyTarget
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
+import com.example.ui.components.GalleryCommentComposerBar
+import com.example.ui.components.GalleryCommentsSection
 import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
+import kotlinx.coroutines.launch
+
+private data class PhotoSlide(
+    val coverPreset: CoverPreset,
+    val imageUrl: String?,
+    val imageBase64: String?
+)
 
 @Composable
 fun GalleryScreen(
     galleryState: UiState<List<GalleryPhoto>>,
     selectedCategory: GalleryCategory?,
     likedPhotoIds: Set<String>,
+    commentsState: UiState<List<GalleryComment>>,
+    isPostingComment: Boolean,
+    currentUserId: String?,
+    isGuest: Boolean,
     isAdmin: Boolean,
     onSelectCategory: (GalleryCategory?) -> Unit,
     onToggleLike: (GalleryPhoto) -> Unit,
+    onObserveComments: (String?) -> Unit,
+    onPostComment: (
+        photoId: String,
+        text: String,
+        parentCommentId: String?,
+        replyToAuthorName: String?,
+        onComplete: () -> Unit
+    ) -> Unit,
+    onDeleteComment: (photoId: String, commentId: String) -> Unit,
     onEditPhoto: (GalleryPhoto) -> Unit,
     onDeletePhoto: (GalleryPhoto) -> Unit,
     onAddPhoto: () -> Unit,
@@ -106,7 +140,7 @@ fun GalleryScreen(
         }
     }
 
-    var lightboxStartIndex by remember { mutableStateOf<Int?>(null) }
+    var activePhotoId by remember { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val columnCount = when {
@@ -137,8 +171,8 @@ fun GalleryScreen(
                             )
                             Text(
                                 text = tr(
-                                    "Ketik foto untuk zum, leret album, dan beri tanda suka",
-                                    "Tap a photo to zoom, swipe the album, and show appreciation"
+                                    "Ketik foto untuk zum, leret kiri/kanan lihat album, dan beri tanda suka",
+                                    "Tap to zoom, swipe left/right to view album photos, and show appreciation"
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -204,11 +238,11 @@ fun GalleryScreen(
                             )
                         }
                     } else {
-                        itemsIndexed(filteredPhotos, key = { _, photo -> photo.id }) { index, photo ->
+                        items(filteredPhotos, key = { it.id }) { photo ->
                             GalleryGridCard(
                                 photo = photo,
                                 isLiked = likedPhotoIds.contains(photo.id),
-                                onClick = { lightboxStartIndex = index },
+                                onClick = { activePhotoId = photo.id },
                                 onToggleLike = { onToggleLike(photo) }
                             )
                         }
@@ -218,23 +252,38 @@ fun GalleryScreen(
         }
     }
 
-    val activeIndex = lightboxStartIndex
-    if (activeIndex != null && filteredPhotos.isNotEmpty()) {
-        val safeIndex = activeIndex.coerceIn(0, filteredPhotos.lastIndex)
+    val selectedPhoto = activePhotoId?.let { id -> filteredPhotos.firstOrNull { it.id == id } }
+    LaunchedEffect(selectedPhoto?.id) {
+        onObserveComments(selectedPhoto?.id)
+    }
+    DisposableEffect(Unit) {
+        onDispose { onObserveComments(null) }
+    }
+
+    if (selectedPhoto != null) {
         InteractivePhotoLightbox(
-            photos = filteredPhotos,
-            initialIndex = safeIndex,
-            likedPhotoIds = likedPhotoIds,
+            photo = selectedPhoto,
+            isLiked = likedPhotoIds.contains(selectedPhoto.id),
+            commentsState = commentsState,
+            isPostingComment = isPostingComment,
+            currentUserId = currentUserId,
+            isGuest = isGuest,
             isAdmin = isAdmin,
-            onDismiss = { lightboxStartIndex = null },
-            onToggleLike = onToggleLike,
-            onEditPhoto = { photo ->
-                lightboxStartIndex = null
-                onEditPhoto(photo)
+            onDismiss = { activePhotoId = null },
+            onToggleLike = { onToggleLike(selectedPhoto) },
+            onPostComment = { text, parentId, replyToName, onDone ->
+                onPostComment(selectedPhoto.id, text, parentId, replyToName, onDone)
             },
-            onDeletePhoto = { photo ->
-                onDeletePhoto(photo)
-                if (filteredPhotos.size <= 1) lightboxStartIndex = null
+            onDeleteComment = { commentId ->
+                onDeleteComment(selectedPhoto.id, commentId)
+            },
+            onEditPhoto = {
+                activePhotoId = null
+                onEditPhoto(selectedPhoto)
+            },
+            onDeletePhoto = {
+                activePhotoId = null
+                onDeletePhoto(selectedPhoto)
             }
         )
     }
@@ -247,6 +296,8 @@ private fun GalleryGridCard(
     onClick: () -> Unit,
     onToggleLike: () -> Unit
 ) {
+    val totalCount = photo.totalImageCount()
+
     Card(
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -270,27 +321,58 @@ private fun GalleryGridCard(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.28f),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.78f)
+                                Color.Black.copy(alpha = 0.80f)
                             )
                         )
                     )
             )
 
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = Color.Black.copy(alpha = 0.45f),
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(8.dp)
             ) {
-                Text(
-                    text = photo.resolvedCategory().localizedLabel(LocalAppLanguage.current),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = Color.Black.copy(alpha = 0.50f)
+                ) {
+                    Text(
+                        text = photo.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+
+                if (totalCount > 1) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xCC1B4332),
+                        modifier = Modifier.testTag("gallery_multi_badge_${photo.id}")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PhotoLibrary,
+                                contentDescription = null,
+                                tint = Color(0xFFF2B86B),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = tr("$totalCount Foto", "$totalCount Photos"),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
 
             Surface(
@@ -364,15 +446,46 @@ private fun GalleryGridCard(
 
 @Composable
 private fun InteractivePhotoLightbox(
-    photos: List<GalleryPhoto>,
-    initialIndex: Int,
-    likedPhotoIds: Set<String>,
+    photo: GalleryPhoto,
+    isLiked: Boolean,
+    commentsState: UiState<List<GalleryComment>>,
+    isPostingComment: Boolean,
+    currentUserId: String?,
+    isGuest: Boolean,
     isAdmin: Boolean,
     onDismiss: () -> Unit,
-    onToggleLike: (GalleryPhoto) -> Unit,
-    onEditPhoto: (GalleryPhoto) -> Unit,
-    onDeletePhoto: (GalleryPhoto) -> Unit
+    onToggleLike: () -> Unit,
+    onPostComment: (
+        text: String,
+        parentCommentId: String?,
+        replyToAuthorName: String?,
+        onComplete: () -> Unit
+    ) -> Unit,
+    onDeleteComment: (String) -> Unit,
+    onEditPhoto: () -> Unit,
+    onDeletePhoto: () -> Unit
 ) {
+    val slides = remember(photo.id, photo.imageBase64, photo.extraImagesBase64, photo.imageUrl, photo.coverPreset) {
+        val b64Images = photo.allBase64Images()
+        if (b64Images.isNotEmpty()) {
+            b64Images.map { b64 ->
+                PhotoSlide(
+                    coverPreset = CoverPreset.CUSTOM,
+                    imageUrl = null,
+                    imageBase64 = b64
+                )
+            }
+        } else {
+            listOf(
+                PhotoSlide(
+                    coverPreset = photo.resolvedCoverPreset(),
+                    imageUrl = photo.imageUrl,
+                    imageBase64 = null
+                )
+            )
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -382,14 +495,13 @@ private fun InteractivePhotoLightbox(
     ) {
         BackHandler { onDismiss() }
 
-        val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { photos.size })
-        val currentPhoto = photos.getOrNull(pagerState.currentPage) ?: photos.first()
-        val isLiked = likedPhotoIds.contains(currentPhoto.id)
+        val pagerState = rememberPagerState(initialPage = 0, pageCount = { slides.size })
         val scrollState = rememberScrollState()
-
-        LaunchedEffect(pagerState.currentPage) {
-            scrollState.scrollTo(0)
-        }
+        val coroutineScope = rememberCoroutineScope()
+        var commentText by remember(photo.id) { mutableStateOf("") }
+        var replyTarget by remember(photo.id) { mutableStateOf<CommentReplyTarget?>(null) }
+        val commentInputFocusRequester = remember(photo.id) { FocusRequester() }
+        val commentsCount = (commentsState as? UiState.Success)?.data?.size ?: 0
 
         Column(
             modifier = Modifier
@@ -398,7 +510,7 @@ private fun InteractivePhotoLightbox(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            // Fixed Top Controls Bar (always accessible)
+            // Fixed Top Controls Bar
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -419,20 +531,24 @@ private fun InteractivePhotoLightbox(
                     }
                 }
 
-                Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f)) {
+                Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.14f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ZoomIn,
+                            imageVector = if (slides.size > 1) Icons.Filled.PhotoLibrary else Icons.Filled.ZoomIn,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.85f),
+                            tint = Color(0xFFF2B86B),
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "${pagerState.currentPage + 1} / ${photos.size} • ${tr("Ketik 2x / Cubit Zum", "Double-Tap / Pinch Zoom")}",
+                            text = if (slides.size > 1) {
+                                "${pagerState.currentPage + 1} / ${slides.size} • ${tr("Leret kiri / kanan", "Swipe left / right")}"
+                            } else {
+                                tr("Ketik 2x / Cubit Zum", "Double-Tap / Pinch Zoom")
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White
                         )
@@ -443,7 +559,7 @@ private fun InteractivePhotoLightbox(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.12f)) {
                             IconButton(
-                                onClick = { onEditPhoto(currentPhoto) },
+                                onClick = onEditPhoto,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
@@ -455,7 +571,7 @@ private fun InteractivePhotoLightbox(
                         }
                         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)) {
                             IconButton(
-                                onClick = { onDeletePhoto(currentPhoto) },
+                                onClick = onDeletePhoto,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
@@ -471,7 +587,7 @@ private fun InteractivePhotoLightbox(
                 }
             }
 
-            // Scrollable Body: Photo Stage + Full Description below the image
+            // Scrollable Body: Swipeable Multi-Photo Stage + Thumbnail Strip + Full Description Panel
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
@@ -485,7 +601,7 @@ private fun InteractivePhotoLightbox(
                         .verticalScroll(scrollState)
                         .testTag("lightbox_scrollable_content")
                 ) {
-                    // Interactive Photo Pager Stage
+                    // Swipeable Photo Pager Stage for this single upload's images
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -494,11 +610,13 @@ private fun InteractivePhotoLightbox(
                     ) {
                         HorizontalPager(
                             state = pagerState,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag("lightbox_album_pager")
                         ) { page ->
-                            val photo = photos[page]
-                            var scale by remember(photo.id) { mutableFloatStateOf(1f) }
-                            var offset by remember(photo.id) { mutableStateOf(Offset.Zero) }
+                            val slide = slides[page]
+                            var scale by remember(photo.id, page) { mutableFloatStateOf(1f) }
+                            var offset by remember(photo.id, page) { mutableStateOf(Offset.Zero) }
 
                             LaunchedEffect(pagerState.currentPage) {
                                 if (pagerState.currentPage != page) {
@@ -512,7 +630,7 @@ private fun InteractivePhotoLightbox(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(0.dp))
-                                    .pointerInput(photo.id) {
+                                    .pointerInput(photo.id, page) {
                                         detectTapGestures(
                                             onDoubleTap = {
                                                 if (scale > 1.1f) {
@@ -524,7 +642,7 @@ private fun InteractivePhotoLightbox(
                                             }
                                         )
                                     }
-                                    .pointerInput(photo.id) {
+                                    .pointerInput(photo.id, page) {
                                         awaitEachGesture {
                                             awaitFirstDown(requireUnconsumed = false)
                                             do {
@@ -554,10 +672,10 @@ private fun InteractivePhotoLightbox(
                                     }
                             ) {
                                 BulletinCoverImage(
-                                    coverPreset = photo.resolvedCoverPreset(),
-                                    imageUrl = photo.imageUrl,
-                                    imageBase64 = photo.imageBase64,
-                                    contentDescription = photo.title,
+                                    coverPreset = slide.coverPreset,
+                                    imageUrl = slide.imageUrl,
+                                    imageBase64 = slide.imageBase64,
+                                    contentDescription = "${photo.title} (${page + 1}/${slides.size})",
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -568,6 +686,122 @@ private fun InteractivePhotoLightbox(
                                             translationY = offset.y
                                         )
                                 )
+                            }
+                        }
+
+                        // Subtle Prev/Next arrow controls for multi-photo uploads
+                        if (slides.size > 1) {
+                            if (pagerState.currentPage > 0) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.Black.copy(alpha = 0.48f),
+                                    modifier = Modifier
+                                        .align(Alignment.CenterStart)
+                                        .padding(start = 8.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                            }
+                                        },
+                                        modifier = Modifier.size(44.dp).testTag("lightbox_prev_photo")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                            contentDescription = tr("Foto sebelumnya", "Previous photo"),
+                                            tint = Color.White
+                                        )
+                                    }
+                                }
+                            }
+                            if (pagerState.currentPage < slides.lastIndex) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.Black.copy(alpha = 0.48f),
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .padding(end = 8.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                            }
+                                        },
+                                        modifier = Modifier.size(44.dp).testTag("lightbox_next_photo")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = tr("Foto seterusnya", "Next photo"),
+                                            tint = Color.White
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Pagination dots overlay at bottom of photo stage
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 10.dp)
+                                    .background(Color.Black.copy(alpha = 0.42f), RoundedCornerShape(50))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                repeat(slides.size) { index ->
+                                    val selected = pagerState.currentPage == index
+                                    Box(
+                                        modifier = Modifier
+                                            .size(if (selected) 8.dp else 6.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (selected) Color(0xFFF2B86B)
+                                                else Color.White.copy(alpha = 0.45f)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Interactive thumbnail selector strip when multiple photos in one upload
+                    if (slides.size > 1) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF0E1715))
+                                .testTag("lightbox_thumbnail_strip")
+                        ) {
+                            itemsIndexed(slides) { index, slide ->
+                                val isSelected = pagerState.currentPage == index
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) Color(0xFFF2B86B)
+                                        else Color.White.copy(alpha = 0.2f)
+                                    ),
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            coroutineScope.launch {
+                                                pagerState.animateScrollToPage(index)
+                                            }
+                                        }
+                                ) {
+                                    BulletinCoverImage(
+                                        coverPreset = slide.coverPreset,
+                                        imageUrl = slide.imageUrl,
+                                        imageBase64 = slide.imageBase64,
+                                        contentDescription = tr("Gambar ${index + 1}", "Photo ${index + 1}"),
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             }
                         }
                     }
@@ -590,45 +824,99 @@ private fun InteractivePhotoLightbox(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = Color(0x33F2B86B)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = currentPhoto.resolvedCategory().localizedLabel(LocalAppLanguage.current),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFF2B86B),
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(50),
+                                        color = Color(0x33F2B86B)
+                                    ) {
+                                        Text(
+                                            text = photo.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFF2B86B),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    if (slides.size > 1) {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = Color.White.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = tr("${slides.size} Gambar", "${slides.size} Photos"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White.copy(alpha = 0.9f),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
                                 }
 
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = if (isLiked) Color(0x33FF6B6B) else Color.White.copy(alpha = 0.14f),
-                                    modifier = Modifier
-                                        .clickable { onToggleLike(currentPhoto) }
-                                        .testTag("lightbox_like_button")
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                    Surface(
+                                        shape = RoundedCornerShape(50),
+                                        color = Color.White.copy(alpha = 0.14f),
+                                        modifier = Modifier
+                                            .clickable {
+                                                coroutineScope.launch {
+                                                    scrollState.animateScrollTo(scrollState.maxValue)
+                                                }
+                                            }
+                                            .testTag("lightbox_scroll_to_comments_button")
                                     ) {
-                                        Icon(
-                                            imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                            contentDescription = tr("Sukai foto", "Like photo"),
-                                            tint = if (isLiked) Color(0xFFFF6B6B) else Color.White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            text = tr(
-                                                "${currentPhoto.likesCount} Suka",
-                                                "${currentPhoto.likesCount} Likes"
-                                            ),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.ChatBubbleOutline,
+                                                contentDescription = tr("Lihat komen", "View comments"),
+                                                tint = Color(0xFFF2B86B),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(Modifier.width(5.dp))
+                                            Text(
+                                                text = commentsCount.toString(),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(50),
+                                        color = if (isLiked) Color(0x33FF6B6B) else Color.White.copy(alpha = 0.14f),
+                                        modifier = Modifier
+                                            .clickable { onToggleLike() }
+                                            .testTag("lightbox_like_button")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                                contentDescription = tr("Sukai foto", "Like photo"),
+                                                tint = if (isLiked) Color(0xFFFF6B6B) else Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = tr(
+                                                    "${photo.likesCount} Suka",
+                                                    "${photo.likesCount} Likes"
+                                                ),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -636,7 +924,7 @@ private fun InteractivePhotoLightbox(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Text(
-                                text = currentPhoto.title,
+                                text = photo.title,
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = Color.White
                             )
@@ -652,13 +940,13 @@ private fun InteractivePhotoLightbox(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "${currentPhoto.photographerName.ifBlank { tr("Multimedia SIB Toburon", "SIB Toburon Media") }} • ${currentPhoto.eventDate}",
+                                    text = "${photo.photographerName.ifBlank { tr("Multimedia SIB Toburon", "SIB Toburon Media") }} • ${photo.eventDate}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White.copy(alpha = 0.78f)
                                 )
                             }
 
-                            if (currentPhoto.caption.isNotBlank()) {
+                            if (photo.caption.isNotBlank()) {
                                 Spacer(modifier = Modifier.height(14.dp))
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
                                 Spacer(modifier = Modifier.height(14.dp))
@@ -670,18 +958,62 @@ private fun InteractivePhotoLightbox(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = currentPhoto.caption,
+                                    text = photo.caption,
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = Color.White.copy(alpha = 0.94f),
                                     modifier = Modifier.testTag("lightbox_photo_caption")
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            GalleryCommentsSection(
+                                commentsState = commentsState,
+                                currentUserId = currentUserId,
+                                isGuest = isGuest,
+                                isAdmin = isAdmin,
+                                onReplyClick = { target ->
+                                    replyTarget = target
+                                    runCatching { commentInputFocusRequester.requestFocus() }
+                                },
+                                onDeleteComment = { comment ->
+                                    onDeleteComment(comment.id)
+                                    if (replyTarget?.rootParentCommentId == comment.id) {
+                                        replyTarget = null
+                                    }
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
                         }
                     }
                 }
             }
+
+            // Fixed Bottom Comment & Reply Composer Bar
+            GalleryCommentComposerBar(
+                commentText = commentText,
+                onCommentTextChange = { commentText = it },
+                replyTarget = replyTarget,
+                onClearReplyTarget = { replyTarget = null },
+                isGuest = isGuest,
+                isPosting = isPostingComment,
+                inputFocusRequester = commentInputFocusRequester,
+                onSendClick = {
+                    val trimmed = commentText.trim()
+                    if (trimmed.isNotEmpty()) {
+                        val currentReply = replyTarget
+                        onPostComment(
+                            trimmed,
+                            currentReply?.rootParentCommentId,
+                            currentReply?.replyToAuthorName
+                        ) {
+                            commentText = ""
+                            replyTarget = null
+                        }
+                    }
+                }
+            )
         }
     }
 }

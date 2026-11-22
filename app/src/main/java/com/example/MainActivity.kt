@@ -287,8 +287,13 @@ private fun BuletinMainShell(
     val memberSearchQuery by viewModel.memberSearchQuery.collectAsStateWithLifecycle()
     val selectedMemberDetail by viewModel.selectedMemberDetail.collectAsStateWithLifecycle()
     val isLoadingMemberDetail by viewModel.isLoadingMemberDetail.collectAsStateWithLifecycle()
+    val activePhotoComments by viewModel.activePhotoComments.collectAsStateWithLifecycle()
+    val isPostingComment by viewModel.isPostingComment.collectAsStateWithLifecycle()
+    val activeNewsComments by viewModel.activeNewsComments.collectAsStateWithLifecycle()
+    val isPostingNewsComment by viewModel.isPostingNewsComment.collectAsStateWithLifecycle()
 
     var currentTab by rememberSaveable { mutableStateOf(BulletinTab.NEWS) }
+    var isViewingNewsDetail by remember { mutableStateOf(false) }
     val isGuest = currentUser == null
     val visibleTabs = remember(isGuest) {
         if (isGuest) BulletinTab.entries.filter { it != BulletinTab.MEMBERS }
@@ -422,6 +427,9 @@ private fun BuletinMainShell(
     // Receive live real-time published news/schedule alerts and dispatch Android push notifications + snackbar
     LaunchedEffect(viewModel) {
         viewModel.liveAlerts.collect { alert ->
+            if (!BulletinNotificationManager.isAlertEnabledForType(context, alert.type)) {
+                return@collect
+            }
             BulletinNotificationManager.showBulletinNotification(
                 context = context,
                 type = alert.type,
@@ -490,7 +498,8 @@ private fun BuletinMainShell(
                 }
             },
             floatingActionButton = {
-                if (isAdmin && currentTab != BulletinTab.ACCOUNT) {
+                val hideNewsDetailFab = currentTab == BulletinTab.NEWS && isViewingNewsDetail && !isExpandedScreen
+                if (isAdmin && currentTab != BulletinTab.ACCOUNT && !hideNewsDetailFab) {
                     if (currentTab == BulletinTab.MEMBERS) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -599,6 +608,10 @@ private fun BuletinMainShell(
                                 searchQuery = newsSearchQuery,
                                 selectedCategory = selectedNewsCategory,
                                 bookmarkedIds = bookmarkedNewsIds,
+                                commentsState = activeNewsComments,
+                                isPostingComment = isPostingNewsComment,
+                                currentUserId = currentUser?.uid,
+                                isGuest = isGuest,
                                 isAdmin = isAdmin,
                                 isExpandedScreen = isExpandedScreen,
                                 focusedNewsId = focusedNewsId,
@@ -607,6 +620,14 @@ private fun BuletinMainShell(
                                 onSelectCategory = viewModel::selectNewsCategory,
                                 onToggleBookmark = { article ->
                                     viewModel.toggleBookmark(article.id, "NEWS", article.title)
+                                },
+                                onObserveComments = viewModel::observeCommentsForNews,
+                                onPostComment = { newsId, text, parentId, replyToName, onDone ->
+                                    viewModel.postNewsComment(newsId, text, parentId, replyToName, onDone)
+                                },
+                                onDeleteComment = viewModel::deleteNewsComment,
+                                onDetailVisibilityChange = { visible ->
+                                    isViewingNewsDetail = visible
                                 },
                                 onOpenFeaturedSchedule = { schedule ->
                                     focusedScheduleId = schedule.id
@@ -663,11 +684,20 @@ private fun BuletinMainShell(
                                 galleryState = galleryState,
                                 selectedCategory = selectedGalleryCategory,
                                 likedPhotoIds = likedPhotoIds,
+                                commentsState = activePhotoComments,
+                                isPostingComment = isPostingComment,
+                                currentUserId = currentUser?.uid,
+                                isGuest = isGuest,
                                 isAdmin = isAdmin,
                                 onSelectCategory = viewModel::selectGalleryCategory,
                                 onToggleLike = { photo ->
                                     viewModel.togglePhotoLike(photo.id)
                                 },
+                                onObserveComments = viewModel::observeCommentsForPhoto,
+                                onPostComment = { photoId, text, parentId, replyToName, onDone ->
+                                    viewModel.postGalleryComment(photoId, text, parentId, replyToName, onDone)
+                                },
+                                onDeleteComment = viewModel::deleteGalleryComment,
                                 onEditPhoto = { photo ->
                                     editingPhoto = photo
                                     showPhotoEditor = true
@@ -727,6 +757,8 @@ private fun BuletinMainShell(
                                 membersCount = (membersState as? UiState.Success)?.data?.size ?: 0,
                                 isBusy = isBusy,
                                 onSaveProfile = viewModel::saveProfile,
+                                onUpdateProfilePhoto = viewModel::updateProfilePhoto,
+                                onProfilePhotoError = viewModel::showSnackbar,
                                 onOpenBookmark = { bm ->
                                     if (bm.itemType == "SCHEDULE") {
                                         focusedScheduleId = bm.itemId
@@ -851,7 +883,7 @@ private fun BuletinMainShell(
             defaultPhotographer = userProfile?.displayName ?: currentUser.displayName ?: tr("Pasukan Multimedia SIB Toburon", "SIB Toburon Media Team"),
             isBusy = isBusy,
             onDismiss = { showPhotoEditor = false },
-            onSave = { title, caption, cat, date, preset, url, b64, photographer, published ->
+            onSave = { title, caption, cat, date, preset, url, b64, extraB64, photographer, published ->
                 viewModel.saveGalleryPhoto(
                     existingId = editingPhoto?.id,
                     title = title,
@@ -861,6 +893,7 @@ private fun BuletinMainShell(
                     coverPreset = preset,
                     imageUrl = url,
                     imageBase64 = b64,
+                    extraImagesBase64 = extraB64,
                     photographerName = photographer,
                     published = published,
                     onComplete = { showPhotoEditor = false }

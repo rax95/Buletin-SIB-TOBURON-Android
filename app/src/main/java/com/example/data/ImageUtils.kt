@@ -23,19 +23,28 @@ data class EncodedPhoto(
 )
 
 object ImageUtils {
+    const val MAX_GALLERY_PHOTOS_PER_UPLOAD = 8
+    const val MAX_GALLERY_TOTAL_BASE64_LENGTH = 760_000
     private const val INITIAL_MAX_DIMENSION_PX = 960
-    private const val MIN_DIMENSION_PX = 360
+    private const val MIN_DIMENSION_PX = 320
     private const val MAX_BASE64_LENGTH = 240_000
 
     /**
      * Decodes, auto-orients (EXIF), downscales, and compresses a device photo selected via
-     * Android Photo Picker (PickVisualMedia) or Document Picker (OpenDocument) into a JPEG
-     * Base64 string guaranteed to fit comfortably within Firestore security rule bounds (<= 260KB).
+     * Android Photo Picker (PickVisualMedia / PickMultipleVisualMedia) or Document Picker
+     * into a JPEG Base64 string guaranteed to fit comfortably within Firestore bounds.
      */
-    suspend fun encodeUriToBase64(context: Context, uri: Uri): Result<EncodedPhoto> =
+    suspend fun encodeUriToBase64(
+        context: Context,
+        uri: Uri,
+        maxBase64Length: Int = MAX_BASE64_LENGTH,
+        initialMaxDimensionPx: Int = INITIAL_MAX_DIMENSION_PX
+    ): Result<EncodedPhoto> =
         withContext(Dispatchers.IO) {
             try {
-                val decoded = decodeBitmapSafely(context, uri)
+                val safeMaxBase64 = maxBase64Length.coerceIn(45_000, MAX_BASE64_LENGTH)
+                val safeInitialDim = initialMaxDimensionPx.coerceIn(MIN_DIMENSION_PX, INITIAL_MAX_DIMENSION_PX)
+                val decoded = decodeBitmapSafely(context, uri, safeInitialDim)
                     ?: return@withContext Result.failure(
                         IllegalArgumentException(
                             AppLanguageManager.tr(
@@ -45,17 +54,17 @@ object ImageUtils {
                         )
                     )
 
-                var workingBitmap = scaleBitmapDown(decoded, INITIAL_MAX_DIMENSION_PX)
+                var workingBitmap = scaleBitmapDown(decoded, safeInitialDim)
                 if (workingBitmap != decoded) {
                     decoded.recycle()
                 }
 
                 var encodedResult: EncodedPhoto? = null
-                var currentMaxDim = INITIAL_MAX_DIMENSION_PX
+                var currentMaxDim = safeInitialDim
 
                 while (encodedResult == null && currentMaxDim >= MIN_DIMENSION_PX) {
                     var quality = 82
-                    while (quality >= 34) {
+                    while (quality >= 30) {
                         val out = ByteArrayOutputStream()
                         val compressedOk = workingBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
                         if (!compressedOk) {
@@ -71,7 +80,7 @@ object ImageUtils {
                         }
                         val bytes = out.toByteArray()
                         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        if (b64.length <= MAX_BASE64_LENGTH) {
+                        if (b64.length <= safeMaxBase64) {
                             encodedResult = EncodedPhoto(
                                 base64 = b64,
                                 sizeKb = (bytes.size / 1024).coerceAtLeast(1),
@@ -126,7 +135,7 @@ object ImageUtils {
             }
         }
 
-    private fun decodeBitmapSafely(context: Context, uri: Uri): Bitmap? {
+    private fun decodeBitmapSafely(context: Context, uri: Uri, maxDimPx: Int): Bitmap? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 val source = ImageDecoder.createSource(context.contentResolver, uri)
@@ -136,8 +145,8 @@ object ImageUtils {
                     val width = info.size.width
                     val height = info.size.height
                     val maxSide = maxOf(width, height)
-                    if (maxSide > INITIAL_MAX_DIMENSION_PX) {
-                        val scale = INITIAL_MAX_DIMENSION_PX.toFloat() / maxSide.toFloat()
+                    if (maxSide > maxDimPx) {
+                        val scale = maxDimPx.toFloat() / maxSide.toFloat()
                         val targetW = (width * scale).toInt().coerceAtLeast(1)
                         val targetH = (height * scale).toInt().coerceAtLeast(1)
                         decoder.setTargetSize(targetW, targetH)
@@ -160,7 +169,7 @@ object ImageUtils {
 
         var sampleSize = 1
         val maxSide = maxOf(outW, outH)
-        while (maxSide / sampleSize > INITIAL_MAX_DIMENSION_PX * 2) {
+        while (maxSide / sampleSize > maxDimPx * 2) {
             sampleSize *= 2
         }
 

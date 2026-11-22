@@ -123,6 +123,19 @@ data class NewsArticle(
 
 @Keep
 @IgnoreExtraProperties
+data class NewsComment(
+    @DocumentId val id: String = "",
+    val newsId: String = "",
+    val authorId: String = "",
+    val authorName: String = "",
+    val text: String = "",
+    val parentCommentId: String? = null,
+    val replyToAuthorName: String? = null,
+    @ServerTimestamp val createdAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
 data class ChurchSchedule(
     @DocumentId val id: String = "",
     val title: String = "",
@@ -154,6 +167,7 @@ data class GalleryPhoto(
     val coverPreset: String = CoverPreset.FELLOWSHIP.code,
     val imageUrl: String? = null,
     val imageBase64: String? = null,
+    val extraImagesBase64: List<String> = emptyList(),
     val likesCount: Long = 0L,
     val published: Boolean = true,
     val authorId: String = "",
@@ -163,7 +177,30 @@ data class GalleryPhoto(
 ) {
     fun resolvedCategory(): GalleryCategory = GalleryCategory.fromCode(category)
     fun resolvedCoverPreset(): CoverPreset = CoverPreset.fromCode(coverPreset)
+
+    fun allBase64Images(): List<String> = buildList {
+        imageBase64?.takeIf { it.isNotBlank() }?.let { add(it) }
+        extraImagesBase64.filter { it.isNotBlank() }.forEach { add(it) }
+    }
+
+    fun totalImageCount(): Int {
+        val count = allBase64Images().size
+        return if (count > 0) count else 1
+    }
 }
+
+@Keep
+@IgnoreExtraProperties
+data class GalleryComment(
+    @DocumentId val id: String = "",
+    val photoId: String = "",
+    val authorId: String = "",
+    val authorName: String = "",
+    val text: String = "",
+    val parentCommentId: String? = null,
+    val replyToAuthorName: String? = null,
+    @ServerTimestamp val createdAt: Timestamp? = null
+)
 
 @Keep
 @IgnoreExtraProperties
@@ -182,6 +219,7 @@ data class UserProfile(
     val displayName: String = "",
     val email: String = "",
     val fellowshipGroup: String = FellowshipGroup.UMUM.code,
+    val photoBase64: String? = null,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null,
     @ServerTimestamp val lastLoginAt: Timestamp? = null

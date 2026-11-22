@@ -557,6 +557,103 @@ class BulletinRepository(
         }
     }
 
+    fun observeNewsComments(newsId: String, uid: String?): Flow<List<NewsComment>> = flow {
+        if (newsId.isBlank()) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "news/$newsId/comments"
+        emitAll(
+            db.collection("news")
+                .document(newsId)
+                .collection("comments")
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(
+                        NewsComment::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    ).sortedBy { it.createdAt ?: Timestamp(0, 0) }
+                }
+                .catch { error ->
+                    logStreamErrorIfActive(uid, error, OperationType.LIST, path)
+                    throw error
+                }
+        )
+    }
+
+    suspend fun addNewsComment(
+        newsId: String,
+        authorName: String,
+        text: String,
+        parentCommentId: String? = null,
+        replyToAuthorName: String? = null
+    ): Result<Unit> {
+        var docPath = "news/$newsId/comments"
+        return try {
+            val uid = requireUserId()
+            require(newsId.isNotBlank()) {
+                AppLanguageManager.tr("ID berita tidak sah.", "Invalid news ID.")
+            }
+            val cleanText = text.trim()
+            val cleanAuthor = authorName.trim().ifBlank { "Jemaat SIB Toburon" }.take(80)
+            val cleanParentId = parentCommentId?.trim()?.takeIf { it.isNotBlank() }
+            val cleanReplyTo = replyToAuthorName?.trim()?.takeIf { it.isNotBlank() }?.take(80)
+
+            require(cleanText.length in 1..500) {
+                AppLanguageManager.tr(
+                    "Komen mestilah antara 1 hingga 500 aksara.",
+                    "Comment must be between 1 and 500 characters."
+                )
+            }
+
+            val docRef = db.collection("news")
+                .document(newsId)
+                .collection("comments")
+                .document()
+            docPath = docRef.path
+
+            val payload = mapOf<String, Any?>(
+                "newsId" to newsId,
+                "authorId" to uid,
+                "authorName" to cleanAuthor,
+                "text" to cleanText,
+                "parentCommentId" to cleanParentId,
+                "replyToAuthorName" to cleanReplyTo,
+                "createdAt" to FieldValue.serverTimestamp()
+            ).filterValues { it != null }
+
+            docRef.set(payload).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteNewsComment(newsId: String, commentId: String): Result<Unit> {
+        val docPath = "news/$newsId/comments/$commentId"
+        return try {
+            requireUserId()
+            require(newsId.isNotBlank() && commentId.isNotBlank()) {
+                AppLanguageManager.tr("ID komen tidak sah.", "Invalid comment ID.")
+            }
+            db.collection("news")
+                .document(newsId)
+                .collection("comments")
+                .document(commentId)
+                .delete()
+                .await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docPath)
+            Result.failure(e)
+        }
+    }
+
     // --- SCHEDULE MUTATIONS (ADMIN) ---
 
     suspend fun createSchedule(
@@ -785,6 +882,7 @@ class BulletinRepository(
         coverPreset: CoverPreset,
         imageUrl: String?,
         imageBase64: String?,
+        extraImagesBase64: List<String> = emptyList(),
         photographerName: String,
         published: Boolean
     ): Result<Unit> {
@@ -799,6 +897,7 @@ class BulletinRepository(
             }.take(80)
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
+            val cleanExtras = extraImagesBase64.map { it.trim() }.filter { it.isNotBlank() }
 
             require(cleanTitle.length in 2..120) {
                 AppLanguageManager.tr("Tajuk foto mestilah 2-120 aksara.", "Photo title must be 2-120 characters.")
@@ -815,6 +914,22 @@ class BulletinRepository(
             if (cleanBase64 != null) require(cleanBase64.length <= 260_000) {
                 AppLanguageManager.tr("Saiz gambar terlalu besar.", "Image size is too large.")
             }
+            require(cleanExtras.size <= 7) {
+                AppLanguageManager.tr(
+                    "Maksimum 8 gambar dibenarkan dalam satu muat naik.",
+                    "A maximum of 8 photos is allowed per upload."
+                )
+            }
+            require(cleanExtras.all { it.length <= 260_000 }) {
+                AppLanguageManager.tr("Salah satu gambar melebihi had saiz.", "One of the selected images exceeds the size limit.")
+            }
+            val totalB64Size = (cleanBase64?.length ?: 0) + cleanExtras.sumOf { it.length }
+            require(totalB64Size <= 840_000) {
+                AppLanguageManager.tr(
+                    "Jumlah saiz semua gambar terlalu besar. Sila kurangkan bilangan gambar.",
+                    "Combined size of all selected photos is too large. Please remove a few photos."
+                )
+            }
 
             val docRef = db.collection("gallery_photos").document()
             docPath = docRef.path
@@ -826,6 +941,7 @@ class BulletinRepository(
                 "coverPreset" to coverPreset.code,
                 "imageUrl" to cleanUrl,
                 "imageBase64" to cleanBase64,
+                "extraImagesBase64" to cleanExtras.takeIf { it.isNotEmpty() },
                 "likesCount" to 0L,
                 "published" to published,
                 "authorId" to uid,
@@ -853,6 +969,7 @@ class BulletinRepository(
         coverPreset: CoverPreset,
         imageUrl: String?,
         imageBase64: String?,
+        extraImagesBase64: List<String> = emptyList(),
         photographerName: String,
         published: Boolean
     ): Result<Unit> {
@@ -868,6 +985,7 @@ class BulletinRepository(
             }.take(80)
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
+            val cleanExtras = extraImagesBase64.map { it.trim() }.filter { it.isNotBlank() }
 
             require(cleanTitle.length in 2..120) {
                 AppLanguageManager.tr("Tajuk foto mestilah 2-120 aksara.", "Photo title must be 2-120 characters.")
@@ -884,6 +1002,22 @@ class BulletinRepository(
             if (cleanBase64 != null) require(cleanBase64.length <= 260_000) {
                 AppLanguageManager.tr("Saiz gambar terlalu besar.", "Image size is too large.")
             }
+            require(cleanExtras.size <= 7) {
+                AppLanguageManager.tr(
+                    "Maksimum 8 gambar dibenarkan dalam satu muat naik.",
+                    "A maximum of 8 photos is allowed per upload."
+                )
+            }
+            require(cleanExtras.all { it.length <= 260_000 }) {
+                AppLanguageManager.tr("Salah satu gambar melebihi had saiz.", "One of the selected images exceeds the size limit.")
+            }
+            val totalB64Size = (cleanBase64?.length ?: 0) + cleanExtras.sumOf { it.length }
+            require(totalB64Size <= 840_000) {
+                AppLanguageManager.tr(
+                    "Jumlah saiz semua gambar terlalu besar. Sila kurangkan bilangan gambar.",
+                    "Combined size of all selected photos is too large. Please remove a few photos."
+                )
+            }
 
             val updates = mapOf<String, Any?>(
                 "title" to cleanTitle,
@@ -893,6 +1027,7 @@ class BulletinRepository(
                 "coverPreset" to coverPreset.code,
                 "imageUrl" to cleanUrl,
                 "imageBase64" to cleanBase64,
+                "extraImagesBase64" to cleanExtras,
                 "photographerName" to cleanPhotoBy,
                 "published" to published,
                 "updatedAt" to FieldValue.serverTimestamp()
@@ -961,6 +1096,103 @@ class BulletinRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    fun observeGalleryComments(photoId: String, uid: String?): Flow<List<GalleryComment>> = flow {
+        if (photoId.isBlank()) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "gallery_photos/$photoId/comments"
+        emitAll(
+            db.collection("gallery_photos")
+                .document(photoId)
+                .collection("comments")
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(
+                        GalleryComment::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    ).sortedBy { it.createdAt ?: Timestamp(0, 0) }
+                }
+                .catch { error ->
+                    logStreamErrorIfActive(uid, error, OperationType.LIST, path)
+                    throw error
+                }
+        )
+    }
+
+    suspend fun addGalleryComment(
+        photoId: String,
+        authorName: String,
+        text: String,
+        parentCommentId: String? = null,
+        replyToAuthorName: String? = null
+    ): Result<Unit> {
+        var docPath = "gallery_photos/$photoId/comments"
+        return try {
+            val uid = requireUserId()
+            require(photoId.isNotBlank()) {
+                AppLanguageManager.tr("ID foto tidak sah.", "Invalid photo ID.")
+            }
+            val cleanText = text.trim()
+            val cleanAuthor = authorName.trim().ifBlank { "Jemaat SIB Toburon" }.take(80)
+            val cleanParentId = parentCommentId?.trim()?.takeIf { it.isNotBlank() }
+            val cleanReplyTo = replyToAuthorName?.trim()?.takeIf { it.isNotBlank() }?.take(80)
+
+            require(cleanText.length in 1..500) {
+                AppLanguageManager.tr(
+                    "Komen mestilah antara 1 hingga 500 aksara.",
+                    "Comment must be between 1 and 500 characters."
+                )
+            }
+
+            val docRef = db.collection("gallery_photos")
+                .document(photoId)
+                .collection("comments")
+                .document()
+            docPath = docRef.path
+
+            val payload = mapOf<String, Any?>(
+                "photoId" to photoId,
+                "authorId" to uid,
+                "authorName" to cleanAuthor,
+                "text" to cleanText,
+                "parentCommentId" to cleanParentId,
+                "replyToAuthorName" to cleanReplyTo,
+                "createdAt" to FieldValue.serverTimestamp()
+            ).filterValues { it != null }
+
+            docRef.set(payload).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteGalleryComment(photoId: String, commentId: String): Result<Unit> {
+        val docPath = "gallery_photos/$photoId/comments/$commentId"
+        return try {
+            requireUserId()
+            require(photoId.isNotBlank() && commentId.isNotBlank()) {
+                AppLanguageManager.tr("ID komen tidak sah.", "Invalid comment ID.")
+            }
+            db.collection("gallery_photos")
+                .document(photoId)
+                .collection("comments")
+                .document(commentId)
+                .delete()
+                .await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docPath)
             Result.failure(e)
         }
     }
@@ -1081,6 +1313,59 @@ class BulletinRepository(
                 if (cleanEmail.isNotBlank()) {
                     updates["email"] = cleanEmail
                 }
+                docRef.update(updates).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateUserProfilePhoto(
+        photoBase64: String?,
+        existingProfile: UserProfile?,
+        defaultDisplayName: String? = null,
+        userEmail: String? = null
+    ): Result<Unit> {
+        var docPath = "users"
+        return try {
+            val uid = requireUserId()
+            val cleanBase64 = photoBase64?.trim()?.takeIf { it.isNotBlank() }
+            if (cleanBase64 != null) {
+                require(cleanBase64.length <= 160_000) {
+                    AppLanguageManager.tr(
+                        "Saiz gambar profil terlalu besar. Sila pilih foto lain.",
+                        "Profile photo is too large. Please choose another image."
+                    )
+                }
+            }
+            val cleanEmail = userEmail?.trim().orEmpty().take(160)
+            val fallbackName = existingProfile?.displayName?.trim()?.takeIf { it.isNotBlank() }
+                ?: defaultDisplayName?.trim()?.takeIf { it.isNotBlank() }
+                ?: cleanEmail.substringBefore("@").takeIf { it.isNotBlank() }
+                ?: "Jemaat SIB Toburon"
+            val docRef = db.collection("users").document(uid)
+            docPath = docRef.path
+            val exists = existingProfile != null || docRef.get().await().exists()
+            if (!exists) {
+                val payload = mutableMapOf<String, Any?>(
+                    "displayName" to fallbackName.take(80),
+                    "email" to cleanEmail,
+                    "fellowshipGroup" to (existingProfile?.resolvedGroup() ?: FellowshipGroup.UMUM).code,
+                    "photoBase64" to cleanBase64,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp(),
+                    "lastLoginAt" to FieldValue.serverTimestamp()
+                ).filterValues { it != null }
+                docRef.set(payload).await()
+            } else {
+                val updates = mapOf<String, Any?>(
+                    "photoBase64" to cleanBase64,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
                 docRef.update(updates).await()
             }
             Result.success(Unit)
