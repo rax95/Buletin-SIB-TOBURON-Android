@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Cake
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WaterDrop
@@ -53,13 +56,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.R
 import com.example.data.ChurchMemberDetail
 import com.example.data.ChurchMemberPublic
 import com.example.data.UiState
@@ -68,6 +69,8 @@ import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.LiveSyncStatusPill
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 
 @Composable
 fun MembersScreen(
@@ -147,15 +150,21 @@ fun MembersScreen(
                                 Spacer(Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = "Senarai Ahli Jemaat",
+                                        text = tr("Senarai Ahli Jemaat", "Church Members Directory"),
                                         style = MaterialTheme.typography.headlineSmall,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = if (isAdmin) {
-                                            "Ketuk nama ahli untuk lihat, edit, atau padam maklumat."
+                                            tr(
+                                                "Ketik nama ahli untuk lihat, edit, atau padam maklumat.",
+                                                "Tap a member's name to view, edit, or delete details."
+                                            )
                                         } else {
-                                            "Ketuk nama ahli untuk lihat jantina & status baptisan."
+                                            tr(
+                                                "Ketik nama ahli untuk lihat jantina & status baptisan.",
+                                                "Tap a member's name to view gender & baptism status."
+                                            )
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -173,7 +182,10 @@ fun MembersScreen(
                                 color = MaterialTheme.colorScheme.secondaryContainer
                             ) {
                                 Text(
-                                    text = "${allMembers.size} Ahli Berdaftar",
+                                    text = tr(
+                                        "${allMembers.size} Ahli Berdaftar",
+                                        "${allMembers.size} Registered Members"
+                                    ),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -191,7 +203,7 @@ fun MembersScreen(
                 EditorialSearchBar(
                     query = searchQuery,
                     onQueryChange = onSearchQueryChange,
-                    placeholder = stringResource(R.string.search_members_hint),
+                    placeholder = tr("Cari nama ahli jemaat...", "Search member name..."),
                     testTagName = "member_search_input"
                 )
             }
@@ -222,10 +234,13 @@ fun MembersScreen(
                         item(key = "members_empty") {
                             EmptyBulletinState(
                                 icon = Icons.Filled.Groups,
-                                title = stringResource(R.string.empty_members_title),
-                                description = stringResource(R.string.empty_members_desc),
+                                title = tr("Belum Ada Ahli Berdaftar", "No Registered Members Yet"),
+                                description = tr(
+                                    "Senarai nama ahli jemaat SIB Toburon yang didaftarkan oleh Admin akan dipaparkan di sini.",
+                                    "The list of SIB Toburon church members registered by Admin will appear here."
+                                ),
                                 isAdmin = isAdmin,
-                                primaryActionLabel = stringResource(R.string.action_add_member),
+                                primaryActionLabel = tr("Tambah Ahli", "Add Member"),
                                 onPrimaryAction = onAddMember
                             )
                         }
@@ -241,13 +256,16 @@ fun MembersScreen(
                                     modifier = Modifier.padding(24.dp)
                                 ) {
                                     Text(
-                                        text = "Nama tidak dijumpai",
+                                        text = tr("Nama tidak dijumpai", "Name not found"),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = "Tiada ahli yang sepadan dengan \"$searchQuery\".",
+                                        text = tr(
+                                            "Tiada ahli yang sepadan dengan \"$searchQuery\".",
+                                            "No members match \"$searchQuery\"."
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -293,7 +311,7 @@ fun MembersScreen(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                     Text(
-                        text = "Memuat maklumat ahli...",
+                        text = tr("Memuatkan maklumat ahli...", "Loading member details..."),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -326,10 +344,13 @@ fun MembersScreen(
     if (isAdmin && memberToDelete != null) {
         AlertDialog(
             onDismissRequest = { if (!isBusy) pendingDeleteMember = null },
-            title = { Text("Padam Ahli Jemaat?") },
+            title = { Text(tr("Padam Ahli Jemaat?", "Delete Church Member?")) },
             text = {
                 Text(
-                    "Adakah anda pasti mahu memadam \"${memberToDelete.fullName}\" daripada senarai ahli SIB Toburon? Tindakan ini tidak boleh dibatalkan."
+                    tr(
+                        "Adakah anda pasti mahu memadam \"${memberToDelete.fullName}\" daripada senarai ahli SIB Toburon? Tindakan ini tidak boleh dibatalkan.",
+                        "Are you sure you want to delete \"${memberToDelete.fullName}\" from the SIB Toburon members list? This action cannot be undone."
+                    )
                 )
             },
             confirmButton = {
@@ -346,7 +367,7 @@ fun MembersScreen(
                     ),
                     modifier = Modifier.testTag("confirm_delete_member_button")
                 ) {
-                    Text("Padam")
+                    Text(tr("Padam", "Delete"))
                 }
             },
             dismissButton = {
@@ -354,7 +375,7 @@ fun MembersScreen(
                     onClick = { pendingDeleteMember = null },
                     enabled = !isBusy
                 ) {
-                    Text("Batal")
+                    Text(tr("Batal", "Cancel"))
                 }
             }
         )
@@ -409,7 +430,7 @@ private fun MemberNameRow(
             Spacer(Modifier.width(8.dp))
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Lihat maklumat $fullName",
+                contentDescription = tr("Lihat maklumat $fullName", "View details for $fullName"),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(22.dp)
             )
@@ -436,6 +457,7 @@ private fun JemaatMemberInfoDialog(
                 .widthIn(max = 460.dp)
                 .testTag("jemaat_member_info_dialog")
         ) {
+            val lang = LocalAppLanguage.current
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -446,7 +468,7 @@ private fun JemaatMemberInfoDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Maklumat Ahli",
+                            text = tr("Maklumat Ahli", "Member Info"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -462,7 +484,7 @@ private fun JemaatMemberInfoDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Tutup"
+                            contentDescription = tr("Tutup", "Close")
                         )
                     }
                 }
@@ -476,13 +498,13 @@ private fun JemaatMemberInfoDialog(
                 ) {
                     MemberDetailInfoRow(
                         icon = Icons.Filled.Wc,
-                        label = "Jantina",
-                        value = member.resolvedGenderLabel()
+                        label = tr("Jantina", "Gender"),
+                        value = member.resolvedGenderLabel(lang)
                     )
                     MemberDetailInfoRow(
                         icon = Icons.Filled.WaterDrop,
-                        label = "Status Baptisan",
-                        value = member.resolvedBaptismLabel()
+                        label = tr("Status Baptisan", "Baptism Status"),
+                        value = member.resolvedBaptismLabel(lang)
                     )
                 }
 
@@ -500,7 +522,7 @@ private fun JemaatMemberInfoDialog(
                             .heightIn(min = 48.dp)
                             .testTag("jemaat_member_close_button")
                     ) {
-                        Text("Tutup")
+                        Text(tr("Tutup", "Close"))
                     }
                 }
             }
@@ -516,8 +538,9 @@ private fun AdminMemberDetailDialog(
     onEdit: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
+    val lang = LocalAppLanguage.current
     val age = detail.calculatedAge()
-    val readableBirthDate = formatBirthDateReadable(detail.birthDate)
+    val readableBirthDate = formatBirthDateReadable(detail.birthDate, lang)
 
     Dialog(
         onDismissRequest = { if (!isBusy) onDismiss() },
@@ -544,7 +567,7 @@ private fun AdminMemberDetailDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Maklumat Ahli Jemaat",
+                            text = tr("Maklumat Ahli Jemaat", "Church Member Details"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -560,43 +583,53 @@ private fun AdminMemberDetailDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Tutup"
+                            contentDescription = tr("Tutup", "Close")
                         )
                     }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // 5 Member Information Rows
+                // 6 Member Information Rows (scrollable for compact screens)
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(20.dp)
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp)
                 ) {
                     MemberDetailInfoRow(
                         icon = Icons.Filled.Person,
-                        label = "1. Nama Penuh",
+                        label = tr("1. Nama Penuh", "1. Full Name"),
                         value = detail.fullName
                     )
                     MemberDetailInfoRow(
                         icon = Icons.Filled.Wc,
-                        label = "2. Jantina",
-                        value = detail.resolvedGender().label
+                        label = tr("2. Jantina", "2. Gender"),
+                        value = detail.resolvedGender().localizedLabel(lang)
                     )
                     MemberDetailInfoRow(
                         icon = Icons.Filled.Cake,
-                        label = "3. Tarikh Lahir",
+                        label = tr("3. Tarikh Lahir", "3. Date of Birth"),
                         value = readableBirthDate,
-                        trailingBadge = if (age != null) "Umur: $age tahun" else null
+                        trailingBadge = if (age != null) {
+                            tr("Umur: $age tahun", "Age: $age yrs")
+                        } else null
                     )
                     MemberDetailInfoRow(
                         icon = Icons.Filled.WaterDrop,
-                        label = "4. Status Baptisan",
-                        value = detail.resolvedBaptismStatus().label
+                        label = tr("4. Status Baptisan", "4. Baptism Status"),
+                        value = detail.resolvedBaptismStatus().localizedLabel(lang)
                     )
                     MemberDetailInfoRow(
                         icon = Icons.Filled.Church,
-                        label = "5. Denominasi",
+                        label = tr("5. Denominasi", "5. Denomination"),
                         value = detail.denomination
+                    )
+                    MemberDetailInfoRow(
+                        icon = Icons.Filled.Favorite,
+                        label = tr("6. Status Perkahwinan", "6. Marital Status"),
+                        value = detail.resolvedMaritalStatusLabel(lang)
                     )
                 }
 
@@ -627,7 +660,7 @@ private fun AdminMemberDetailDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("Padam")
+                        Text(tr("Padam", "Delete"))
                     }
                     Button(
                         onClick = onEdit,
@@ -643,7 +676,7 @@ private fun AdminMemberDetailDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("Edit")
+                        Text(tr("Edit", "Edit"))
                     }
                 }
             }

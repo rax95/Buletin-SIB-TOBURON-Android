@@ -75,6 +75,10 @@ import com.example.data.ImageUtils
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
 import com.example.data.ScheduleCategory
+import com.example.ui.i18n.AppLanguage
+import com.example.ui.i18n.AppLanguageManager
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -103,6 +107,7 @@ fun AdminNewsEditorDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
+    val lang = LocalAppLanguage.current
     val scope = rememberCoroutineScope()
 
     var title by remember { mutableStateOf(initial?.title ?: "") }
@@ -130,9 +135,15 @@ fun AdminNewsEditorDialog(
                 imageBase64 = encoded.base64
                 imageUrl = ""
                 coverPreset = CoverPreset.CUSTOM
-                photoStatusNote = "Foto siap diunggah (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})"
+                photoStatusNote = AppLanguageManager.tr(
+                    "Foto sedia dimuat naik (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})",
+                    "Photo ready to upload (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})"
+                )
             }.onFailure { err ->
-                validationError = err.localizedMessage ?: "Gagal memproses foto dari perangkat."
+                validationError = err.localizedMessage ?: AppLanguageManager.tr(
+                    "Gagal memproses foto daripada peranti.",
+                    "Failed to process photo from device."
+                )
             }
         }
     }
@@ -159,7 +170,11 @@ fun AdminNewsEditorDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (initial == null) "Tulis Berita Baru" else "Ubah Berita",
+                text = if (initial == null) {
+                    tr("Tulis Berita Baharu", "Write New Article")
+                } else {
+                    tr("Edit Berita", "Edit Article")
+                },
                 style = MaterialTheme.typography.headlineSmall
             )
         },
@@ -173,21 +188,21 @@ fun AdminNewsEditorDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it; validationError = null },
-                    label = { Text("Judul Berita *") },
+                    label = { Text(tr("Tajuk Berita *", "Article Title *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("news_title_input")
                 )
                 OutlinedTextField(
                     value = summary,
                     onValueChange = { summary = it; validationError = null },
-                    label = { Text("Ringkasan Singkat *") },
+                    label = { Text(tr("Ringkasan Singkat *", "Short Summary *")) },
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth().testTag("news_summary_input")
                 )
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it; validationError = null },
-                    label = { Text("Isi Lengkap Warta / Berita *") },
+                    label = { Text(tr("Isi Lengkap Warta / Berita *", "Full Bulletin / News Content *")) },
                     minLines = 4,
                     maxLines = 8,
                     modifier = Modifier.fillMaxWidth().testTag("news_content_input")
@@ -195,12 +210,12 @@ fun AdminNewsEditorDialog(
                 OutlinedTextField(
                     value = authorName,
                     onValueChange = { authorName = it },
-                    label = { Text("Nama Penulis / Redaksi") },
+                    label = { Text(tr("Nama Penulis / Sidang Editorial", "Author / Editorial Team")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Kategori", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Kategori", "Category"), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -209,17 +224,17 @@ fun AdminNewsEditorDialog(
                         FilterChip(
                             selected = category == item,
                             onClick = { category = item },
-                            label = { Text(item.label, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(item.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
                 }
 
-                Text("Sampul Gambar", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Gambar Sampul", "Cover Image"), style = MaterialTheme.typography.labelLarge)
                 BulletinCoverImage(
                     coverPreset = coverPreset,
                     imageUrl = imageUrl.takeIf { it.isNotBlank() },
                     imageBase64 = imageBase64,
-                    contentDescription = "Pratinjau sampul",
+                    contentDescription = tr("Pratonton sampul", "Cover preview"),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(130.dp)
@@ -238,22 +253,30 @@ fun AdminNewsEditorDialog(
                             Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                         }
                         Spacer(Modifier.width(6.dp))
-                        Text("Galeri HP")
+                        Text(tr("Galeri Telefon", "Phone Gallery"))
                     }
                     OutlinedButton(
                         onClick = { openDocumentLauncher.launch(arrayOf("image/*")) },
                         enabled = !isEncodingPhoto
                     ) {
-                        Icon(Icons.Filled.FolderOpen, contentDescription = "Pilih file gambar", modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Filled.FolderOpen,
+                            contentDescription = tr("Pilih fail gambar", "Choose image file"),
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(4.dp))
-                        Text("File")
+                        Text(tr("Fail", "File"))
                     }
                     if (!imageBase64.isNullOrBlank()) {
                         OutlinedButton(onClick = {
                             imageBase64 = null
                             photoStatusNote = null
                         }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Hapus foto terunggah", modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = tr("Padam foto dimuat naik", "Remove uploaded photo"),
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }
@@ -273,7 +296,7 @@ fun AdminNewsEditorDialog(
                                 coverPreset = preset
                                 imageBase64 = null
                             },
-                            label = { Text(preset.label, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(preset.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
                 }
@@ -281,7 +304,7 @@ fun AdminNewsEditorDialog(
                 OutlinedTextField(
                     value = imageUrl,
                     onValueChange = { imageUrl = it },
-                    label = { Text("Atau URL Gambar HTTPS (Opsional)") },
+                    label = { Text(tr("Atau URL Gambar HTTPS (Pilihan)", "Or HTTPS Image URL (Optional)")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -291,7 +314,7 @@ fun AdminNewsEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Sematkan sebagai Berita Utama", style = MaterialTheme.typography.bodyMedium)
+                    Text(tr("Sematkan sebagai Berita Utama", "Pin as Featured News"), style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = pinned, onCheckedChange = { pinned = it })
                 }
 
@@ -300,7 +323,7 @@ fun AdminNewsEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Publikasikan langsung ke Jemaat", style = MaterialTheme.typography.bodyMedium)
+                    Text(tr("Terbitkan terus kepada Jemaat", "Publish directly to Congregation"), style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = published, onCheckedChange = { published = it })
                 }
 
@@ -321,9 +344,18 @@ fun AdminNewsEditorDialog(
                     val s = summary.trim()
                     val c = content.trim()
                     when {
-                        t.length < 3 -> validationError = "Judul minimal 3 karakter."
-                        s.length < 5 -> validationError = "Ringkasan minimal 5 karakter."
-                        c.length < 10 -> validationError = "Isi berita minimal 10 karakter."
+                        t.length < 3 -> validationError = AppLanguageManager.tr(
+                            "Tajuk minimum 3 aksara.",
+                            "Title must be at least 3 characters."
+                        )
+                        s.length < 5 -> validationError = AppLanguageManager.tr(
+                            "Ringkasan minimum 5 aksara.",
+                            "Summary must be at least 5 characters."
+                        )
+                        c.length < 10 -> validationError = AppLanguageManager.tr(
+                            "Isi berita minimum 10 aksara.",
+                            "Article content must be at least 10 characters."
+                        )
                         else -> onSave(
                             t, s, c, category, authorName, coverPreset,
                             imageUrl.trim().takeIf { it.isNotBlank() },
@@ -333,19 +365,22 @@ fun AdminNewsEditorDialog(
                 },
                 modifier = Modifier.testTag("save_news_button")
             ) {
-                Text(if (isBusy) "Menyimpan…" else "Simpan & Sinkron")
+                Text(if (isBusy) tr("Menyimpan…", "Saving…") else tr("Simpan & Segerak", "Save & Sync"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Batal")
+                Text(tr("Batal", "Cancel"))
             }
         }
     )
 }
 
-private fun formatScheduleDateLabel(utcMillis: Long): String {
-    val fmt = SimpleDateFormat("EEEE, dd MMM yyyy", Locale("id", "ID")).apply {
+private fun formatScheduleDateLabel(
+    utcMillis: Long,
+    lang: AppLanguage = AppLanguageManager.current()
+): String {
+    val fmt = SimpleDateFormat("EEEE, dd MMM yyyy", lang.locale).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
     return fmt.format(Date(utcMillis))
@@ -398,6 +433,7 @@ fun AdminScheduleEditorDialog(
         published: Boolean
     ) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
     val defaultUtcToday = remember {
         val local = Calendar.getInstance()
         Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
@@ -413,8 +449,8 @@ fun AdminScheduleEditorDialog(
     var selectedDateMillis by remember { mutableStateOf(defaultUtcToday) }
     var dateLabel by remember {
         mutableStateOf(
-            initial?.dateLabel?.ifBlank { formatScheduleDateLabel(defaultUtcToday) }
-                ?: formatScheduleDateLabel(defaultUtcToday)
+            initial?.dateLabel?.ifBlank { formatScheduleDateLabel(defaultUtcToday, lang) }
+                ?: formatScheduleDateLabel(defaultUtcToday, lang)
         )
     }
     var startHour by remember { mutableIntStateOf(parsedTimes[0]) }
@@ -426,13 +462,17 @@ fun AdminScheduleEditorDialog(
     val formattedTimeLabel = remember(startHour, startMinute, endHour, endMinute, useEndTime) {
         val startStr = formatHourMinute(startHour, startMinute)
         if (useEndTime) {
-            "$startStr - ${formatHourMinute(endHour, endMinute)} WITA"
+            "$startStr - ${formatHourMinute(endHour, endMinute)} MYT"
         } else {
-            "$startStr WITA"
+            "$startStr MYT"
         }
     }
 
-    var location by remember { mutableStateOf(initial?.location ?: "Gedung Utama SIB Toburon") }
+    var location by remember {
+        mutableStateOf(
+            initial?.location ?: AppLanguageManager.tr("Bangunan Utama SIB Toburon", "SIB Toburon Main Hall")
+        )
+    }
     var speaker by remember { mutableStateOf(initial?.speaker ?: "") }
     var sortOrderText by remember {
         mutableStateOf(
@@ -451,7 +491,11 @@ fun AdminScheduleEditorDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (initial == null) "Tambah Jadwal Kegiatan" else "Ubah Jadwal Kegiatan",
+                text = if (initial == null) {
+                    tr("Tambah Jadual Kegiatan", "Add Event Schedule")
+                } else {
+                    tr("Edit Jadual Kegiatan", "Edit Event Schedule")
+                },
                 style = MaterialTheme.typography.headlineSmall
             )
         },
@@ -465,13 +509,13 @@ fun AdminScheduleEditorDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it; validationError = null },
-                    label = { Text("Nama Kegiatan *") },
+                    label = { Text(tr("Nama Kegiatan *", "Event Name *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("schedule_title_input")
                 )
 
-                // Hari / Tanggal — Material 3 Date Picker
-                Text("Hari / Tanggal *", style = MaterialTheme.typography.labelLarge)
+                // Hari / Tarikh — Material 3 Date Picker
+                Text(tr("Hari / Tarikh *", "Day / Date *"), style = MaterialTheme.typography.labelLarge)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -507,7 +551,7 @@ fun AdminScheduleEditorDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Ketuk untuk pilih tarikh",
+                                    text = tr("Ketik untuk pilih tarikh", "Tap to select date"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -518,7 +562,7 @@ fun AdminScheduleEditorDialog(
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
-                                text = "Pilih",
+                                text = tr("Pilih", "Pick"),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -533,13 +577,17 @@ fun AdminScheduleEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Waktu Kegiatan *", style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Waktu Kegiatan *", "Event Time *"), style = MaterialTheme.typography.labelLarge)
                     FilterChip(
                         selected = useEndTime,
                         onClick = { useEndTime = !useEndTime },
                         label = {
                             Text(
-                                text = if (useEndTime) "Ada Waktu Tamat" else "Waktu Mula Sahaja",
+                                text = if (useEndTime) {
+                                    tr("Ada Waktu Tamat", "Has End Time")
+                                } else {
+                                    tr("Waktu Mula Sahaja", "Start Time Only")
+                                },
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
@@ -571,7 +619,7 @@ fun AdminScheduleEditorDialog(
                             Spacer(Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = "Mula",
+                                    text = tr("Mula", "Start"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -608,7 +656,7 @@ fun AdminScheduleEditorDialog(
                                 Spacer(Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "Tamat",
+                                        text = tr("Tamat", "End"),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -624,7 +672,7 @@ fun AdminScheduleEditorDialog(
                     }
                 }
                 Text(
-                    text = "Paparan waktu: $formattedTimeLabel",
+                    text = "${tr("Paparan waktu", "Displayed time")}: $formattedTimeLabel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -632,21 +680,21 @@ fun AdminScheduleEditorDialog(
                 OutlinedTextField(
                     value = location,
                     onValueChange = { location = it; validationError = null },
-                    label = { Text("Lokasi *") },
+                    label = { Text(tr("Lokasi *", "Location *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = speaker,
                     onValueChange = { speaker = it },
-                    label = { Text("Pelayan Firman / Koordinator") },
+                    label = { Text(tr("Pelayan Firman / Penyelaras", "Speaker / Coordinator")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it; validationError = null },
-                    label = { Text("Keterangan Kegiatan *") },
+                    label = { Text(tr("Keterangan Kegiatan *", "Event Details *")) },
                     minLines = 3,
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth()
@@ -654,13 +702,13 @@ fun AdminScheduleEditorDialog(
                 OutlinedTextField(
                     value = sortOrderText,
                     onValueChange = { sortOrderText = it.filter { ch -> ch.isDigit() }.take(12) },
-                    label = { Text("Angka Urutan Tampil (kecil di atas)") },
+                    label = { Text(tr("Nombor Urutan Paparan (kecil di atas)", "Display Sort Order (smaller first)")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Kategori Kegiatan", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Kategori Kegiatan", "Event Category"), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -669,7 +717,7 @@ fun AdminScheduleEditorDialog(
                         FilterChip(
                             selected = category == item,
                             onClick = { category = item },
-                            label = { Text(item.label, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(item.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
                 }
@@ -679,7 +727,7 @@ fun AdminScheduleEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Jadwal Rutin Mingguan", style = MaterialTheme.typography.bodyMedium)
+                    Text(tr("Jadual Berkala Mingguan", "Weekly Recurring Schedule"), style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = recurring, onCheckedChange = { recurring = it })
                 }
 
@@ -688,7 +736,7 @@ fun AdminScheduleEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Publikasikan langsung ke Jemaat", style = MaterialTheme.typography.bodyMedium)
+                    Text(tr("Terbitkan terus kepada Jemaat", "Publish directly to Congregation"), style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = published, onCheckedChange = { published = it })
                 }
 
@@ -712,21 +760,36 @@ fun AdminScheduleEditorDialog(
                     val loc = location.trim()
                     val order = sortOrderText.toLongOrNull() ?: 500L
                     when {
-                        t.length < 3 -> validationError = "Nama kegiatan minimal 3 karakter."
-                        dt.length < 3 -> validationError = "Sila pilih hari / tarikh kegiatan."
-                        tm.length < 3 -> validationError = "Sila pilih waktu kegiatan."
-                        loc.length < 2 -> validationError = "Lokasi kegiatan minimal 2 karakter."
-                        d.isEmpty() -> validationError = "Keterangan kegiatan wajib diisi."
+                        t.length < 3 -> validationError = AppLanguageManager.tr(
+                            "Nama kegiatan minimum 3 aksara.",
+                            "Event name must be at least 3 characters."
+                        )
+                        dt.length < 3 -> validationError = AppLanguageManager.tr(
+                            "Sila pilih hari / tarikh kegiatan.",
+                            "Please select the event date."
+                        )
+                        tm.length < 3 -> validationError = AppLanguageManager.tr(
+                            "Sila pilih waktu kegiatan.",
+                            "Please select the event time."
+                        )
+                        loc.length < 2 -> validationError = AppLanguageManager.tr(
+                            "Lokasi kegiatan minimum 2 aksara.",
+                            "Location must be at least 2 characters."
+                        )
+                        d.isEmpty() -> validationError = AppLanguageManager.tr(
+                            "Keterangan kegiatan wajib diisi.",
+                            "Event details are required."
+                        )
                         else -> onSave(t, d, category, dt, tm, loc, speaker.trim(), order, recurring, published)
                     }
                 },
                 modifier = Modifier.testTag("save_schedule_button")
             ) {
-                Text(if (isBusy) "Menyimpan…" else "Simpan & Sinkron")
+                Text(if (isBusy) tr("Menyimpan…", "Saving…") else tr("Simpan & Segerak", "Save & Sync"))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
+            TextButton(onClick = onDismiss) { Text(tr("Batal", "Cancel")) }
         }
     )
 
@@ -741,18 +804,18 @@ fun AdminScheduleEditorDialog(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
                             selectedDateMillis = millis
-                            dateLabel = formatScheduleDateLabel(millis)
+                            dateLabel = formatScheduleDateLabel(millis, lang)
                             sortOrderText = buildScheduleSortOrder(millis, startHour, startMinute).toString()
                             validationError = null
                         }
                         showDatePicker = false
                     }
                 ) {
-                    Text("Pilih")
+                    Text(tr("Pilih", "Select"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
+                TextButton(onClick = { showDatePicker = false }) { Text(tr("Batal", "Cancel")) }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -767,7 +830,7 @@ fun AdminScheduleEditorDialog(
         )
         AlertDialog(
             onDismissRequest = { showStartTimePicker = false },
-            title = { Text("Pilih Waktu Mula", style = MaterialTheme.typography.titleLarge) },
+            title = { Text(tr("Pilih Waktu Mula", "Select Start Time"), style = MaterialTheme.typography.titleLarge) },
             text = {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -785,11 +848,11 @@ fun AdminScheduleEditorDialog(
                         showStartTimePicker = false
                     }
                 ) {
-                    Text("Pilih")
+                    Text(tr("Pilih", "Select"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showStartTimePicker = false }) { Text("Batal") }
+                TextButton(onClick = { showStartTimePicker = false }) { Text(tr("Batal", "Cancel")) }
             }
         )
     }
@@ -802,7 +865,7 @@ fun AdminScheduleEditorDialog(
         )
         AlertDialog(
             onDismissRequest = { showEndTimePicker = false },
-            title = { Text("Pilih Waktu Tamat", style = MaterialTheme.typography.titleLarge) },
+            title = { Text(tr("Pilih Waktu Tamat", "Select End Time"), style = MaterialTheme.typography.titleLarge) },
             text = {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -819,11 +882,11 @@ fun AdminScheduleEditorDialog(
                         showEndTimePicker = false
                     }
                 ) {
-                    Text("Pilih")
+                    Text(tr("Pilih", "Select"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEndTimePicker = false }) { Text("Batal") }
+                TextButton(onClick = { showEndTimePicker = false }) { Text(tr("Batal", "Cancel")) }
             }
         )
     }
@@ -849,10 +912,11 @@ fun AdminPhotoEditorDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
+    val lang = LocalAppLanguage.current
     val scope = rememberCoroutineScope()
 
-    val defaultTodayDate = remember {
-        SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(Date())
+    val defaultTodayDate = remember(lang) {
+        SimpleDateFormat("dd MMM yyyy", lang.locale).format(Date())
     }
 
     var title by remember { mutableStateOf(initial?.title ?: "") }
@@ -869,7 +933,9 @@ fun AdminPhotoEditorDialog(
     var isEncodingPhoto by remember { mutableStateOf(false) }
     var photoStatusNote by remember {
         mutableStateOf(
-            if (!initial?.imageBase64.isNullOrBlank()) "Foto perangkat tersimpan" else null
+            if (!initial?.imageBase64.isNullOrBlank()) {
+                AppLanguageManager.tr("Foto peranti disimpan", "Device photo saved")
+            } else null
         )
     }
 
@@ -885,9 +951,15 @@ fun AdminPhotoEditorDialog(
                 imageUrl = ""
                 coverPreset = CoverPreset.CUSTOM
                 presetExplicitlyChosen = false
-                photoStatusNote = "Foto perangkat siap diunggah (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})"
+                photoStatusNote = AppLanguageManager.tr(
+                    "Foto peranti sedia dimuat naik (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})",
+                    "Device photo ready to upload (${encoded.sizeKb} KB • ${encoded.width}×${encoded.height})"
+                )
             }.onFailure { err ->
-                validationError = err.localizedMessage ?: "Gagal memproses foto dari perangkat."
+                validationError = err.localizedMessage ?: AppLanguageManager.tr(
+                    "Gagal memproses foto daripada peranti.",
+                    "Failed to process photo from device."
+                )
             }
         }
     }
@@ -916,7 +988,11 @@ fun AdminPhotoEditorDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (initial == null) "Unggah Foto Galeri" else "Ubah Info Foto",
+                text = if (initial == null) {
+                    tr("Muat Naik Foto Galeri", "Upload Gallery Photo")
+                } else {
+                    tr("Edit Maklumat Foto", "Edit Photo Info")
+                },
                 style = MaterialTheme.typography.headlineSmall
             )
         },
@@ -949,7 +1025,7 @@ fun AdminPhotoEditorDialog(
                                 coverPreset = coverPreset,
                                 imageUrl = imageUrl.trim().takeIf { it.isNotBlank() },
                                 imageBase64 = imageBase64,
-                                contentDescription = "Pratinjau foto galeri",
+                                contentDescription = tr("Pratonton foto galeri", "Gallery photo preview"),
                                 modifier = Modifier.fillMaxWidth().height(170.dp)
                             )
                         } else {
@@ -966,13 +1042,19 @@ fun AdminPhotoEditorDialog(
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "Ketuk untuk Pilih Foto dari Perangkat",
+                                    text = tr(
+                                        "Ketik untuk Pilih Foto daripada Peranti",
+                                        "Tap to Choose Photo from Device"
+                                    ),
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.Center
                                 )
                                 Text(
-                                    text = "Mendukung JPG, PNG, WebP, & HEIC (dikompresi otomatis)",
+                                    text = tr(
+                                        "Menyokong JPG, PNG, WebP, & HEIC (dimampatkan automatik)",
+                                        "Supports JPG, PNG, WebP, & HEIC (auto-compressed)"
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
@@ -996,7 +1078,7 @@ fun AdminPhotoEditorDialog(
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        text = "Memproses foto…",
+                                        text = tr("Memproses foto…", "Processing photo…"),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = Color.White
                                     )
@@ -1037,7 +1119,13 @@ fun AdminPhotoEditorDialog(
                     ) {
                         Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (imageBase64 != null) "Ganti Foto" else "Pilih dari Galeri")
+                        Text(
+                            if (imageBase64 != null) {
+                                tr("Tukar Foto", "Change Photo")
+                            } else {
+                                tr("Pilih dari Galeri", "Choose from Gallery")
+                            }
+                        )
                     }
                     OutlinedButton(
                         onClick = { openDocumentLauncher.launch(arrayOf("image/*")) },
@@ -1046,9 +1134,13 @@ fun AdminPhotoEditorDialog(
                             .height(48.dp)
                             .testTag("pick_file_photo_button")
                     ) {
-                        Icon(Icons.Filled.FolderOpen, contentDescription = "Pilih foto dari file perangkat", modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Filled.FolderOpen,
+                            contentDescription = tr("Pilih foto daripada fail peranti", "Choose photo from device files"),
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(4.dp))
-                        Text("File")
+                        Text(tr("Fail", "File"))
                     }
                     if (!imageBase64.isNullOrBlank()) {
                         OutlinedButton(
@@ -1058,7 +1150,11 @@ fun AdminPhotoEditorDialog(
                             },
                             modifier = Modifier.height(48.dp)
                         ) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Hapus foto", modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = tr("Padam foto", "Remove photo"),
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }
@@ -1074,21 +1170,21 @@ fun AdminPhotoEditorDialog(
                             coverPreset = CoverPreset.CUSTOM
                         }
                     },
-                    label = { Text("Atau URL Foto HTTPS (Opsional)") },
+                    label = { Text(tr("Atau URL Foto HTTPS (Pilihan)", "Or HTTPS Photo URL (Optional)")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it; validationError = null },
-                    label = { Text("Judul Foto *") },
+                    label = { Text(tr("Tajuk Foto *", "Photo Title *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("photo_title_input")
                 )
                 OutlinedTextField(
                     value = caption,
                     onValueChange = { caption = it },
-                    label = { Text("Cerita / Keterangan Foto") },
+                    label = { Text(tr("Cerita / Keterangan Foto", "Story / Photo Caption")) },
                     minLines = 2,
                     maxLines = 5,
                     modifier = Modifier.fillMaxWidth()
@@ -1096,19 +1192,19 @@ fun AdminPhotoEditorDialog(
                 OutlinedTextField(
                     value = eventDate,
                     onValueChange = { eventDate = it; validationError = null },
-                    label = { Text("Tanggal Dokumentasi *") },
+                    label = { Text(tr("Tarikh Dokumentasi *", "Event Date *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = photographerName,
                     onValueChange = { photographerName = it },
-                    label = { Text("Fotografer / Tim Multimedia") },
+                    label = { Text(tr("Jurugambar / Pasukan Multimedia", "Photographer / Media Team")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Kategori Album", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Kategori Album", "Album Category"), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1117,7 +1213,7 @@ fun AdminPhotoEditorDialog(
                         FilterChip(
                             selected = category == item,
                             onClick = { category = item },
-                            label = { Text(item.label, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(item.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
                 }
@@ -1127,7 +1223,7 @@ fun AdminPhotoEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Publikasikan ke Galeri Jemaat", style = MaterialTheme.typography.bodyMedium)
+                    Text(tr("Terbitkan ke Galeri Jemaat", "Publish to Congregation Gallery"), style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = published, onCheckedChange = { published = it })
                 }
 
@@ -1149,9 +1245,18 @@ fun AdminPhotoEditorDialog(
                     val cleanUrl = imageUrl.trim().takeIf { it.isNotBlank() }
                     when {
                         imageBase64.isNullOrBlank() && cleanUrl == null && !presetExplicitlyChosen ->
-                            validationError = "Pilih foto dari perangkat atau masukkan URL foto terlebih dahulu."
-                        t.length < 2 -> validationError = "Judul foto minimal 2 karakter."
-                        dt.length < 2 -> validationError = "Tanggal dokumentasi minimal 2 karakter."
+                            validationError = AppLanguageManager.tr(
+                                "Sila pilih foto daripada peranti atau masukkan URL foto terlebih dahulu.",
+                                "Please pick a photo from your device or enter a photo URL first."
+                            )
+                        t.length < 2 -> validationError = AppLanguageManager.tr(
+                            "Tajuk foto minimum 2 aksara.",
+                            "Photo title must be at least 2 characters."
+                        )
+                        dt.length < 2 -> validationError = AppLanguageManager.tr(
+                            "Tarikh dokumentasi minimum 2 aksara.",
+                            "Event date must be at least 2 characters."
+                        )
                         else -> onSave(
                             t, caption.trim(), category, dt, coverPreset,
                             cleanUrl,
@@ -1161,11 +1266,11 @@ fun AdminPhotoEditorDialog(
                 },
                 modifier = Modifier.testTag("save_photo_button")
             ) {
-                Text(if (isBusy) "Mengunggah…" else "Unggah & Sinkron")
+                Text(if (isBusy) tr("Memuat naik…", "Uploading…") else tr("Muat Naik & Segerak", "Upload & Sync"))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
+            TextButton(onClick = onDismiss) { Text(tr("Batal", "Cancel")) }
         }
     )
 }
@@ -1176,39 +1281,43 @@ fun AdminMemberAddDialog(
     onDismiss: () -> Unit,
     onAdd: (uid: String, displayName: String, roleTitle: String) -> Unit
 ) {
+    val defaultRoleTitle = tr("Setiausaha Jemaat", "Church Secretary")
     var targetUid by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
-    var roleTitle by remember { mutableStateOf("Sekretaris Jemaat") }
+    var roleTitle by remember { mutableStateOf(defaultRoleTitle) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tambah Pengurus Admin", style = MaterialTheme.typography.headlineSmall) },
+        title = { Text(tr("Tambah Pentadbir Admin", "Add Admin Manager"), style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Masukkan UID akun Google pengurus gereja (dapat disalin dari tab Akun mereka) agar dapat memperbarui berita, jadwal, dan galeri.",
+                    text = tr(
+                        "Masukkan UID akaun Google pentadbir gereja (boleh disalin daripada tab Akaun mereka) untuk mengemas kini berita, jadual, galeri, dan ahli.",
+                        "Enter the church manager's Google account UID (can be copied from their Account tab) to manage news, schedules, gallery, and members."
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = targetUid,
                     onValueChange = { targetUid = it; validationError = null },
-                    label = { Text("UID Pengguna *") },
+                    label = { Text(tr("UID Pengguna *", "User UID *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it; validationError = null },
-                    label = { Text("Nama Pengurus *") },
+                    label = { Text(tr("Nama Pentadbir *", "Manager Name *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = roleTitle,
                     onValueChange = { roleTitle = it; validationError = null },
-                    label = { Text("Jabatan Pelayanan *") },
+                    label = { Text(tr("Jawatan Pelayanan *", "Ministry Role *")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1229,18 +1338,27 @@ fun AdminMemberAddDialog(
                     val n = displayName.trim()
                     val r = roleTitle.trim()
                     when {
-                        !u.matches(Regex("^[a-zA-Z0-9_\\-]+$")) -> validationError = "Format UID tidak valid."
-                        n.isEmpty() -> validationError = "Nama pengurus wajib diisi."
-                        r.isEmpty() -> validationError = "Jabatan pelayanan wajib diisi."
+                        !u.matches(Regex("^[a-zA-Z0-9_\\-]+$")) -> validationError = AppLanguageManager.tr(
+                            "Format UID tidak sah.",
+                            "Invalid UID format."
+                        )
+                        n.isEmpty() -> validationError = AppLanguageManager.tr(
+                            "Nama pentadbir wajib diisi.",
+                            "Manager name is required."
+                        )
+                        r.isEmpty() -> validationError = AppLanguageManager.tr(
+                            "Jawatan pelayanan wajib diisi.",
+                            "Ministry role is required."
+                        )
                         else -> onAdd(u, n, r)
                     }
                 }
             ) {
-                Text(if (isBusy) "Menyimpan…" else "Tambahkan")
+                Text(if (isBusy) tr("Menyimpan…", "Saving…") else tr("Tambahkan", "Add"))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
+            TextButton(onClick = onDismiss) { Text(tr("Batal", "Cancel")) }
         }
     )
 }

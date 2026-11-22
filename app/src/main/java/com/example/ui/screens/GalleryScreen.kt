@@ -70,13 +70,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.R
 import com.example.data.GalleryCategory
 import com.example.data.GalleryPhoto
 import com.example.data.UiState
@@ -85,6 +83,8 @@ import com.example.ui.components.CategoryFilterRow
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.LiveSyncStatusPill
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 
 @Composable
 fun GalleryScreen(
@@ -131,12 +131,15 @@ fun GalleryScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Galeri Foto Interaktif",
+                                text = tr("Galeri Foto Interaktif", "Interactive Photo Gallery"),
                                 style = MaterialTheme.typography.headlineMedium,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                             Text(
-                                text = "Ketuk foto untuk memperbesar, menggeser album, dan memberi apresiasi",
+                                text = tr(
+                                    "Ketik foto untuk zum, leret album, dan beri tanda suka",
+                                    "Tap a photo to zoom, swipe the album, and show appreciation"
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -145,10 +148,11 @@ fun GalleryScreen(
                         LiveSyncStatusPill()
                     }
                     Spacer(modifier = Modifier.height(12.dp))
+                    val lang = LocalAppLanguage.current
                     CategoryFilterRow(
                         items = GalleryCategory.entries,
                         selected = selectedCategory,
-                        labelProvider = { it.label },
+                        labelProvider = { it.localizedLabel(lang) },
                         onSelect = onSelectCategory,
                         modifier = Modifier.padding(horizontal = 0.dp)
                     )
@@ -178,12 +182,24 @@ fun GalleryScreen(
                         item(span = { GridItemSpan(columnCount) }, key = "empty_gallery") {
                             EmptyBulletinState(
                                 icon = Icons.Filled.PhotoLibrary,
-                                title = if (galleryState.data.isEmpty()) stringResource(R.string.empty_gallery_title)
-                                else "Tidak Ada Foto di Kategori Ini",
-                                description = if (galleryState.data.isEmpty()) stringResource(R.string.empty_gallery_desc)
-                                else "Pilih kategori lain untuk melihat dokumentasi jemaat SIB Toburon.",
+                                title = if (galleryState.data.isEmpty()) {
+                                    tr("Galeri Foto Masih Kosong", "Photo Gallery Is Empty")
+                                } else {
+                                    tr("Tiada Foto dalam Kategori Ini", "No Photos in This Category")
+                                },
+                                description = if (galleryState.data.isEmpty()) {
+                                    tr(
+                                        "Dokumentasi kegiatan jemaat SIB Toburon akan dipaparkan secara interaktif di sini.",
+                                        "SIB Toburon congregation event photos will be showcased interactively here."
+                                    )
+                                } else {
+                                    tr(
+                                        "Pilih kategori lain untuk melihat dokumentasi jemaat SIB Toburon.",
+                                        "Select another category to browse SIB Toburon event photos."
+                                    )
+                                },
                                 isAdmin = isAdmin && galleryState.data.isEmpty(),
-                                primaryActionLabel = stringResource(R.string.action_add_photo),
+                                primaryActionLabel = tr("Muat Naik Foto", "Upload Photo"),
                                 onPrimaryAction = onAddPhoto
                             )
                         }
@@ -270,7 +286,7 @@ private fun GalleryGridCard(
                     .padding(8.dp)
             ) {
                 Text(
-                    text = photo.resolvedCategory().label,
+                    text = photo.resolvedCategory().localizedLabel(LocalAppLanguage.current),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -290,7 +306,7 @@ private fun GalleryGridCard(
                 ) {
                     Icon(
                         imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = stringResource(R.string.cd_like_photo),
+                        contentDescription = tr("Sukai foto", "Like photo"),
                         tint = if (isLiked) Color(0xFFFF6B6B) else Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -397,7 +413,7 @@ private fun InteractivePhotoLightbox(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.action_close),
+                            contentDescription = tr("Tutup", "Close"),
                             tint = Color.White
                         )
                     }
@@ -416,7 +432,7 @@ private fun InteractivePhotoLightbox(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "${pagerState.currentPage + 1} / ${photos.size} • Ketuk 2x / Cubit Zoom",
+                            text = "${pagerState.currentPage + 1} / ${photos.size} • ${tr("Ketik 2x / Cubit Zum", "Double-Tap / Pinch Zoom")}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White
                         )
@@ -432,7 +448,7 @@ private fun InteractivePhotoLightbox(
                             ) {
                                 Icon(
                                     Icons.Filled.Edit,
-                                    contentDescription = stringResource(R.string.action_edit),
+                                    contentDescription = tr("Edit", "Edit"),
                                     tint = Color.White
                                 )
                             }
@@ -444,7 +460,7 @@ private fun InteractivePhotoLightbox(
                             ) {
                                 Icon(
                                     Icons.Filled.Delete,
-                                    contentDescription = stringResource(R.string.action_delete),
+                                    contentDescription = tr("Padam", "Delete"),
                                     tint = Color.White
                                 )
                             }
@@ -579,7 +595,7 @@ private fun InteractivePhotoLightbox(
                                     color = Color(0x33F2B86B)
                                 ) {
                                     Text(
-                                        text = currentPhoto.resolvedCategory().label,
+                                        text = currentPhoto.resolvedCategory().localizedLabel(LocalAppLanguage.current),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color(0xFFF2B86B),
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -599,13 +615,16 @@ private fun InteractivePhotoLightbox(
                                     ) {
                                         Icon(
                                             imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                            contentDescription = stringResource(R.string.cd_like_photo),
+                                            contentDescription = tr("Sukai foto", "Like photo"),
                                             tint = if (isLiked) Color(0xFFFF6B6B) else Color.White,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(Modifier.width(6.dp))
                                         Text(
-                                            text = "${currentPhoto.likesCount} Apresiasi",
+                                            text = tr(
+                                                "${currentPhoto.likesCount} Suka",
+                                                "${currentPhoto.likesCount} Likes"
+                                            ),
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
@@ -633,7 +652,7 @@ private fun InteractivePhotoLightbox(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "${currentPhoto.photographerName.ifBlank { "Multimedia SIB Toburon" }} • ${currentPhoto.eventDate}",
+                                    text = "${currentPhoto.photographerName.ifBlank { tr("Multimedia SIB Toburon", "SIB Toburon Media") }} • ${currentPhoto.eventDate}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White.copy(alpha = 0.78f)
                                 )
@@ -644,7 +663,7 @@ private fun InteractivePhotoLightbox(
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.14f))
                                 Spacer(modifier = Modifier.height(14.dp))
                                 Text(
-                                    text = "Keterangan Foto",
+                                    text = tr("Keterangan Foto", "Photo Caption"),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color(0xFFF2B86B),
                                     fontWeight = FontWeight.SemiBold

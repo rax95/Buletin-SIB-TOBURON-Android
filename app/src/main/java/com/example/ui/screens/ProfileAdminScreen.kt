@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,13 +30,18 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
@@ -53,6 +63,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,14 +73,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
-import com.example.R
 import com.example.data.AdminMember
 import com.example.data.FellowshipGroup
 import com.example.data.UserBookmark
@@ -77,6 +86,11 @@ import com.example.data.UserProfile
 import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NotificationSettingsCard
+import com.example.ui.components.formatIndonesianTimestamp
+import com.example.ui.i18n.AppLanguageManager
+import com.example.ui.i18n.LanguageSelectorCard
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -89,6 +103,7 @@ fun ProfileAdminScreen(
     bookmarks: List<UserBookmark>,
     isAdmin: Boolean,
     adminMembers: List<AdminMember>,
+    registeredUsers: List<UserProfile>,
     newsCount: Int,
     schedulesCount: Int,
     galleryCount: Int,
@@ -123,6 +138,8 @@ fun ProfileAdminScreen(
         return
     }
 
+    val context = LocalContext.current
+    val lang = LocalAppLanguage.current
     val clipboard = LocalClipboardManager.current
     var displayName by remember { mutableStateOf(userProfile?.displayName ?: googleDisplayName ?: "Jemaat SIB Toburon") }
     var selectedGroup by remember { mutableStateOf(userProfile?.resolvedGroup() ?: FellowshipGroup.UMUM) }
@@ -195,8 +212,11 @@ fun ProfileAdminScreen(
                                         else MaterialTheme.colorScheme.primaryContainer
                                     ) {
                                         Text(
-                                            text = if (isAdmin) stringResource(R.string.admin_badge)
-                                            else stringResource(R.string.jemaat_badge),
+                                            text = if (isAdmin) {
+                                                tr("Admin Buletin", "Bulletin Admin")
+                                            } else {
+                                                tr("Jemaat SIB Toburon", "SIB Toburon Member")
+                                            },
                                             style = MaterialTheme.typography.labelSmall,
                                             color = if (isAdmin) MaterialTheme.colorScheme.onSecondaryContainer
                                             else MaterialTheme.colorScheme.onPrimaryContainer,
@@ -226,7 +246,10 @@ fun ProfileAdminScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "ID Pengguna (UID) • Ketuk untuk menyalin",
+                                        text = tr(
+                                            "ID Pengguna (UID) • Ketik untuk salin",
+                                            "User ID (UID) • Tap to copy"
+                                        ),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -239,7 +262,7 @@ fun ProfileAdminScreen(
                                 }
                                 Icon(
                                     imageVector = Icons.Filled.ContentCopy,
-                                    contentDescription = "Salin UID",
+                                    contentDescription = tr("Salin UID", "Copy UID"),
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -247,6 +270,14 @@ fun ProfileAdminScreen(
                         }
                     }
                 }
+            }
+
+            // 1b. Language Selector (Bahasa Malaysia / English)
+            item(key = "language_settings") {
+                LanguageSelectorCard(
+                    selectedLanguage = lang,
+                    onSelectLanguage = { AppLanguageManager.setLanguage(context, it) }
+                )
             }
 
             // 2. Admin Real-Time Console (Visible to Admins)
@@ -275,12 +306,15 @@ fun ProfileAdminScreen(
                                 Spacer(Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Panel Admin SIB Toburon",
+                                        text = tr("Panel Admin SIB Toburon", "SIB Toburon Admin Panel"),
                                         style = MaterialTheme.typography.headlineSmall,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "Setiap pembaruan langsung tayang otomatis di perangkat seluruh jemaat.",
+                                        text = tr(
+                                            "Setiap kemas kini dipaparkan secara automatik pada peranti semua jemaat.",
+                                            "Every update appears automatically on all church members' devices."
+                                        ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -291,10 +325,10 @@ fun ProfileAdminScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                AdminStatPill("Berita", newsCount, Modifier.weight(1f))
-                                AdminStatPill("Jadwal", schedulesCount, Modifier.weight(1f))
-                                AdminStatPill("Galeri", galleryCount, Modifier.weight(1f))
-                                AdminStatPill("Ahli", membersCount, Modifier.weight(1f))
+                                AdminStatPill(tr("Berita", "News"), newsCount, Modifier.weight(1f))
+                                AdminStatPill(tr("Jadual", "Schedule"), schedulesCount, Modifier.weight(1f))
+                                AdminStatPill(tr("Galeri", "Gallery"), galleryCount, Modifier.weight(1f))
+                                AdminStatPill(tr("Ahli", "Members"), membersCount, Modifier.weight(1f))
                             }
 
                             FlowRow(
@@ -308,7 +342,7 @@ fun ProfileAdminScreen(
                                 ) {
                                     Icon(Icons.Filled.Newspaper, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Tulis Berita")
+                                    Text(tr("Tulis Berita", "Write News"))
                                 }
                                 Button(
                                     onClick = onAddScheduleClick,
@@ -316,7 +350,7 @@ fun ProfileAdminScreen(
                                 ) {
                                     Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Tambah Jadwal")
+                                    Text(tr("Tambah Jadual", "Add Schedule"))
                                 }
                                 Button(
                                     onClick = onAddPhotoClick,
@@ -324,7 +358,7 @@ fun ProfileAdminScreen(
                                 ) {
                                     Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Unggah Foto")
+                                    Text(tr("Muat Naik Foto", "Upload Photo"))
                                 }
                                 Button(
                                     onClick = onAddMemberClick,
@@ -332,7 +366,7 @@ fun ProfileAdminScreen(
                                 ) {
                                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Tambah Ahli")
+                                    Text(tr("Tambah Ahli", "Add Member"))
                                 }
                             }
 
@@ -344,19 +378,25 @@ fun ProfileAdminScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = "Pengurus Admin Tambahan (${adminMembers.size})",
+                                    text = tr(
+                                        "Pentadbir Tambahan (${adminMembers.size})",
+                                        "Additional Admins (${adminMembers.size})"
+                                    ),
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 OutlinedButton(onClick = onOpenAddAdminDialog) {
                                     Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Tambah")
+                                    Text(tr("Tambah", "Add"))
                                 }
                             }
 
                             if (adminMembers.isEmpty()) {
                                 Text(
-                                    text = "Belum ada pengurus admin tambahan. Anda dapat menambahkan sekretaris atau tim multimedia gereja menggunakan UID mereka.",
+                                    text = tr(
+                                        "Belum ada pentadbir tambahan. Anda boleh menambah setiausaha atau pasukan multimedia gereja menggunakan UID mereka.",
+                                        "No additional admins yet. You can add church secretaries or media team members using their UID."
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -389,7 +429,7 @@ fun ProfileAdminScreen(
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Delete,
-                                                        contentDescription = "Cabut akses admin",
+                                                        contentDescription = tr("Batalkan akses admin", "Revoke admin access"),
                                                         tint = MaterialTheme.colorScheme.error
                                                     )
                                                 }
@@ -400,6 +440,17 @@ fun ProfileAdminScreen(
                             }
                         }
                     }
+                }
+
+                item(key = "admin_registered_users") {
+                    AdminGoogleUsersCard(
+                        registeredUsers = registeredUsers,
+                        currentAdminUid = uid,
+                        onCopyUid = { targetUid ->
+                            clipboard.setText(AnnotatedString(targetUid))
+                            onUidCopied()
+                        }
+                    )
                 }
             }
 
@@ -423,18 +474,18 @@ fun ProfileAdminScreen(
                         modifier = Modifier.padding(20.dp)
                     ) {
                         Text(
-                            text = "Profil Jemaat",
+                            text = tr("Profil Jemaat", "Member Profile"),
                             style = MaterialTheme.typography.titleLarge
                         )
                         OutlinedTextField(
                             value = displayName,
                             onValueChange = { displayName = it },
-                            label = { Text("Nama Tampilan") },
+                            label = { Text(tr("Nama Paparan", "Display Name")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            text = "Kelompok Persekutuan",
+                            text = tr("Kumpulan Persekutuan", "Fellowship Group"),
                             style = MaterialTheme.typography.labelLarge
                         )
                         FlowRow(
@@ -445,7 +496,7 @@ fun ProfileAdminScreen(
                                 FilterChip(
                                     selected = selectedGroup == group,
                                     onClick = { selectedGroup = group },
-                                    label = { Text(group.label, style = MaterialTheme.typography.labelSmall) }
+                                    label = { Text(group.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                                 )
                             }
                         }
@@ -456,7 +507,7 @@ fun ProfileAdminScreen(
                         ) {
                             Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Simpan Profil")
+                            Text(tr("Simpan Profil", "Save Profile"))
                         }
                     }
                 }
@@ -481,13 +532,19 @@ fun ProfileAdminScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "Warta & Jadwal Tersimpan (${bookmarks.size})",
+                                text = tr(
+                                    "Warta & Jadual Tersimpan (${bookmarks.size})",
+                                    "Saved News & Schedules (${bookmarks.size})"
+                                ),
                                 style = MaterialTheme.typography.titleLarge
                             )
                         }
                         if (bookmarks.isEmpty()) {
                             Text(
-                                text = "Ketuk ikon simpan pada berita atau jadwal kegiatan agar mudah diakses kembali kapan saja.",
+                                text = tr(
+                                    "Ketik ikon simpan pada berita atau jadual kegiatan agar mudah diakses semula bila-bila masa.",
+                                    "Tap the bookmark icon on any news or schedule to easily revisit it anytime."
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -525,7 +582,11 @@ fun ProfileAdminScreen(
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
-                                                    text = if (bookmark.itemType == "SCHEDULE") "Jadwal Kegiatan" else "Berita Terkini",
+                                                    text = if (bookmark.itemType == "SCHEDULE") {
+                                                        tr("Jadual Kegiatan", "Event Schedule")
+                                                    } else {
+                                                        tr("Berita Terkini", "Latest News")
+                                                    },
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -536,7 +597,7 @@ fun ProfileAdminScreen(
                                             ) {
                                                 Icon(
                                                     Icons.Filled.Delete,
-                                                    contentDescription = "Hapus simpanan",
+                                                    contentDescription = tr("Padam simpanan", "Remove bookmark"),
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
@@ -566,7 +627,7 @@ fun ProfileAdminScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = stringResource(R.string.auth_sign_out),
+                        text = tr("Log Keluar", "Sign Out"),
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -588,6 +649,7 @@ private fun GuestAccountView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lang = LocalAppLanguage.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
     var isSigningIn by remember { mutableStateOf(false) }
@@ -631,7 +693,7 @@ private fun GuestAccountView(
                         }
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Akun Tamu SIB Toburon",
+                            text = tr("Akaun Tetamu SIB Toburon", "SIB Toburon Guest Account"),
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center
@@ -643,7 +705,7 @@ private fun GuestAccountView(
                                 color = MaterialTheme.colorScheme.secondaryContainer
                             ) {
                                 Text(
-                                    text = stringResource(R.string.guest_badge),
+                                    text = tr("Mod Tetamu", "Guest Mode"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -653,7 +715,10 @@ private fun GuestAccountView(
                         }
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Anda sedang membaca Berita Terkini, Jadwal Kegiatan, dan Galeri Foto SIB Toburon secara real-time tanpa perlu mendaftar. Masuk dengan Google kapan saja untuk melihat Senarai Ahli Jemaat, menyimpan warta, memberi apresiasi foto, atau mengakses Panel Admin.",
+                            text = tr(
+                                "Anda sedang membaca Berita Terkini, Jadual Kegiatan, dan Galeri Foto SIB Toburon secara masa nyata tanpa perlu mendaftar. Log masuk dengan Google bila-bila masa untuk melihat Senarai Ahli Jemaat, menyimpan warta, menyukai foto, atau mengakses Panel Admin.",
+                                "You are viewing Latest News, Event Schedules, and SIB Toburon Photo Gallery in real time without registering. Sign in with Google anytime to view Church Members, bookmark articles, like photos, or access the Admin Panel."
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -664,9 +729,9 @@ private fun GuestAccountView(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            AdminStatPill("Berita", newsCount, Modifier.weight(1f))
-                            AdminStatPill("Jadwal", schedulesCount, Modifier.weight(1f))
-                            AdminStatPill("Galeri", galleryCount, Modifier.weight(1f))
+                            AdminStatPill(tr("Berita", "News"), newsCount, Modifier.weight(1f))
+                            AdminStatPill(tr("Jadual", "Schedule"), schedulesCount, Modifier.weight(1f))
+                            AdminStatPill(tr("Galeri", "Gallery"), galleryCount, Modifier.weight(1f))
                         }
 
                         if (signInError != null) {
@@ -715,11 +780,14 @@ private fun GuestAccountView(
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(Modifier.width(10.dp))
-                                Text(stringResource(R.string.auth_signing_in))
+                                Text(tr("Menyambung akaun Google…", "Connecting Google account…"))
                             } else {
                                 Icon(Icons.Rounded.Login, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(10.dp))
-                                Text(stringResource(R.string.auth_sign_in_google), fontWeight = FontWeight.Bold)
+                                Text(
+                                    tr("Log Masuk dengan Google", "Sign In with Google"),
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
 
@@ -732,10 +800,17 @@ private fun GuestAccountView(
                                 .height(48.dp)
                                 .testTag("exit_guest_mode_button")
                         ) {
-                            Text("Kembali ke Halaman Masuk")
+                            Text(tr("Kembali ke Halaman Log Masuk", "Back to Sign-In Screen"))
                         }
                     }
                 }
+            }
+
+            item(key = "guest_language_settings") {
+                LanguageSelectorCard(
+                    selectedLanguage = lang,
+                    onSelectLanguage = { AppLanguageManager.setLanguage(context, it) }
+                )
             }
 
             item(key = "guest_notification_settings") {
@@ -747,6 +822,333 @@ private fun GuestAccountView(
             }
         }
     }
+}
+
+@Composable
+private fun AdminGoogleUsersCard(
+    registeredUsers: List<UserProfile>,
+    currentAdminUid: String,
+    onCopyUid: (String) -> Unit
+) {
+    val lang = LocalAppLanguage.current
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showAllUsers by remember { mutableStateOf(false) }
+
+    val filteredUsers = remember(registeredUsers, searchQuery, lang) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) {
+            registeredUsers
+        } else {
+            registeredUsers.filter { user ->
+                user.displayName.contains(q, ignoreCase = true) ||
+                    user.email.contains(q, ignoreCase = true) ||
+                    user.resolvedGroup().localizedLabel(lang).contains(q, ignoreCase = true)
+            }
+        }
+    }
+
+    val displayedUsers = remember(filteredUsers, showAllUsers) {
+        if (showAllUsers) filteredUsers else filteredUsers.take(8)
+    }
+
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("admin_google_users_card")
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(20.dp)
+                    .testTag("admin_google_users_header")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.SupervisorAccount,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = tr("Pengguna Log Masuk Google", "Google Signed-In Users"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isExpanded) {
+                                tr("Ketik untuk menyembunyikan senarai", "Tap to hide list")
+                            } else {
+                                tr("Ketik untuk melihat senarai pengguna", "Tap to view user list")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.testTag("admin_google_users_count")
+                    ) {
+                        Text(
+                            text = tr("${registeredUsers.size} Pengguna", "${registeredUsers.size} Users"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (isExpanded) {
+                            tr("Tutup senarai pengguna", "Collapse user list")
+                        } else {
+                            tr("Buka senarai pengguna", "Expand user list")
+                        },
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, bottom = 20.dp)
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            if (registeredUsers.size > 5) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(tr("Cari nama atau emel pengguna...", "Search user name or email...")) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = null
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = tr("Padam carian", "Clear search")
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("admin_google_users_search")
+                )
+            }
+
+            if (registeredUsers.isEmpty()) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = tr(
+                            "Belum ada pengguna akaun Google direkodkan. Setiap jemaat yang log masuk menggunakan Google akan dipaparkan secara automatik di sini.",
+                            "No Google account users recorded yet. Every member who signs in with Google will appear here automatically."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            } else if (filteredUsers.isEmpty()) {
+                Text(
+                    text = tr(
+                        "Tiada pengguna sepadan dengan carian \"$searchQuery\".",
+                        "No users match \"$searchQuery\"."
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    displayedUsers.forEachIndexed { index, user ->
+                        val resolvedName = user.displayName.trim().ifBlank { "Jemaat SIB Toburon" }
+                        val initials = resolvedName
+                            .split(" ")
+                            .filter { it.isNotBlank() }
+                            .take(2)
+                            .joinToString("") { it.first().uppercaseChar().toString() }
+                            .ifBlank { "JG" }
+                        val isSelf = user.id == currentAdminUid
+                        val lastSeen = user.lastLoginAt ?: user.updatedAt ?: user.createdAt
+
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_google_user_item_$index")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (isSelf) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.tertiaryContainer,
+                                    modifier = Modifier.size(38.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = initials,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelf) MaterialTheme.colorScheme.onPrimary
+                                            else MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = resolvedName,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        if (isSelf) {
+                                            Surface(
+                                                shape = RoundedCornerShape(50),
+                                                color = MaterialTheme.colorScheme.secondaryContainer
+                                            ) {
+                                                Text(
+                                                    text = tr("Anda", "You"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (user.email.isNotBlank()) {
+                                        Text(
+                                            text = user.email,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    val metaLine = buildString {
+                                        append(user.resolvedGroup().localizedLabel(lang))
+                                        if (lastSeen != null) {
+                                            append(" • ")
+                                            append(formatIndonesianTimestamp(lastSeen, lang))
+                                        }
+                                    }
+                                    Text(
+                                        text = metaLine,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onCopyUid(user.id) },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ContentCopy,
+                                        contentDescription = tr("Salin UID $resolvedName", "Copy UID for $resolvedName"),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (filteredUsers.size > 8) {
+                    OutlinedButton(
+                        onClick = { showAllUsers = !showAllUsers },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("admin_google_users_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = if (showAllUsers) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (showAllUsers) {
+                                tr("Papar Ringkas", "Show Less")
+                            } else {
+                                tr("Lihat Semua (${filteredUsers.size})", "View All (${filteredUsers.size})")
+                            }
+                        )
+                    }
+                }
+                }
+            }
+        }
+    }
+}
 }
 
 @Composable

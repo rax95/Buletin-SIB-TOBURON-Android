@@ -3,6 +3,7 @@ package com.example.notifications
 import android.util.Log
 import com.example.R
 import com.example.data.BulletinRepository
+import com.example.ui.i18n.AppLanguageManager
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -31,7 +32,7 @@ class BulletinMessagingService : FirebaseMessagingService() {
                 val repo = BulletinRepository(appContext)
                 repo.saveFcmToken(token, newsEnabled, schedulesEnabled)
                     .onFailure { err ->
-                        Log.w(TAG, "Gagal menyinkronkan token FCM baru: ${err.message}")
+                        Log.w(TAG, "Gagal menyegerakkan token FCM baharu: ${err.message}")
                     }
             }
         }
@@ -39,6 +40,7 @@ class BulletinMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        AppLanguageManager.init(applicationContext)
         val data = message.data
         val type = data["eventType"]
             ?: data["type"]
@@ -49,7 +51,10 @@ class BulletinMessagingService : FirebaseMessagingService() {
             ?: applicationContext.getString(R.string.app_name)
         val body = data["body"]
             ?: message.notification?.body
-            ?: "Ada pembaruan terbaru di Buletin SIB Toburon."
+            ?: AppLanguageManager.tr(
+                "Terdapat kemas kini terbaharu di Buletin SIB Toburon.",
+                "There is a new update in Buletin SIB Toburon."
+            )
 
         BulletinNotificationManager.showBulletinNotification(
             context = applicationContext,

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.data.MemberExportFormat
+import com.example.ui.i18n.tr
 
 @Composable
 fun AdminMemberExportDialog(
@@ -73,12 +74,15 @@ fun AdminMemberExportDialog(
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Eksport Senarai Ahli",
+                                text = tr("Eksport Senarai Ahli", "Export Members List"),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "$membersCount ahli akan disimpan ke storan peranti",
+                                text = tr(
+                                    "$membersCount ahli akan disimpan ke storan peranti",
+                                    "$membersCount members will be saved to device storage"
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -88,7 +92,7 @@ fun AdminMemberExportDialog(
                         onClick = { if (!isBusy) onDismiss() },
                         modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(Icons.Filled.Close, contentDescription = "Tutup")
+                        Icon(Icons.Filled.Close, contentDescription = tr("Tutup", "Close"))
                     }
                 }
 
@@ -112,7 +116,7 @@ fun AdminMemberExportDialog(
                             )
                             Spacer(Modifier.width(12.dp))
                             Text(
-                                text = "Menyediakan fail eksport...",
+                                text = tr("Menyediakan fail eksport...", "Preparing export file..."),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -120,7 +124,10 @@ fun AdminMemberExportDialog(
                         ExportFormatOptionCard(
                             icon = Icons.Filled.TableChart,
                             title = "Excel (.xlsx)",
-                            description = "Fail jadual Microsoft Excel / Google Sheets dengan semua kolum maklumat ahli.",
+                            description = tr(
+                                "Fail jadual Microsoft Excel / Google Sheets dengan semua kolum maklumat ahli.",
+                                "Microsoft Excel / Google Sheets spreadsheet with all member information columns."
+                            ),
                             onClick = { onSelectFormat(MemberExportFormat.EXCEL) },
                             modifier = Modifier.testTag("export_excel_option")
                         )
@@ -128,7 +135,10 @@ fun AdminMemberExportDialog(
                         ExportFormatOptionCard(
                             icon = Icons.Filled.PictureAsPdf,
                             title = "PDF (.pdf)",
-                            description = "Dokumen rasmi berformat jadual sedia cetak dengan kepala surat SIB Toburon.",
+                            description = tr(
+                                "Dokumen rasmi berformat jadual sedia cetak dengan kepala surat SIB Toburon.",
+                                "Print-ready official table document with SIB Toburon header."
+                            ),
                             onClick = { onSelectFormat(MemberExportFormat.PDF) },
                             modifier = Modifier.testTag("export_pdf_option")
                         )
@@ -147,7 +157,7 @@ fun AdminMemberExportDialog(
                         onClick = { if (!isBusy) onDismiss() },
                         enabled = !isBusy
                     ) {
-                        Text("Batal")
+                        Text(tr("Batal", "Cancel"))
                     }
                 }
             }

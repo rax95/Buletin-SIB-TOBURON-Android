@@ -10,6 +10,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
+import com.example.ui.i18n.AppLanguageManager
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -89,12 +90,22 @@ fun onGoogleSignInClicked(
     val clientId = try {
         context.getString(R.string.default_web_client_id)
     } catch (_: Exception) {
-        onAuthError("Konfigurasi Google Sign-In belum lengkap (default_web_client_id tidak ditemukan).")
+        onAuthError(
+            AppLanguageManager.tr(
+                "Konfigurasi Log Masuk Google belum lengkap (default_web_client_id tidak dijumpai).",
+                "Google Sign-In configuration is incomplete (default_web_client_id missing)."
+            )
+        )
         return
     }
     val activity = context.findActivity()
     if (activity == null) {
-        onAuthError("Tidak dapat membuka dialog akun Google pada konteks saat ini.")
+        onAuthError(
+            AppLanguageManager.tr(
+                "Tidak dapat membuka dialog akaun Google pada konteks semasa.",
+                "Unable to open Google account dialog in the current context."
+            )
+        )
         return
     }
 
@@ -111,14 +122,24 @@ fun onGoogleSignInClicked(
                 Firebase.auth.signInWithCredential(GoogleAuthProvider.getCredential(token, null)).await()
                 onAuthSuccess()
             } else {
-                onAuthError("Jenis kredensial tidak dikenali. Silakan coba lagi.")
+                onAuthError(
+                    AppLanguageManager.tr(
+                        "Jenis kelayakan tidak dikenali. Sila cuba lagi.",
+                        "Unrecognized credential type. Please try again."
+                    )
+                )
             }
         } catch (e: GetCredentialCancellationException) {
             Log.w("Auth", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
             onAuthCancelled()
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Gagal masuk dengan akun Google.")
+            onAuthError(
+                e.localizedMessage ?: AppLanguageManager.tr(
+                    "Gagal log masuk dengan akaun Google.",
+                    "Failed to sign in with Google account."
+                )
+            )
         }
     }
 }

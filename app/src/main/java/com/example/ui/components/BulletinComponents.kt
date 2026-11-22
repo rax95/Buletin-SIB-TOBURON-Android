@@ -57,10 +57,13 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.CoverPreset
 import com.example.data.ImageUtils
+import com.example.ui.i18n.AppLanguage
+import com.example.ui.i18n.AppLanguageManager
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 import com.example.ui.theme.LiveSyncEmerald
 import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
-import java.util.Locale
 
 @Composable
 fun BulletinCoverImage(
@@ -156,7 +159,7 @@ fun LiveSyncStatusPill(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = stringResource(R.string.live_sync_active),
+                text = tr("Segerak Langsung", "Live Sync"),
                 style = MaterialTheme.typography.labelSmall,
                 color = textColor
             )
@@ -194,7 +197,7 @@ fun EditorialSearchBar(
                 IconButton(onClick = { onQueryChange("") }) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.cd_clear_search)
+                        contentDescription = tr("Padam carian", "Clear search")
                     )
                 }
             }
@@ -220,7 +223,7 @@ fun <T> CategoryFilterRow(
     labelProvider: (T) -> String,
     onSelect: (T?) -> Unit,
     modifier: Modifier = Modifier,
-    allLabel: String = "Semua"
+    allLabel: String = tr("Semua", "All")
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -342,7 +345,7 @@ fun ErrorStateCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Kendala Sinkronisasi",
+                    text = tr("Masalah Penyegerakan", "Sync Issue"),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -356,8 +359,11 @@ fun ErrorStateCard(
     }
 }
 
-fun formatIndonesianTimestamp(timestamp: Timestamp?): String {
+fun formatIndonesianTimestamp(
+    timestamp: Timestamp?,
+    lang: AppLanguage = AppLanguageManager.current()
+): String {
     val date = (timestamp ?: Timestamp.now()).toDate()
-    val formatter = SimpleDateFormat("dd MMM yyyy • HH:mm", Locale("id", "ID"))
+    val formatter = SimpleDateFormat("dd MMM yyyy • HH:mm", lang.locale)
     return formatter.format(date)
 }

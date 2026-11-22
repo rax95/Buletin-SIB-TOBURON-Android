@@ -3,6 +3,7 @@ package com.example.data
 import android.content.Context
 import com.example.R
 import com.example.notifications.BulletinNotificationManager
+import com.example.ui.i18n.AppLanguageManager
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -35,7 +36,12 @@ class BulletinRepository(
     private fun requireUserId(): String {
         val uid = auth.currentUser?.uid
         if (uid.isNullOrBlank()) {
-            throw IllegalStateException("Pengguna harus masuk dengan Google sebelum mengakses data.")
+            throw IllegalStateException(
+                AppLanguageManager.tr(
+                    "Pengguna mesti log masuk dengan Google sebelum mengakses data.",
+                    "You must sign in with Google before accessing this data."
+                )
+            )
         }
         return uid
     }
@@ -265,6 +271,30 @@ class BulletinRepository(
         )
     }
 
+    fun observeRegisteredUsers(uid: String?): Flow<List<UserProfile>> = flow {
+        if (uid.isNullOrBlank()) {
+            emit(emptyList())
+            return@flow
+        }
+        val path = "users"
+        emitAll(
+            db.collection("users")
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+                        .sortedWith(
+                            compareByDescending<UserProfile> {
+                                (it.lastLoginAt ?: it.updatedAt ?: it.createdAt ?: Timestamp(0, 0)).seconds
+                            }.thenBy { it.displayName.lowercase() }
+                        )
+                }
+                .catch { error ->
+                    logStreamErrorIfActive(uid, error, OperationType.LIST, path)
+                    throw error
+                }
+        )
+    }
+
     fun observeNotificationEvents(uid: String?): Flow<List<NotificationEvent>> = flow {
         val path = "notification_events"
         emitAll(
@@ -293,7 +323,9 @@ class BulletinRepository(
         return try {
             val uid = requireUserId()
             val cleanToken = token.trim()
-            require(cleanToken.length in 10..512) { "Token FCM tidak valid." }
+            require(cleanToken.length in 10..512) {
+                AppLanguageManager.tr("Token FCM tidak sah.", "Invalid FCM token.")
+            }
             val tokenDocId = BulletinNotificationManager.buildTokenDocId(cleanToken)
             val docRef = db.collection("users")
                 .document(uid)
@@ -326,7 +358,9 @@ class BulletinRepository(
         authorId: String
     ): Map<String, Any> {
         val safeTitle = title.trim().take(160).let { if (it.length < 2) "Buletin SIB Toburon" else it }
-        val safeBody = body.trim().take(320).let { if (it.length < 2) "Pembaruan terbaru tersedia." else it }
+        val safeBody = body.trim().take(320).let {
+            if (it.length < 2) AppLanguageManager.tr("Kemas kini terbaharu tersedia.", "A new update is available.") else it
+        }
         return mapOf(
             "title" to safeTitle,
             "body" to safeBody,
@@ -363,11 +397,21 @@ class BulletinRepository(
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
 
-            require(cleanTitle.length in 3..160) { "Judul berita harus antara 3 hingga 160 karakter." }
-            require(cleanSummary.length in 5..320) { "Ringkasan berita harus antara 5 hingga 320 karakter." }
-            require(cleanContent.length in 10..5000) { "Isi berita minimal 10 karakter (maks 5000)." }
-            if (cleanUrl != null) require(cleanUrl.length <= 1000) { "URL gambar terlalu panjang." }
-            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) { "Ukuran gambar terlalu besar." }
+            require(cleanTitle.length in 3..160) {
+                AppLanguageManager.tr("Tajuk berita mestilah antara 3 hingga 160 aksara.", "News title must be 3 to 160 characters.")
+            }
+            require(cleanSummary.length in 5..320) {
+                AppLanguageManager.tr("Ringkasan berita mestilah antara 5 hingga 320 aksara.", "News summary must be 5 to 320 characters.")
+            }
+            require(cleanContent.length in 10..5000) {
+                AppLanguageManager.tr("Kandungan berita minimum 10 aksara (maks 5000).", "News content must be 10 to 5000 characters.")
+            }
+            if (cleanUrl != null) require(cleanUrl.length <= 1000) {
+                AppLanguageManager.tr("URL gambar terlalu panjang.", "Image URL is too long.")
+            }
+            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) {
+                AppLanguageManager.tr("Saiz gambar terlalu besar.", "Image size is too large.")
+            }
 
             val docRef = db.collection("news").document()
             docPath = docRef.path
@@ -394,7 +438,7 @@ class BulletinRepository(
                 batch.set(
                     notifRef,
                     buildNotificationEventPayload(
-                        title = "Berita Baru: $cleanTitle",
+                        title = AppLanguageManager.tr("Berita Baharu: $cleanTitle", "New Bulletin: $cleanTitle"),
                         body = cleanSummary,
                         eventType = BulletinNotificationManager.TYPE_NEWS,
                         targetId = docRef.id,
@@ -432,7 +476,7 @@ class BulletinRepository(
         val docPath = "news/$newsId"
         return try {
             val uid = requireUserId()
-            require(newsId.isNotBlank()) { "ID berita tidak valid." }
+            require(newsId.isNotBlank()) { AppLanguageManager.tr("ID berita tidak sah.", "Invalid news ID.") }
             val cleanTitle = title.trim()
             val cleanSummary = summary.trim()
             val cleanContent = content.trim()
@@ -440,11 +484,21 @@ class BulletinRepository(
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
 
-            require(cleanTitle.length in 3..160) { "Judul berita harus antara 3 hingga 160 karakter." }
-            require(cleanSummary.length in 5..320) { "Ringkasan berita harus antara 5 hingga 320 karakter." }
-            require(cleanContent.length in 10..5000) { "Isi berita minimal 10 karakter (maks 5000)." }
-            if (cleanUrl != null) require(cleanUrl.length <= 1000) { "URL gambar terlalu panjang." }
-            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) { "Ukuran gambar terlalu besar." }
+            require(cleanTitle.length in 3..160) {
+                AppLanguageManager.tr("Tajuk berita mestilah antara 3 hingga 160 aksara.", "News title must be 3 to 160 characters.")
+            }
+            require(cleanSummary.length in 5..320) {
+                AppLanguageManager.tr("Ringkasan berita mestilah antara 5 hingga 320 aksara.", "News summary must be 5 to 320 characters.")
+            }
+            require(cleanContent.length in 10..5000) {
+                AppLanguageManager.tr("Kandungan berita minimum 10 aksara (maks 5000).", "News content must be 10 to 5000 characters.")
+            }
+            if (cleanUrl != null) require(cleanUrl.length <= 1000) {
+                AppLanguageManager.tr("URL gambar terlalu panjang.", "Image URL is too long.")
+            }
+            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) {
+                AppLanguageManager.tr("Saiz gambar terlalu besar.", "Image size is too large.")
+            }
 
             val updates = mapOf<String, Any?>(
                 "title" to cleanTitle,
@@ -467,7 +521,7 @@ class BulletinRepository(
                 batch.set(
                     notifRef,
                     buildNotificationEventPayload(
-                        title = "Berita Baru: $cleanTitle",
+                        title = AppLanguageManager.tr("Berita Baharu: $cleanTitle", "New Bulletin: $cleanTitle"),
                         body = cleanSummary,
                         eventType = BulletinNotificationManager.TYPE_NEWS,
                         targetId = newsId,
@@ -492,7 +546,7 @@ class BulletinRepository(
         val docPath = "news/$newsId"
         return try {
             requireUserId()
-            require(newsId.isNotBlank()) { "ID berita tidak valid." }
+            require(newsId.isNotBlank()) { AppLanguageManager.tr("ID berita tidak sah.", "Invalid news ID.") }
             db.collection("news").document(newsId).delete().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -527,13 +581,27 @@ class BulletinRepository(
             val cleanLocation = location.trim()
             val cleanSpeaker = speaker.trim()
 
-            require(cleanTitle.length in 3..140) { "Nama kegiatan harus 3-140 karakter." }
-            require(cleanDesc.length in 1..1500) { "Keterangan kegiatan harus diisi (maks 1500 karakter)." }
-            require(cleanDate.length in 3..60) { "Tanggal / hari harus diisi (3-60 karakter)." }
-            require(cleanTime.length in 3..40) { "Jam kegiatan harus diisi (3-40 karakter)." }
-            require(cleanLocation.length in 2..120) { "Lokasi kegiatan harus diisi (2-120 karakter)." }
-            require(cleanSpeaker.length <= 100) { "Nama pengkhotbah/koordinator maks 100 karakter." }
-            require(sortOrder in 0L..9_999_999_999_999L) { "Urutan jadwal tidak valid." }
+            require(cleanTitle.length in 3..140) {
+                AppLanguageManager.tr("Nama kegiatan mestilah 3-140 aksara.", "Activity name must be 3-140 characters.")
+            }
+            require(cleanDesc.length in 1..1500) {
+                AppLanguageManager.tr("Keterangan kegiatan wajib diisi (maks 1500 aksara).", "Activity description is required (max 1500 characters).")
+            }
+            require(cleanDate.length in 3..60) {
+                AppLanguageManager.tr("Tarikh / hari wajib diisi (3-60 aksara).", "Date / day is required (3-60 characters).")
+            }
+            require(cleanTime.length in 3..40) {
+                AppLanguageManager.tr("Masa kegiatan wajib diisi (3-40 aksara).", "Activity time is required (3-40 characters).")
+            }
+            require(cleanLocation.length in 2..120) {
+                AppLanguageManager.tr("Lokasi kegiatan wajib diisi (2-120 aksara).", "Activity location is required (2-120 characters).")
+            }
+            require(cleanSpeaker.length <= 100) {
+                AppLanguageManager.tr("Nama pengkhotbah/penyelaras maks 100 aksara.", "Speaker/coordinator name max 100 characters.")
+            }
+            require(sortOrder in 0L..9_999_999_999_999L) {
+                AppLanguageManager.tr("Susunan jadual tidak sah.", "Invalid schedule sort order.")
+            }
 
             val docRef = db.collection("schedules").document()
             docPath = docRef.path
@@ -559,7 +627,7 @@ class BulletinRepository(
                 batch.set(
                     notifRef,
                     buildNotificationEventPayload(
-                        title = "Jadwal Baru: $cleanTitle",
+                        title = AppLanguageManager.tr("Jadual Baharu: $cleanTitle", "New Schedule: $cleanTitle"),
                         body = "$cleanDate • $cleanTime — $cleanLocation",
                         eventType = BulletinNotificationManager.TYPE_SCHEDULE,
                         targetId = docRef.id,
@@ -597,7 +665,7 @@ class BulletinRepository(
         val docPath = "schedules/$scheduleId"
         return try {
             val uid = requireUserId()
-            require(scheduleId.isNotBlank()) { "ID jadwal tidak valid." }
+            require(scheduleId.isNotBlank()) { AppLanguageManager.tr("ID jadual tidak sah.", "Invalid schedule ID.") }
             val cleanTitle = title.trim()
             val cleanDesc = description.trim()
             val cleanDate = dateLabel.trim()
@@ -605,13 +673,27 @@ class BulletinRepository(
             val cleanLocation = location.trim()
             val cleanSpeaker = speaker.trim()
 
-            require(cleanTitle.length in 3..140) { "Nama kegiatan harus 3-140 karakter." }
-            require(cleanDesc.length in 1..1500) { "Keterangan kegiatan harus diisi." }
-            require(cleanDate.length in 3..60) { "Tanggal / hari harus diisi." }
-            require(cleanTime.length in 3..40) { "Jam kegiatan harus diisi." }
-            require(cleanLocation.length in 2..120) { "Lokasi kegiatan harus diisi." }
-            require(cleanSpeaker.length <= 100) { "Nama pengkhotbah maks 100 karakter." }
-            require(sortOrder in 0L..9_999_999_999_999L) { "Urutan jadwal tidak valid." }
+            require(cleanTitle.length in 3..140) {
+                AppLanguageManager.tr("Nama kegiatan mestilah 3-140 aksara.", "Activity name must be 3-140 characters.")
+            }
+            require(cleanDesc.length in 1..1500) {
+                AppLanguageManager.tr("Keterangan kegiatan wajib diisi.", "Activity description is required.")
+            }
+            require(cleanDate.length in 3..60) {
+                AppLanguageManager.tr("Tarikh / hari wajib diisi.", "Date / day is required.")
+            }
+            require(cleanTime.length in 3..40) {
+                AppLanguageManager.tr("Masa kegiatan wajib diisi.", "Activity time is required.")
+            }
+            require(cleanLocation.length in 2..120) {
+                AppLanguageManager.tr("Lokasi kegiatan wajib diisi.", "Activity location is required.")
+            }
+            require(cleanSpeaker.length <= 100) {
+                AppLanguageManager.tr("Nama pengkhotbah maks 100 aksara.", "Speaker name max 100 characters.")
+            }
+            require(sortOrder in 0L..9_999_999_999_999L) {
+                AppLanguageManager.tr("Susunan jadual tidak sah.", "Invalid schedule sort order.")
+            }
 
             val updates = mapOf(
                 "title" to cleanTitle,
@@ -634,7 +716,7 @@ class BulletinRepository(
                 batch.set(
                     notifRef,
                     buildNotificationEventPayload(
-                        title = "Jadwal Baru: $cleanTitle",
+                        title = AppLanguageManager.tr("Jadual Baharu: $cleanTitle", "New Schedule: $cleanTitle"),
                         body = "$cleanDate • $cleanTime — $cleanLocation",
                         eventType = BulletinNotificationManager.TYPE_SCHEDULE,
                         targetId = scheduleId,
@@ -659,13 +741,36 @@ class BulletinRepository(
         val docPath = "schedules/$scheduleId"
         return try {
             requireUserId()
-            require(scheduleId.isNotBlank()) { "ID jadwal tidak valid." }
+            require(scheduleId.isNotBlank()) { AppLanguageManager.tr("ID jadual tidak sah.", "Invalid schedule ID.") }
             db.collection("schedules").document(scheduleId).delete().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun setScheduleFeaturedInNews(
+        scheduleId: String,
+        featured: Boolean
+    ): Result<Unit> {
+        val docPath = "schedules/$scheduleId"
+        return try {
+            requireUserId()
+            require(scheduleId.isNotBlank()) { AppLanguageManager.tr("ID jadual tidak sah.", "Invalid schedule ID.") }
+            db.collection("schedules").document(scheduleId).update(
+                mapOf(
+                    "featuredInNews" to featured,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docPath)
             Result.failure(e)
         }
     }
@@ -689,15 +794,27 @@ class BulletinRepository(
             val cleanTitle = title.trim()
             val cleanCaption = caption.trim()
             val cleanDate = eventDate.trim()
-            val cleanPhotoBy = photographerName.trim().ifBlank { "Tim Multimedia SIB Toburon" }.take(80)
+            val cleanPhotoBy = photographerName.trim().ifBlank {
+                AppLanguageManager.tr("Pasukan Multimedia SIB Toburon", "SIB Toburon Media Team")
+            }.take(80)
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
 
-            require(cleanTitle.length in 2..120) { "Judul foto harus 2-120 karakter." }
-            require(cleanCaption.length <= 600) { "Keterangan foto maksimal 600 karakter." }
-            require(cleanDate.length in 2..50) { "Tanggal acara harus diisi (2-50 karakter)." }
-            if (cleanUrl != null) require(cleanUrl.length <= 1000) { "URL gambar terlalu panjang." }
-            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) { "Ukuran gambar terlalu besar." }
+            require(cleanTitle.length in 2..120) {
+                AppLanguageManager.tr("Tajuk foto mestilah 2-120 aksara.", "Photo title must be 2-120 characters.")
+            }
+            require(cleanCaption.length <= 600) {
+                AppLanguageManager.tr("Keterangan foto maksimum 600 aksara.", "Photo caption maximum 600 characters.")
+            }
+            require(cleanDate.length in 2..50) {
+                AppLanguageManager.tr("Tarikh acara wajib diisi (2-50 aksara).", "Event date is required (2-50 characters).")
+            }
+            if (cleanUrl != null) require(cleanUrl.length <= 1000) {
+                AppLanguageManager.tr("URL gambar terlalu panjang.", "Image URL is too long.")
+            }
+            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) {
+                AppLanguageManager.tr("Saiz gambar terlalu besar.", "Image size is too large.")
+            }
 
             val docRef = db.collection("gallery_photos").document()
             docPath = docRef.path
@@ -742,19 +859,31 @@ class BulletinRepository(
         val docPath = "gallery_photos/$photoId"
         return try {
             requireUserId()
-            require(photoId.isNotBlank()) { "ID foto tidak valid." }
+            require(photoId.isNotBlank()) { AppLanguageManager.tr("ID foto tidak sah.", "Invalid photo ID.") }
             val cleanTitle = title.trim()
             val cleanCaption = caption.trim()
             val cleanDate = eventDate.trim()
-            val cleanPhotoBy = photographerName.trim().ifBlank { "Tim Multimedia SIB Toburon" }.take(80)
+            val cleanPhotoBy = photographerName.trim().ifBlank {
+                AppLanguageManager.tr("Pasukan Multimedia SIB Toburon", "SIB Toburon Media Team")
+            }.take(80)
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
 
-            require(cleanTitle.length in 2..120) { "Judul foto harus 2-120 karakter." }
-            require(cleanCaption.length <= 600) { "Keterangan foto maksimal 600 karakter." }
-            require(cleanDate.length in 2..50) { "Tanggal acara harus diisi." }
-            if (cleanUrl != null) require(cleanUrl.length <= 1000) { "URL gambar terlalu panjang." }
-            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) { "Ukuran gambar terlalu besar." }
+            require(cleanTitle.length in 2..120) {
+                AppLanguageManager.tr("Tajuk foto mestilah 2-120 aksara.", "Photo title must be 2-120 characters.")
+            }
+            require(cleanCaption.length <= 600) {
+                AppLanguageManager.tr("Keterangan foto maksimum 600 aksara.", "Photo caption maximum 600 characters.")
+            }
+            require(cleanDate.length in 2..50) {
+                AppLanguageManager.tr("Tarikh acara wajib diisi.", "Event date is required.")
+            }
+            if (cleanUrl != null) require(cleanUrl.length <= 1000) {
+                AppLanguageManager.tr("URL gambar terlalu panjang.", "Image URL is too long.")
+            }
+            if (cleanBase64 != null) require(cleanBase64.length <= 260_000) {
+                AppLanguageManager.tr("Saiz gambar terlalu besar.", "Image size is too large.")
+            }
 
             val updates = mapOf<String, Any?>(
                 "title" to cleanTitle,
@@ -782,7 +911,7 @@ class BulletinRepository(
         val docPath = "gallery_photos/$photoId"
         return try {
             requireUserId()
-            require(photoId.isNotBlank()) { "ID foto tidak valid." }
+            require(photoId.isNotBlank()) { AppLanguageManager.tr("ID foto tidak sah.", "Invalid photo ID.") }
             db.collection("gallery_photos").document(photoId).delete().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -797,7 +926,7 @@ class BulletinRepository(
         val docPath = "gallery_photos/$photoId"
         return try {
             val uid = requireUserId()
-            require(photoId.isNotBlank()) { "ID foto tidak valid." }
+            require(photoId.isNotBlank()) { AppLanguageManager.tr("ID foto tidak sah.", "Invalid photo ID.") }
             val photoRef = db.collection("gallery_photos").document(photoId)
             val likeRef = db.collection("users").document(uid).collection("liked_photos").document(photoId)
             val batch = db.batch()
@@ -847,7 +976,7 @@ class BulletinRepository(
         var docPath = "users/bookmarks"
         return try {
             val uid = requireUserId()
-            require(itemId.isNotBlank()) { "ID item tidak valid." }
+            require(itemId.isNotBlank()) { AppLanguageManager.tr("ID item tidak sah.", "Invalid item ID.") }
             val bookmarkDocId = "${itemType.lowercase()}_$itemId"
             val docRef = db.collection("users").document(uid).collection("bookmarks").document(bookmarkDocId)
             docPath = docRef.path
@@ -857,7 +986,9 @@ class BulletinRepository(
                 val payload = mapOf(
                     "itemId" to itemId,
                     "itemType" to itemType,
-                    "title" to title.trim().take(160).ifBlank { "Item Tersimpan" },
+                    "title" to title.trim().take(160).ifBlank {
+                        AppLanguageManager.tr("Item Tersimpan", "Saved Item")
+                    },
                     "createdAt" to FieldValue.serverTimestamp()
                 )
                 docRef.set(payload).await()
@@ -871,34 +1002,86 @@ class BulletinRepository(
         }
     }
 
+    suspend fun recordSignedInUser(
+        googleDisplayName: String?,
+        googleEmail: String?
+    ): Result<Unit> {
+        var docPath = "users"
+        return try {
+            val uid = requireUserId()
+            val cleanEmail = googleEmail?.trim().orEmpty().take(160)
+            val fallbackName = googleDisplayName?.trim()?.takeIf { it.isNotBlank() }
+                ?: cleanEmail.substringBefore("@").takeIf { it.isNotBlank() }
+                ?: "Jemaat SIB Toburon"
+            val cleanName = fallbackName.take(80)
+            val docRef = db.collection("users").document(uid)
+            docPath = docRef.path
+            val snap = docRef.get().await()
+            if (!snap.exists()) {
+                docRef.set(
+                    mapOf(
+                        "displayName" to cleanName,
+                        "email" to cleanEmail,
+                        "fellowshipGroup" to FellowshipGroup.UMUM.code,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                        "lastLoginAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                val updates = mutableMapOf<String, Any>(
+                    "updatedAt" to FieldValue.serverTimestamp(),
+                    "lastLoginAt" to FieldValue.serverTimestamp()
+                )
+                if (cleanEmail.isNotBlank()) {
+                    updates["email"] = cleanEmail
+                }
+                docRef.update(updates).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
     suspend fun saveUserProfile(
         displayName: String,
         fellowshipGroup: FellowshipGroup,
-        existingProfile: UserProfile?
+        existingProfile: UserProfile?,
+        userEmail: String? = null
     ): Result<Unit> {
         var docPath = "users"
         return try {
             val uid = requireUserId()
             val cleanName = displayName.trim().ifBlank { "Jemaat SIB Toburon" }.take(80)
+            val cleanEmail = userEmail?.trim().orEmpty().take(160)
             val docRef = db.collection("users").document(uid)
             docPath = docRef.path
-            if (existingProfile == null) {
+            val exists = existingProfile != null || docRef.get().await().exists()
+            if (!exists) {
                 docRef.set(
                     mapOf(
                         "displayName" to cleanName,
+                        "email" to cleanEmail,
                         "fellowshipGroup" to fellowshipGroup.code,
                         "createdAt" to FieldValue.serverTimestamp(),
-                        "updatedAt" to FieldValue.serverTimestamp()
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                        "lastLoginAt" to FieldValue.serverTimestamp()
                     )
                 ).await()
             } else {
-                docRef.update(
-                    mapOf(
-                        "displayName" to cleanName,
-                        "fellowshipGroup" to fellowshipGroup.code,
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                ).await()
+                val updates = mutableMapOf<String, Any>(
+                    "displayName" to cleanName,
+                    "fellowshipGroup" to fellowshipGroup.code,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                if (cleanEmail.isNotBlank()) {
+                    updates["email"] = cleanEmail
+                }
+                docRef.update(updates).await()
             }
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -917,12 +1100,19 @@ class BulletinRepository(
         return try {
             val uid = requireUserId()
             require(cleanUid.matches(Regex("^[a-zA-Z0-9_\\-]+$")) && cleanUid.length in 1..128) {
-                "Format UID tidak valid (hanya huruf, angka, _ atau -)."
+                AppLanguageManager.tr(
+                    "Format UID tidak sah (hanya huruf, nombor, _ atau -).",
+                    "Invalid UID format (letters, numbers, _ or - only)."
+                )
             }
             val cleanName = displayName.trim()
             val cleanRole = roleTitle.trim()
-            require(cleanName.length in 1..80) { "Nama pengurus harus diisi (maks 80 karakter)." }
-            require(cleanRole.length in 1..60) { "Jabatan pelayanan harus diisi (maks 60 karakter)." }
+            require(cleanName.length in 1..80) {
+                AppLanguageManager.tr("Nama pengurus wajib diisi (maks 80 aksara).", "Admin name is required (max 80 characters).")
+            }
+            require(cleanRole.length in 1..60) {
+                AppLanguageManager.tr("Jawatan pelayanan wajib diisi (maks 60 aksara).", "Ministry role is required (max 60 characters).")
+            }
 
             db.collection("admins").document(cleanUid).set(
                 mapOf(
@@ -945,7 +1135,7 @@ class BulletinRepository(
         val docPath = "admins/$targetUid"
         return try {
             requireUserId()
-            require(targetUid.isNotBlank()) { "UID tidak valid." }
+            require(targetUid.isNotBlank()) { AppLanguageManager.tr("UID tidak sah.", "Invalid UID.") }
             db.collection("admins").document(targetUid).delete().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -985,7 +1175,7 @@ class BulletinRepository(
         val docPath = "church_member_details/$memberId"
         return try {
             requireUserId()
-            require(memberId.isNotBlank()) { "ID ahli tidak valid." }
+            require(memberId.isNotBlank()) { AppLanguageManager.tr("ID ahli tidak sah.", "Invalid member ID.") }
             val snap = db.collection("church_member_details").document(memberId).get().await()
             val detail = if (snap.exists()) {
                 snap.toObject(ChurchMemberDetail::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
@@ -1040,7 +1230,8 @@ class BulletinRepository(
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
-        denomination: String
+        denomination: String,
+        maritalStatus: MaritalStatus
     ): Result<Unit> {
         var docPath = "church_members"
         return try {
@@ -1049,14 +1240,18 @@ class BulletinRepository(
             val cleanBirth = birthDateIso.trim()
             val cleanDenom = denomination.trim()
 
-            require(cleanName.length in 2..120) { "Nama penuh harus 2 hingga 120 karakter." }
+            require(cleanName.length in 2..120) {
+                AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
+            }
             require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
-                "Format tarikh lahir tidak sah (YYYY-MM-DD)."
+                AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
             }
             require(calculateAgeFromIsoDate(cleanBirth) != null) {
-                "Tarikh lahir tidak sah atau melebihi tarikh hari ini."
+                AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
             }
-            require(cleanDenom.length in 1..80) { "Denominasi harus diisi (maks 80 karakter)." }
+            require(cleanDenom.length in 1..80) {
+                AppLanguageManager.tr("Denominasi wajib diisi (maks 80 aksara).", "Denomination is required (max 80 characters).")
+            }
 
             val publicRef = db.collection("church_members").document()
             val detailRef = db.collection("church_member_details").document(publicRef.id)
@@ -1083,6 +1278,7 @@ class BulletinRepository(
                     "birthDate" to cleanBirth,
                     "baptismStatus" to baptismStatus.code,
                     "denomination" to cleanDenom,
+                    "maritalStatus" to maritalStatus.code,
                     "authorId" to uid,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
@@ -1104,24 +1300,29 @@ class BulletinRepository(
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
-        denomination: String
+        denomination: String,
+        maritalStatus: MaritalStatus
     ): Result<Unit> {
         val docPath = "church_members/$memberId"
         return try {
             requireUserId()
-            require(memberId.isNotBlank()) { "ID ahli tidak valid." }
+            require(memberId.isNotBlank()) { AppLanguageManager.tr("ID ahli tidak sah.", "Invalid member ID.") }
             val cleanName = fullName.trim()
             val cleanBirth = birthDateIso.trim()
             val cleanDenom = denomination.trim()
 
-            require(cleanName.length in 2..120) { "Nama penuh harus 2 hingga 120 karakter." }
+            require(cleanName.length in 2..120) {
+                AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
+            }
             require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
-                "Format tarikh lahir tidak sah (YYYY-MM-DD)."
+                AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
             }
             require(calculateAgeFromIsoDate(cleanBirth) != null) {
-                "Tarikh lahir tidak sah atau melebihi tarikh hari ini."
+                AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
             }
-            require(cleanDenom.length in 1..80) { "Denominasi harus diisi (maks 80 karakter)." }
+            require(cleanDenom.length in 1..80) {
+                AppLanguageManager.tr("Denominasi wajib diisi (maks 80 aksara).", "Denomination is required (max 80 characters).")
+            }
 
             val publicRef = db.collection("church_members").document(memberId)
             val detailRef = db.collection("church_member_details").document(memberId)
@@ -1144,6 +1345,7 @@ class BulletinRepository(
                     "birthDate" to cleanBirth,
                     "baptismStatus" to baptismStatus.code,
                     "denomination" to cleanDenom,
+                    "maritalStatus" to maritalStatus.code,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
@@ -1161,7 +1363,7 @@ class BulletinRepository(
         val docPath = "church_members/$memberId"
         return try {
             requireUserId()
-            require(memberId.isNotBlank()) { "ID ahli tidak valid." }
+            require(memberId.isNotBlank()) { AppLanguageManager.tr("ID ahli tidak sah.", "Invalid member ID.") }
             val batch = db.batch()
             batch.delete(db.collection("church_members").document(memberId))
             batch.delete(db.collection("church_member_details").document(memberId))

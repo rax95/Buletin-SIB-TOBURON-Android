@@ -1,71 +1,71 @@
 <resources>
     <string name="app_name">Buletin SIB Toburon</string>
-    <string name="app_subtitle">Warta, Jadwal &amp; Galeri Jemaat Real-Time</string>
+    <string name="app_subtitle">Warta, Jadual &amp; Galeri Jemaat Masa Nyata</string>
     <string name="church_name">SIB Toburon</string>
     <string name="church_motto">Bertumbuh dalam Kasih, Bersatu dalam Pelayanan</string>
 
-    <!-- Navigation -->
+    <!-- Navigasi -->
     <string name="nav_news">Berita</string>
-    <string name="nav_schedules">Jadwal</string>
+    <string name="nav_schedules">Jadual</string>
     <string name="nav_gallery">Galeri</string>
     <string name="nav_members">Ahli</string>
-    <string name="nav_account">Akun</string>
+    <string name="nav_account">Akaun</string>
 
-    <!-- Auth -->
-    <string name="auth_welcome_title">Selamat Datang di Buletin SIB Toburon</string>
-    <string name="auth_welcome_desc">Akses berita terkini, jadwal ibadah dan kegiatan gereja, serta galeri foto jemaat yang tersinkronisasi secara real-time.</string>
-    <string name="auth_sign_in_google">Masuk dengan Google</string>
-    <string name="auth_continue_guest">Masuk sebagai Tamu (Lihat Buletin)</string>
-    <string name="auth_guest_hint">Mode Tamu dapat membaca Berita, Jadwal, dan Galeri secara real-time tanpa akun Google.</string>
-    <string name="auth_signing_in">Menghubungkan akun Google…</string>
-    <string name="auth_sync_badge">Sinkronisasi Real-Time Firebase</string>
-    <string name="auth_sign_out">Keluar</string>
+    <!-- Pengesahan -->
+    <string name="auth_welcome_title">Selamat Datang ke Buletin SIB Toburon</string>
+    <string name="auth_welcome_desc">Akses berita terkini, jadual ibadah dan kegiatan gereja, serta galeri foto jemaat yang disegerakkan secara masa nyata.</string>
+    <string name="auth_sign_in_google">Log Masuk dengan Google</string>
+    <string name="auth_continue_guest">Masuk sebagai Tetamu (Lihat Buletin)</string>
+    <string name="auth_guest_hint">Mod Tetamu boleh membaca Berita, Jadual, dan Galeri secara masa nyata tanpa akaun Google.</string>
+    <string name="auth_signing_in">Menghubungkan akaun Google…</string>
+    <string name="auth_sync_badge">Penyegerakan Masa Nyata Firebase</string>
+    <string name="auth_sign_out">Log Keluar</string>
 
-    <!-- Status & Actions -->
-    <string name="live_sync_active">Sinkronisasi Langsung</string>
+    <!-- Status & Tindakan -->
+    <string name="live_sync_active">Segerak Langsung</string>
     <string name="admin_badge">Admin Gereja</string>
     <string name="jemaat_badge">Jemaat SIB Toburon</string>
-    <string name="guest_badge">Mode Tamu (Baca Saja)</string>
+    <string name="guest_badge">Mod Tetamu (Baca Sahaja)</string>
     <string name="search_news_hint">Cari warta atau pengumuman…</string>
     <string name="search_schedule_hint">Cari kegiatan atau lokasi…</string>
     <string name="search_members_hint">Cari nama ahli jemaat…</string>
     <string name="action_add_news">Tulis Berita</string>
-    <string name="action_add_schedule">Tambah Jadwal</string>
-    <string name="action_add_photo">Unggah Foto</string>
+    <string name="action_add_schedule">Tambah Jadual</string>
+    <string name="action_add_photo">Muat Naik Foto</string>
     <string name="action_add_member">Tambah Ahli</string>
     <string name="action_save">Simpan</string>
     <string name="action_cancel">Batal</string>
-    <string name="action_delete">Hapus</string>
-    <string name="action_edit">Ubah</string>
+    <string name="action_delete">Padam</string>
+    <string name="action_edit">Edit</string>
     <string name="action_close">Tutup</string>
-    <string name="action_retry">Coba Lagi</string>
+    <string name="action_retry">Cuba Lagi</string>
 
-    <!-- Empty States -->
-    <string name="empty_news_title">Belum Ada Berita Terkini</string>
-    <string name="empty_news_desc">Warta dan pengumuman terbaru dari pengurus SIB Toburon akan langsung muncul di sini secara otomatis.</string>
-    <string name="empty_schedules_title">Belum Ada Jadwal Kegiatan</string>
-    <string name="empty_schedules_desc">Jadwal ibadah raya, doa, pemuda, dan persekutuan akan segera diperbarui secara real-time.</string>
+    <!-- Keadaan Kosong -->
+    <string name="empty_news_title">Tiada Berita Terkini Lagi</string>
+    <string name="empty_news_desc">Warta dan pengumuman terbaharu daripada pengurus SIB Toburon akan muncul di sini secara automatik.</string>
+    <string name="empty_schedules_title">Tiada Jadual Kegiatan Lagi</string>
+    <string name="empty_schedules_desc">Jadual ibadah raya, doa, belia, dan persekutuan akan dikemas kini secara masa nyata.</string>
     <string name="empty_gallery_title">Galeri Foto Masih Kosong</string>
-    <string name="empty_gallery_desc">Dokumentasi momen kebersamaan jemaat SIB Toburon akan tampil otomatis begitu admin mengunggahnya.</string>
-    <string name="empty_members_title">Belum Ada Ahli Terdaftar</string>
+    <string name="empty_gallery_desc">Dokumentasi detik kebersamaan jemaat SIB Toburon akan terpapar secara automatik sebaik sahaja admin memuat naiknya.</string>
+    <string name="empty_members_title">Tiada Ahli Berdaftar Lagi</string>
     <string name="empty_members_desc">Senarai nama penuh jemaat SIB Toburon yang didaftarkan oleh admin akan terpapar secara automatik di sini.</string>
 
-    <!-- Content Descriptions -->
-    <string name="cd_sanctuary_banner">Foto gedung ibadah SIB Toburon bermandikan cahaya pagi</string>
-    <string name="cd_news_cover">Gambar sampul berita gereja</string>
+    <!-- Penerangan Kandungan -->
+    <string name="cd_sanctuary_banner">Foto bangunan gereja SIB Toburon bermandikan cahaya pagi</string>
+    <string name="cd_news_cover">Gambar muka hadapan berita gereja</string>
     <string name="cd_gallery_photo">Foto dokumentasi kegiatan gereja</string>
-    <string name="cd_bookmark_toggle">Simpan atau hapus dari daftar tersimpan</string>
-    <string name="cd_like_photo">Berikan apresiasi pada foto</string>
+    <string name="cd_bookmark_toggle">Simpan atau buang daripada senarai tersimpan</string>
+    <string name="cd_like_photo">Berikan tanda suka pada foto</string>
     <string name="cd_navigate_back">Kembali ke halaman sebelumnya</string>
-    <string name="cd_pick_photo">Pilih foto dari perangkat</string>
-    <string name="cd_clear_search">Hapus kata pencarian</string>
+    <string name="cd_pick_photo">Pilih foto daripada peranti</string>
+    <string name="cd_clear_search">Padam carian</string>
 
-    <!-- Notifications (FCM) -->
-    <string name="notif_channel_name">Pembaruan Buletin SIB Toburon</string>
-    <string name="notif_channel_desc">Notifikasi langsung untuk berita terkini dan jadwal kegiatan gereja terbaru</string>
-    <string name="notif_title_section">Notifikasi Push Real-Time (FCM)</string>
-    <string name="notif_enable_permission">Aktifkan Izin Notifikasi</string>
-    <string name="notif_permission_granted">Izin Notifikasi Aktif</string>
+    <!-- Notifikasi (FCM) -->
+    <string name="notif_channel_name">Kemas Kini Buletin SIB Toburon</string>
+    <string name="notif_channel_desc">Notifikasi langsung untuk berita terkini dan jadual kegiatan gereja terbaharu</string>
+    <string name="notif_title_section">Notifikasi Tolak Masa Nyata (FCM)</string>
+    <string name="notif_enable_permission">Aktifkan Kebenaran Notifikasi</string>
+    <string name="notif_permission_granted">Kebenaran Notifikasi Aktif</string>
     <string name="notif_news_toggle">Berita &amp; Warta Terkini</string>
-    <string name="notif_schedules_toggle">Jadwal Kegiatan Gereja</string>
+    <string name="notif_schedules_toggle">Jadual Kegiatan Gereja</string>
 </resources>

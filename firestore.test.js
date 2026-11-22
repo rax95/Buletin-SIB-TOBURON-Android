@@ -330,13 +330,33 @@ test("Schedules enforce admin writes and published-only jemaat list queries", as
     })
   );
 
+  // Admin CAN toggle featuredInNews to highlight important schedule on Berita main menu
+  await assertSucceeds(
+    adminDb.collection("schedules").doc("sched_001").update({
+      featuredInNews: true,
+      updatedAt: pastDate(1500),
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("schedules").doc("sched_001").update({
+      featuredInNews: false,
+      updatedAt: pastDate(1200),
+    })
+  );
+
   // Jemaat filtered query succeeds
   await assertSucceeds(
     aliceDb.collection("schedules").where("published", "==", true).get()
   );
   // Jemaat unfiltered query fails
   await assertFails(aliceDb.collection("schedules").get());
-  // Jemaat write fails
+  // Jemaat write fails (including trying to toggle featuredInNews)
+  await assertFails(
+    aliceDb.collection("schedules").doc("sched_001").update({
+      featuredInNews: true,
+      updatedAt: pastDate(1000),
+    })
+  );
   await assertFails(
     aliceDb.collection("schedules").doc("sched_001").update({
       location: "Lokasi Palsu",
@@ -418,13 +438,15 @@ test("User profiles and bookmarks are strictly owner-isolated; admins collection
   const bobDb = testEnv.authenticatedContext(JEMAAT_BOB).firestore();
   const ts = pastDate(5000);
 
-  // Alice creates her own profile (no role/isAdmin field allowed)
+  // Alice creates her own profile (with Google email & lastLoginAt; no role/isAdmin field allowed)
   await assertSucceeds(
     aliceDb.collection("users").doc(JEMAAT_ALICE).set({
       displayName: "Alice Toburon",
+      email: "alice@example.com",
       fellowshipGroup: "PEMUDA",
       createdAt: ts,
       updatedAt: ts,
+      lastLoginAt: ts,
     })
   );
 
@@ -439,8 +461,15 @@ test("User profiles and bookmarks are strictly owner-isolated; admins collection
     })
   );
 
-  // Bob cannot read Alice's profile (PII Blanket Test)
+  // Bob and Guest cannot read Alice's profile or list /users (PII Blanket Test)
+  const guestDb = testEnv.unauthenticatedContext().firestore();
   await assertFails(bobDb.collection("users").doc(JEMAAT_ALICE).get());
+  await assertFails(bobDb.collection("users").get());
+  await assertFails(guestDb.collection("users").get());
+
+  // Admin CAN list signed-in Google users and inspect user profiles
+  await assertSucceeds(adminDb.collection("users").get());
+  await assertSucceeds(adminDb.collection("users").doc(JEMAAT_ALICE).get());
 
   // Alice can create & list her own bookmarks; Bob cannot
   await assertSucceeds(
@@ -637,6 +666,7 @@ test("Church members directory exposes full names only; personal details are str
     birthDate: "1995-06-14",
     baptismStatus: "DIBAPTIS",
     denomination: "SIB",
+    maritalStatus: "BUJANG",
     authorId: ADMIN_UID,
     createdAt: ts,
     updatedAt: ts,
@@ -717,15 +747,22 @@ test("Church members directory exposes full names only; personal details are str
     birthDate: "1995-06-14",
     baptismStatus: "DIBAPTIS",
     denomination: "SIB",
+    maritalStatus: "BERKAHWIN",
     updatedAt: updateTs,
   });
   await assertSucceeds(updateBatch.commit());
 
-  // Reject invalid birthDate format
+  // Reject invalid birthDate format and invalid maritalStatus enum
   await assertFails(
     adminDb.collection("church_member_details").doc("member_001").update({
       birthDate: "14/06/1995",
       updatedAt: pastDate(500),
+    })
+  );
+  await assertFails(
+    adminDb.collection("church_member_details").doc("member_001").update({
+      maritalStatus: "INVALID_STATUS",
+      updatedAt: pastDate(400),
     })
   );
 

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
@@ -53,11 +54,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.BaptismStatus
 import com.example.data.ChurchMemberDetail
+import com.example.data.MaritalStatus
 import com.example.data.MemberGender
 import com.example.data.calculateAgeFromIsoDate
 import com.example.data.epochMillisToIsoDate
 import com.example.data.formatBirthDateReadable
 import com.example.data.isoDateToEpochMillis
+import com.example.ui.i18n.AppLanguageManager
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 import java.util.Calendar
 
 private val COMMON_DENOMINATIONS = listOf(
@@ -80,9 +85,11 @@ fun AdminMemberEditorDialog(
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
-        denomination: String
+        denomination: String,
+        maritalStatus: MaritalStatus
     ) -> Unit
 ) {
+    val lang = LocalAppLanguage.current
     var fullName by remember(initial) { mutableStateOf(initial?.fullName ?: "") }
     var gender by remember(initial) { mutableStateOf(initial?.resolvedGender() ?: MemberGender.LELAKI) }
     var birthDateIso by remember(initial) { mutableStateOf(initial?.birthDate ?: "") }
@@ -90,6 +97,9 @@ fun AdminMemberEditorDialog(
         mutableStateOf(initial?.resolvedBaptismStatus() ?: BaptismStatus.BELUM_DIBAPTIS)
     }
     var denomination by remember(initial) { mutableStateOf(initial?.denomination?.ifBlank { "SIB" } ?: "SIB") }
+    var maritalStatus by remember(initial) {
+        mutableStateOf(initial?.resolvedMaritalStatus() ?: MaritalStatus.BUJANG)
+    }
     var showDatePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
@@ -124,12 +134,19 @@ fun AdminMemberEditorDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (initial == null) "Daftar Ahli Jemaat Baharu" else "Edit Maklumat Ahli",
+                            text = if (initial == null) {
+                                tr("Daftar Ahli Jemaat Baharu", "Register New Church Member")
+                            } else {
+                                tr("Edit Maklumat Ahli", "Edit Member Details")
+                            },
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Hanya nama penuh dipaparkan kepada jemaat; maklumat peribadi hanya untuk Admin.",
+                            text = tr(
+                                "Jemaat hanya dapat melihat nama, jantina, dan status baptisan; maklumat penuh hanya untuk Admin.",
+                                "Regular members only see name, gender, and baptism status; full details are Admin-only."
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -140,7 +157,7 @@ fun AdminMemberEditorDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Tutup"
+                            contentDescription = tr("Tutup", "Close")
                         )
                     }
                 }
@@ -158,7 +175,7 @@ fun AdminMemberEditorDialog(
                     // 1. Nama Penuh
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "1. Nama Penuh",
+                            text = tr("1. Nama Penuh", "1. Full Name"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -168,8 +185,8 @@ fun AdminMemberEditorDialog(
                                 fullName = it
                                 validationError = null
                             },
-                            label = { Text("Nama penuh jemaat") },
-                            placeholder = { Text("Contoh: Johanes bin Lukas") },
+                            label = { Text(tr("Nama penuh jemaat", "Member full name")) },
+                            placeholder = { Text(tr("Contoh: Johanes bin Lukas", "Example: John Lukas")) },
                             leadingIcon = {
                                 Icon(Icons.Filled.Person, contentDescription = null)
                             },
@@ -183,7 +200,7 @@ fun AdminMemberEditorDialog(
                     // 2. Jantina
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "2. Jantina",
+                            text = tr("2. Jantina", "2. Gender"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -195,7 +212,7 @@ fun AdminMemberEditorDialog(
                                 FilterChip(
                                     selected = gender == option,
                                     onClick = { gender = option },
-                                    label = { Text(option.label) },
+                                    label = { Text(option.localizedLabel(lang)) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary
@@ -211,7 +228,7 @@ fun AdminMemberEditorDialog(
                     // 3. Tarikh Lahir (Automatik Show Umur)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "3. Tarikh Lahir (Umur Automatik)",
+                            text = tr("3. Tarikh Lahir (Umur Automatik)", "3. Date of Birth (Auto Age)"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -227,7 +244,7 @@ fun AdminMemberEditorDialog(
                                     validationError = null
                                 },
                                 label = { Text("YYYY-MM-DD") },
-                                placeholder = { Text("Contoh: 1995-06-14") },
+                                placeholder = { Text(tr("Contoh: 1995-06-14", "Example: 1995-06-14")) },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Cake, contentDescription = null)
                                 },
@@ -246,11 +263,11 @@ fun AdminMemberEditorDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.CalendarMonth,
-                                    contentDescription = "Pilih tarikh lahir",
+                                    contentDescription = tr("Pilih tarikh lahir", "Pick date of birth"),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                Text("Pilih")
+                                Text(tr("Pilih", "Pick"))
                             }
                         }
 
@@ -274,9 +291,12 @@ fun AdminMemberEditorDialog(
                                 Column {
                                     Text(
                                         text = if (calculatedAge != null) {
-                                            formatBirthDateReadable(birthDateIso)
+                                            formatBirthDateReadable(birthDateIso, lang)
                                         } else {
-                                            "Sila pilih atau masukkan tarikh lahir"
+                                            tr(
+                                                "Sila pilih atau masukkan tarikh lahir",
+                                                "Please pick or enter date of birth"
+                                            )
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = if (calculatedAge != null) {
@@ -287,7 +307,10 @@ fun AdminMemberEditorDialog(
                                     )
                                     if (birthDateIso.isNotBlank() && !isBirthDateValid) {
                                         Text(
-                                            text = "Gunakan format YYYY-MM-DD (tidak melebihi hari ini).",
+                                            text = tr(
+                                                "Gunakan format YYYY-MM-DD (tidak melebihi hari ini).",
+                                                "Use YYYY-MM-DD format (not in the future)."
+                                            ),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.error
                                         )
@@ -303,9 +326,9 @@ fun AdminMemberEditorDialog(
                                 ) {
                                     Text(
                                         text = if (calculatedAge != null) {
-                                            "Umur: $calculatedAge tahun"
+                                            tr("Umur: $calculatedAge tahun", "Age: $calculatedAge yrs")
                                         } else {
-                                            "Umur: --"
+                                            tr("Umur: --", "Age: --")
                                         },
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
@@ -324,7 +347,7 @@ fun AdminMemberEditorDialog(
                     // 4. Status Baptisan
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "4. Status Baptisan",
+                            text = tr("4. Status Baptisan", "4. Baptism Status"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -343,7 +366,7 @@ fun AdminMemberEditorDialog(
                                             modifier = Modifier.size(16.dp)
                                         )
                                     },
-                                    label = { Text(status.label) },
+                                    label = { Text(status.localizedLabel(lang)) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
@@ -360,7 +383,7 @@ fun AdminMemberEditorDialog(
                     // 5. Denominasi
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "5. Denominasi",
+                            text = tr("5. Denominasi", "5. Denomination"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -370,8 +393,8 @@ fun AdminMemberEditorDialog(
                                 denomination = it
                                 validationError = null
                             },
-                            label = { Text("Denominasi gereja") },
-                            placeholder = { Text("Contoh: SIB") },
+                            label = { Text(tr("Denominasi gereja", "Church denomination")) },
+                            placeholder = { Text(tr("Contoh: SIB", "Example: SIB")) },
                             leadingIcon = {
                                 Icon(Icons.Filled.Church, contentDescription = null)
                             },
@@ -389,6 +412,41 @@ fun AdminMemberEditorDialog(
                                     selected = denomination.trim().equals(preset, ignoreCase = true),
                                     onClick = { denomination = preset },
                                     label = { Text(preset, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
+
+                    // 6. Status Perkahwinan / Marital Status
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = tr("6. Status Perkahwinan", "6. Marital Status"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            MaritalStatus.entries.forEach { status ->
+                                FilterChip(
+                                    selected = maritalStatus == status,
+                                    onClick = { maritalStatus = status },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Favorite,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = { Text(status.localizedLabel(lang)) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    modifier = Modifier.testTag("member_marital_${status.code.lowercase()}")
                                 )
                             }
                         }
@@ -417,21 +475,30 @@ fun AdminMemberEditorDialog(
                         onClick = { if (!isBusy) onDismiss() },
                         enabled = !isBusy
                     ) {
-                        Text("Batal")
+                        Text(tr("Batal", "Cancel"))
                     }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
                             if (fullName.trim().length < 2) {
-                                validationError = "Nama penuh minimum 2 aksara."
+                                validationError = AppLanguageManager.tr(
+                                    "Nama penuh minimum 2 aksara.",
+                                    "Full name must be at least 2 characters."
+                                )
                                 return@Button
                             }
                             if (!isBirthDateValid) {
-                                validationError = "Sila pilih tarikh lahir yang sah (YYYY-MM-DD)."
+                                validationError = AppLanguageManager.tr(
+                                    "Sila pilih tarikh lahir yang sah (YYYY-MM-DD).",
+                                    "Please select a valid date of birth (YYYY-MM-DD)."
+                                )
                                 return@Button
                             }
                             if (denomination.trim().isEmpty()) {
-                                validationError = "Sila masukkan denominasi."
+                                validationError = AppLanguageManager.tr(
+                                    "Sila masukkan denominasi.",
+                                    "Please enter a denomination."
+                                )
                                 return@Button
                             }
                             onSave(
@@ -439,7 +506,8 @@ fun AdminMemberEditorDialog(
                                 gender,
                                 birthDateIso.trim(),
                                 baptismStatus,
-                                denomination.trim()
+                                denomination.trim(),
+                                maritalStatus
                             )
                         },
                         enabled = !isBusy && isFormValid,
@@ -453,7 +521,7 @@ fun AdminMemberEditorDialog(
                             )
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (initial == null) "Simpan Ahli" else "Kemas Kini")
+                        Text(if (initial == null) tr("Simpan Ahli", "Save Member") else tr("Kemas Kini", "Update"))
                     }
                 }
             }
@@ -489,12 +557,12 @@ fun AdminMemberEditorDialog(
                         showDatePicker = false
                     }
                 ) {
-                    Text("Pilih")
+                    Text(tr("Pilih", "Select"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text("Batal")
+                    Text(tr("Batal", "Cancel"))
                 }
             }
         ) {

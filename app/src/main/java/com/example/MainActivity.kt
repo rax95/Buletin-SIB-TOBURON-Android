@@ -49,6 +49,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,6 +92,10 @@ import com.example.ui.components.AdminMemberExportDialog
 import com.example.ui.components.AdminNewsEditorDialog
 import com.example.ui.components.AdminPhotoEditorDialog
 import com.example.ui.components.AdminScheduleEditorDialog
+import com.example.ui.i18n.AppLanguage
+import com.example.ui.i18n.AppLanguageManager
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 import com.example.ui.screens.GalleryScreen
 import com.example.ui.screens.MembersScreen
 import com.example.ui.screens.NewsScreen
@@ -107,15 +112,18 @@ import kotlinx.coroutines.launch
 
 private enum class BulletinTab(
     val route: String,
-    val labelRes: Int,
+    val labelMs: String,
+    val labelEn: String,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    NEWS("news", R.string.nav_news, Icons.Filled.Newspaper, Icons.Outlined.Newspaper),
-    SCHEDULES("schedules", R.string.nav_schedules, Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
-    GALLERY("gallery", R.string.nav_gallery, Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
-    MEMBERS("members", R.string.nav_members, Icons.Filled.Groups, Icons.Outlined.Groups),
-    ACCOUNT("account", R.string.nav_account, Icons.Filled.Person, Icons.Outlined.Person)
+    NEWS("news", "Berita", "News", Icons.Filled.Newspaper, Icons.Outlined.Newspaper),
+    SCHEDULES("schedules", "Jadual", "Schedule", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+    GALLERY("gallery", "Galeri", "Gallery", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
+    MEMBERS("members", "Ahli", "Members", Icons.Filled.Groups, Icons.Outlined.Groups),
+    ACCOUNT("account", "Akaun", "Account", Icons.Filled.Person, Icons.Outlined.Person);
+
+    fun label(lang: AppLanguage): String = if (lang == AppLanguage.EN) labelEn else labelMs
 }
 
 class MainActivity : ComponentActivity() {
@@ -124,15 +132,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        AppLanguageManager.init(this)
         BulletinNotificationManager.ensureNotificationChannel(this)
         pendingNotificationDeepLink = extractNotificationDeepLink(intent)
 
         setContent {
-            BuletinSibTheme {
-                AppContent(
-                    pendingDeepLink = pendingNotificationDeepLink,
-                    onConsumeDeepLink = { pendingNotificationDeepLink = null }
-                )
+            val currentLanguage by AppLanguageManager.language.collectAsStateWithLifecycle()
+            CompositionLocalProvider(LocalAppLanguage provides currentLanguage) {
+                BuletinSibTheme {
+                    AppContent(
+                        pendingDeepLink = pendingNotificationDeepLink,
+                        onConsumeDeepLink = { pendingNotificationDeepLink = null }
+                    )
+                }
             }
         }
     }
@@ -265,6 +277,7 @@ private fun BuletinMainShell(
     val likedPhotoIds by viewModel.likedPhotoIds.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val adminMembers by viewModel.adminMembers.collectAsStateWithLifecycle()
+    val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
 
     val newsSearchQuery by viewModel.newsSearchQuery.collectAsStateWithLifecycle()
     val selectedNewsCategory by viewModel.selectedNewsCategory.collectAsStateWithLifecycle()
@@ -319,9 +332,19 @@ private fun BuletinMainShell(
                 isExportingFile = false
                 pendingExportMembers = emptyList()
                 res.onSuccess { count ->
-                    viewModel.showSnackbar("Fail Excel ($count ahli) berjaya disimpan ke storan peranti.")
+                    viewModel.showSnackbar(
+                        AppLanguageManager.tr(
+                            "Fail Excel ($count ahli) berjaya disimpan ke storan peranti.",
+                            "Excel file ($count members) saved to device storage."
+                        )
+                    )
                 }.onFailure { err ->
-                    viewModel.showSnackbar(err.localizedMessage ?: "Gagal menyimpan fail Excel.")
+                    viewModel.showSnackbar(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menyimpan fail Excel.",
+                            "Failed to save Excel file."
+                        )
+                    )
                 }
             }
         } else {
@@ -345,9 +368,19 @@ private fun BuletinMainShell(
                 isExportingFile = false
                 pendingExportMembers = emptyList()
                 res.onSuccess { count ->
-                    viewModel.showSnackbar("Fail PDF ($count ahli) berjaya disimpan ke storan peranti.")
+                    viewModel.showSnackbar(
+                        AppLanguageManager.tr(
+                            "Fail PDF ($count ahli) berjaya disimpan ke storan peranti.",
+                            "PDF file ($count members) saved to device storage."
+                        )
+                    )
                 }.onFailure { err ->
-                    viewModel.showSnackbar(err.localizedMessage ?: "Gagal menyimpan fail PDF.")
+                    viewModel.showSnackbar(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menyimpan fail PDF.",
+                            "Failed to save PDF file."
+                        )
+                    )
                 }
             }
         } else {
@@ -398,7 +431,7 @@ private fun BuletinMainShell(
             )
             val result = snackbarHostState.showSnackbar(
                 message = "${alert.title} — ${alert.body}",
-                actionLabel = "Buka",
+                actionLabel = AppLanguageManager.tr("Buka", "Open"),
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
@@ -419,6 +452,13 @@ private fun BuletinMainShell(
     val bookmarkedScheduleIds = remember(bookmarks) {
         bookmarks.filter { it.itemType == "SCHEDULE" }.map { it.itemId }.toSet()
     }
+    val featuredSchedules = remember(schedulesState, isAdmin) {
+        (schedulesState as? UiState.Success)?.data.orEmpty().filter { schedule ->
+            schedule.featuredInNews && (schedule.published || isAdmin)
+        }
+    }
+
+    val appLang = LocalAppLanguage.current
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useNavRail = maxWidth >= 600.dp
@@ -432,7 +472,7 @@ private fun BuletinMainShell(
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
                         visibleTabs.forEach { tab ->
                             val selected = currentTab == tab
-                            val label = stringResource(tab.labelRes)
+                            val label = tab.label(appLang)
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { currentTab = tab },
@@ -461,7 +501,7 @@ private fun BuletinMainShell(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                 icon = { Icon(Icons.Filled.Download, contentDescription = null) },
-                                text = { Text("Export") },
+                                text = { Text(tr("Eksport", "Export")) },
                                 modifier = Modifier.testTag("admin_export_members_button")
                             )
                             ExtendedFloatingActionButton(
@@ -472,21 +512,21 @@ private fun BuletinMainShell(
                                 containerColor = MaterialTheme.colorScheme.secondary,
                                 contentColor = MaterialTheme.colorScheme.onSecondary,
                                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                                text = { Text(stringResource(R.string.action_add_member)) },
+                                text = { Text(tr("Tambah Ahli", "Add Member")) },
                                 modifier = Modifier.testTag("admin_fab_members")
                             )
                         }
                     } else {
                         val (fabLabel, onFabClick) = when (currentTab) {
-                            BulletinTab.NEWS -> Pair(stringResource(R.string.action_add_news)) {
+                            BulletinTab.NEWS -> Pair(tr("Tulis Berita", "Write News")) {
                                 editingNews = null
                                 showNewsEditor = true
                             }
-                            BulletinTab.SCHEDULES -> Pair(stringResource(R.string.action_add_schedule)) {
+                            BulletinTab.SCHEDULES -> Pair(tr("Tambah Jadual", "Add Schedule")) {
                                 editingSchedule = null
                                 showScheduleEditor = true
                             }
-                            BulletinTab.GALLERY -> Pair(stringResource(R.string.action_add_photo)) {
+                            BulletinTab.GALLERY -> Pair(tr("Muat Naik Foto", "Upload Photo")) {
                                 editingPhoto = null
                                 showPhotoEditor = true
                             }
@@ -533,7 +573,7 @@ private fun BuletinMainShell(
                         Spacer(modifier = Modifier.height(8.dp))
                         visibleTabs.forEach { tab ->
                             val selected = currentTab == tab
-                            val label = stringResource(tab.labelRes)
+                            val label = tab.label(appLang)
                             NavigationRailItem(
                                 selected = selected,
                                 onClick = { currentTab = tab },
@@ -555,6 +595,7 @@ private fun BuletinMainShell(
                         BulletinTab.NEWS -> {
                             NewsScreen(
                                 newsState = newsState,
+                                featuredSchedules = featuredSchedules,
                                 searchQuery = newsSearchQuery,
                                 selectedCategory = selectedNewsCategory,
                                 bookmarkedIds = bookmarkedNewsIds,
@@ -567,6 +608,11 @@ private fun BuletinMainShell(
                                 onToggleBookmark = { article ->
                                     viewModel.toggleBookmark(article.id, "NEWS", article.title)
                                 },
+                                onOpenFeaturedSchedule = { schedule ->
+                                    focusedScheduleId = schedule.id
+                                    currentTab = BulletinTab.SCHEDULES
+                                },
+                                onRemoveFeaturedSchedule = viewModel::toggleScheduleFeaturedInNews,
                                 onEditNews = { article ->
                                     editingNews = article
                                     showNewsEditor = true
@@ -588,6 +634,7 @@ private fun BuletinMainShell(
                                 selectedCategory = selectedScheduleCategory,
                                 bookmarkedIds = bookmarkedScheduleIds,
                                 isAdmin = isAdmin,
+                                isBusy = isBusy,
                                 isExpandedScreen = isExpandedScreen,
                                 focusedScheduleId = focusedScheduleId,
                                 onConsumeFocusedSchedule = { focusedScheduleId = null },
@@ -596,6 +643,7 @@ private fun BuletinMainShell(
                                 onToggleBookmark = { schedule ->
                                     viewModel.toggleBookmark(schedule.id, "SCHEDULE", schedule.title)
                                 },
+                                onToggleFeaturedInNews = viewModel::toggleScheduleFeaturedInNews,
                                 onEditSchedule = { schedule ->
                                     editingSchedule = schedule
                                     showScheduleEditor = true
@@ -672,6 +720,7 @@ private fun BuletinMainShell(
                                 bookmarks = bookmarks,
                                 isAdmin = isAdmin,
                                 adminMembers = adminMembers,
+                                registeredUsers = registeredUsers,
                                 newsCount = (newsState as? UiState.Success)?.data?.size ?: 0,
                                 schedulesCount = (schedulesState as? UiState.Success)?.data?.size ?: 0,
                                 galleryCount = (galleryState as? UiState.Success)?.data?.size ?: 0,
@@ -708,13 +757,25 @@ private fun BuletinMainShell(
                                 },
                                 onOpenAddAdminDialog = { showAddAdminDialog = true },
                                 onRemoveAdminMember = viewModel::removeAdminMember,
-                                onUidCopied = {},
+                                onUidCopied = {
+                                    viewModel.showSnackbar(
+                                        AppLanguageManager.tr(
+                                            "UID pengguna disalin ke papan klip.",
+                                            "User UID copied to clipboard."
+                                        )
+                                    )
+                                },
                                 onNotificationPrefsUpdated = { newsEnabled, schedulesEnabled ->
                                     scope.launch {
                                         BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, _, _ ->
                                             viewModel.syncFcmToken(token, newsEnabled, schedulesEnabled)
                                         }
-                                        snackbarHostState.showSnackbar("Preferensi notifikasi FCM diperbarui.")
+                                        snackbarHostState.showSnackbar(
+                                            AppLanguageManager.tr(
+                                                "Tetapan notifikasi FCM dikemas kini.",
+                                                "FCM notification preferences updated."
+                                            )
+                                        )
                                     }
                                 },
                                 onGoogleSignInSuccess = onGoogleSignInSuccess,
@@ -738,7 +799,7 @@ private fun BuletinMainShell(
     if (showNewsEditor && currentUser != null) {
         AdminNewsEditorDialog(
             initial = editingNews,
-            defaultAuthorName = userProfile?.displayName ?: currentUser.displayName ?: "Sekretariat SIB Toburon",
+            defaultAuthorName = userProfile?.displayName ?: currentUser.displayName ?: tr("Sekretariat SIB Toburon", "SIB Toburon Secretariat"),
             isBusy = isBusy,
             onDismiss = { showNewsEditor = false },
             onSave = { title, summary, content, category, author, preset, url, b64, pinned, published ->
@@ -787,7 +848,7 @@ private fun BuletinMainShell(
     if (showPhotoEditor && currentUser != null) {
         AdminPhotoEditorDialog(
             initial = editingPhoto,
-            defaultPhotographer = userProfile?.displayName ?: currentUser.displayName ?: "Tim Multimedia SIB Toburon",
+            defaultPhotographer = userProfile?.displayName ?: currentUser.displayName ?: tr("Pasukan Multimedia SIB Toburon", "SIB Toburon Media Team"),
             isBusy = isBusy,
             onDismiss = { showPhotoEditor = false },
             onSave = { title, caption, cat, date, preset, url, b64, photographer, published ->
@@ -813,7 +874,7 @@ private fun BuletinMainShell(
             initial = editingMember,
             isBusy = isBusy,
             onDismiss = { showMemberEditor = false },
-            onSave = { fullName, gender, birthDateIso, baptismStatus, denomination ->
+            onSave = { fullName, gender, birthDateIso, baptismStatus, denomination, maritalStatus ->
                 viewModel.saveChurchMember(
                     existingId = editingMember?.id,
                     fullName = fullName,
@@ -821,6 +882,7 @@ private fun BuletinMainShell(
                     birthDateIso = birthDateIso,
                     baptismStatus = baptismStatus,
                     denomination = denomination,
+                    maritalStatus = maritalStatus,
                     onComplete = { showMemberEditor = false }
                 )
             }

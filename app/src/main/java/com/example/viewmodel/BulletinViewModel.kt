@@ -14,6 +14,7 @@ import com.example.data.CoverPreset
 import com.example.data.FellowshipGroup
 import com.example.data.GalleryCategory
 import com.example.data.GalleryPhoto
+import com.example.data.MaritalStatus
 import com.example.data.MemberGender
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
@@ -21,6 +22,7 @@ import com.example.data.ScheduleCategory
 import com.example.data.UiState
 import com.example.data.UserBookmark
 import com.example.data.UserProfile
+import com.example.ui.i18n.AppLanguageManager
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -65,6 +67,14 @@ class BulletinViewModel(
     private var notificationStreamHydrated = false
 
     init {
+        if (!isGuest && !currentUserId.isNullOrBlank()) {
+            viewModelScope.launch {
+                repository.recordSignedInUser(userDisplayName, userEmail)
+                    .onFailure { err ->
+                        Log.w(TAG, "Rekod log masuk pengguna Google gagal: ${err.message}")
+                    }
+            }
+        }
         viewModelScope.launch {
             repository.observeNotificationEvents(currentUserId)
                 .catch { error ->
@@ -136,7 +146,7 @@ class BulletinViewModel(
             repository.observeNews(currentUserId, admin, isBootstrappedAdmin)
                 .map<List<NewsArticle>, UiState<List<NewsArticle>>> { UiState.Success(it) }
                 .catch { error ->
-                    emit(toErrorState("Gagal memuat berita terkini", error))
+                    emit(toErrorState(AppLanguageManager.tr("Gagal memuat berita terkini", "Failed to load latest news"), error))
                 }
         }
         .stateIn(
@@ -151,7 +161,7 @@ class BulletinViewModel(
             repository.observeSchedules(currentUserId, admin, isBootstrappedAdmin)
                 .map<List<ChurchSchedule>, UiState<List<ChurchSchedule>>> { UiState.Success(it) }
                 .catch { error ->
-                    emit(toErrorState("Gagal memuat jadwal kegiatan", error))
+                    emit(toErrorState(AppLanguageManager.tr("Gagal memuat jadual kegiatan", "Failed to load activity schedules"), error))
                 }
         }
         .stateIn(
@@ -166,7 +176,7 @@ class BulletinViewModel(
             repository.observeGallery(currentUserId, admin, isBootstrappedAdmin)
                 .map<List<GalleryPhoto>, UiState<List<GalleryPhoto>>> { UiState.Success(it) }
                 .catch { error ->
-                    emit(toErrorState("Gagal memuat galeri foto", error))
+                    emit(toErrorState(AppLanguageManager.tr("Gagal memuat galeri foto", "Failed to load photo gallery"), error))
                 }
         }
         .stateIn(
@@ -180,7 +190,7 @@ class BulletinViewModel(
         .observeChurchMembers(currentUserId)
         .map<List<ChurchMemberPublic>, UiState<List<ChurchMemberPublic>>> { UiState.Success(it) }
         .catch { error ->
-            emit(toErrorState("Gagal memuat senarai ahli jemaat", error))
+            emit(toErrorState(AppLanguageManager.tr("Gagal memuat senarai ahli jemaat", "Failed to load congregation members list"), error))
         }
         .stateIn(
             scope = viewModelScope,
@@ -243,6 +253,22 @@ class BulletinViewModel(
             initialValue = emptyList()
         )
 
+    // Signed-in Google users stream (strictly admin-only)
+    val registeredUsers: StateFlow<List<UserProfile>> = isAdmin
+        .flatMapLatest { admin ->
+            if (!admin) flowOf(emptyList())
+            else repository.observeRegisteredUsers(currentUserId)
+                .catch { error ->
+                    unwrapOrRethrow("registered_users", error)
+                    emit(emptyList())
+                }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = emptyList()
+        )
+
     // --- FILTER ACTIONS ---
 
     fun setNewsSearchQuery(query: String) {
@@ -279,10 +305,20 @@ class BulletinViewModel(
                     if (detail != null) {
                         _selectedMemberDetail.value = detail
                     } else {
-                        _snackbarMessage.tryEmit("Maklumat lengkap ahli tidak dijumpai.")
+                        _snackbarMessage.tryEmit(
+                            AppLanguageManager.tr(
+                                "Maklumat lengkap ahli tidak dijumpai.",
+                                "Full member details were not found."
+                            )
+                        )
                     }
                 }.onFailure { err ->
-                    _snackbarMessage.tryEmit(err.localizedMessage ?: "Gagal memuat maklumat ahli.")
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal memuat maklumat ahli.",
+                            "Failed to load member details."
+                        )
+                    )
                 }
             } finally {
                 _isLoadingMemberDetail.value = false
@@ -303,12 +339,22 @@ class BulletinViewModel(
                 val result = repository.getAllChurchMemberDetails(memberIds, isBootstrappedAdmin)
                 result.onSuccess { details ->
                     if (details.isEmpty()) {
-                        _snackbarMessage.tryEmit("Tiada senarai ahli untuk dieksport.")
+                        _snackbarMessage.tryEmit(
+                            AppLanguageManager.tr(
+                                "Tiada senarai ahli untuk dieksport.",
+                                "No members available to export."
+                            )
+                        )
                     } else {
                         onReady(details)
                     }
                 }.onFailure { err ->
-                    _snackbarMessage.tryEmit(err.localizedMessage ?: "Gagal menyediakan data eksport ahli.")
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menyediakan data eksport ahli.",
+                            "Failed to prepare member export data."
+                        )
+                    )
                 }
             } finally {
                 _isBusy.value = false
@@ -341,9 +387,18 @@ class BulletinViewModel(
                 ?.firstOrNull { it.id == existingId }?.published == false
         val willNotify = published && (existingId == null || previouslyDraft)
         val message = when {
-            willNotify -> "Berita dipublikasikan & notifikasi dikirim ke jemaat."
-            existingId == null -> "Draf berita berhasil disimpan."
-            else -> "Berita berhasil diperbarui."
+            willNotify -> AppLanguageManager.tr(
+                "Berita diterbitkan & notifikasi dihantar kepada jemaat.",
+                "News published & notification sent to the congregation."
+            )
+            existingId == null -> AppLanguageManager.tr(
+                "Draf berita berjaya disimpan.",
+                "News draft saved successfully."
+            )
+            else -> AppLanguageManager.tr(
+                "Berita berjaya dikemas kini.",
+                "News updated successfully."
+            )
         }
         runMutation(
             successMessage = message,
@@ -365,7 +420,7 @@ class BulletinViewModel(
     }
 
     fun deleteNews(newsId: String) {
-        runMutation("Berita telah dihapus.") {
+        runMutation(AppLanguageManager.tr("Berita telah dipadam.", "News item deleted.")) {
             repository.deleteNews(newsId)
         }
     }
@@ -389,9 +444,18 @@ class BulletinViewModel(
                 ?.firstOrNull { it.id == existingId }?.published == false
         val willNotify = published && (existingId == null || previouslyDraft)
         val message = when {
-            willNotify -> "Jadwal dipublikasikan & notifikasi dikirim ke jemaat."
-            existingId == null -> "Draf jadwal kegiatan berhasil disimpan."
-            else -> "Jadwal kegiatan berhasil diperbarui."
+            willNotify -> AppLanguageManager.tr(
+                "Jadual diterbitkan & notifikasi dihantar kepada jemaat.",
+                "Schedule published & notification sent to the congregation."
+            )
+            existingId == null -> AppLanguageManager.tr(
+                "Draf jadual kegiatan berjaya disimpan.",
+                "Activity schedule draft saved."
+            )
+            else -> AppLanguageManager.tr(
+                "Jadual kegiatan berjaya dikemas kini.",
+                "Activity schedule updated successfully."
+            )
         }
         runMutation(
             successMessage = message,
@@ -413,8 +477,27 @@ class BulletinViewModel(
     }
 
     fun deleteSchedule(scheduleId: String) {
-        runMutation("Jadwal kegiatan telah dihapus.") {
+        runMutation(AppLanguageManager.tr("Jadual kegiatan telah dipadam.", "Activity schedule deleted.")) {
             repository.deleteSchedule(scheduleId)
+        }
+    }
+
+    fun toggleScheduleFeaturedInNews(schedule: ChurchSchedule) {
+        if (!isAdmin.value) return
+        val nextFeatured = !schedule.featuredInNews
+        val message = if (nextFeatured) {
+            AppLanguageManager.tr(
+                "Kegiatan ditambah ke menu utama Berita (Penanda Penting).",
+                "Activity pinned to the News home feed (Important Highlight)."
+            )
+        } else {
+            AppLanguageManager.tr(
+                "Kegiatan dikeluarkan daripada menu utama Berita.",
+                "Activity removed from the News home feed."
+            )
+        }
+        runMutation(message) {
+            repository.setScheduleFeaturedInNews(schedule.id, nextFeatured)
         }
     }
 
@@ -432,7 +515,17 @@ class BulletinViewModel(
         onComplete: () -> Unit = {}
     ) {
         runMutation(
-            successMessage = if (existingId == null) "Foto berhasil ditambahkan ke galeri real-time." else "Info foto berhasil diperbarui.",
+            successMessage = if (existingId == null) {
+                AppLanguageManager.tr(
+                    "Foto berjaya ditambah ke galeri masa nyata.",
+                    "Photo added to the live gallery."
+                )
+            } else {
+                AppLanguageManager.tr(
+                    "Maklumat foto berjaya dikemas kini.",
+                    "Photo details updated successfully."
+                )
+            },
             onComplete = onComplete
         ) {
             if (existingId == null) {
@@ -450,28 +543,43 @@ class BulletinViewModel(
     }
 
     fun deleteGalleryPhoto(photoId: String) {
-        runMutation("Foto telah dihapus dari galeri.") {
+        runMutation(AppLanguageManager.tr("Foto telah dipadam daripada galeri.", "Photo deleted from gallery.")) {
             repository.deleteGalleryPhoto(photoId)
         }
     }
 
     fun togglePhotoLike(photoId: String) {
         if (isGuest) {
-            _snackbarMessage.tryEmit("Masuk dengan akun Google di tab Akun untuk memberi apresiasi foto.")
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Log masuk dengan akaun Google di tab Akaun untuk memberi tanda suka pada foto.",
+                    "Sign in with Google in the Account tab to like photos."
+                )
+            )
             return
         }
         val alreadyLiked = likedPhotoIds.value.contains(photoId)
         viewModelScope.launch {
             val result = repository.togglePhotoLike(photoId, alreadyLiked)
             result.onFailure { err ->
-                _snackbarMessage.tryEmit(err.localizedMessage ?: "Gagal memperbarui apresiasi foto.")
+                _snackbarMessage.tryEmit(
+                    err.localizedMessage ?: AppLanguageManager.tr(
+                        "Gagal mengemas kini tanda suka foto.",
+                        "Failed to update photo like."
+                    )
+                )
             }
         }
     }
 
     fun toggleBookmark(itemId: String, itemType: String, title: String) {
         if (isGuest) {
-            _snackbarMessage.tryEmit("Masuk dengan akun Google di tab Akun untuk menyimpan warta & jadwal.")
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Log masuk dengan akaun Google di tab Akaun untuk menyimpan warta & jadual.",
+                    "Sign in with Google in the Account tab to bookmark news & schedules."
+                )
+            )
             return
         }
         val alreadyBookmarked = bookmarks.value.any { it.itemId == itemId && it.itemType == itemType }
@@ -479,29 +587,46 @@ class BulletinViewModel(
             val result = repository.toggleBookmark(itemId, itemType, title, alreadyBookmarked)
             result.onSuccess {
                 _snackbarMessage.tryEmit(
-                    if (alreadyBookmarked) "Dihapus dari daftar tersimpan."
-                    else "Disimpan ke daftar pribadi Anda."
+                    if (alreadyBookmarked) {
+                        AppLanguageManager.tr(
+                            "Dibuang daripada senarai tersimpan.",
+                            "Removed from your saved list."
+                        )
+                    } else {
+                        AppLanguageManager.tr(
+                            "Disimpan ke senarai peribadi anda.",
+                            "Saved to your personal bookmarks."
+                        )
+                    }
                 )
             }.onFailure { err ->
-                _snackbarMessage.tryEmit(err.localizedMessage ?: "Gagal memperbarui simpanan.")
+                _snackbarMessage.tryEmit(
+                    err.localizedMessage ?: AppLanguageManager.tr(
+                        "Gagal mengemas kini senarai simpanan.",
+                        "Failed to update bookmarks."
+                    )
+                )
             }
         }
     }
 
     fun saveProfile(displayName: String, fellowshipGroup: FellowshipGroup) {
-        runMutation("Profil jemaat berhasil disimpan.") {
-            repository.saveUserProfile(displayName, fellowshipGroup, userProfile.value)
+        runMutation(AppLanguageManager.tr("Profil jemaat berjaya disimpan.", "Member profile saved successfully.")) {
+            repository.saveUserProfile(displayName, fellowshipGroup, userProfile.value, userEmail)
         }
     }
 
     fun addAdminMember(targetUid: String, displayName: String, roleTitle: String, onComplete: () -> Unit = {}) {
-        runMutation("Pengurus admin berhasil ditambahkan.", onComplete) {
+        runMutation(
+            AppLanguageManager.tr("Pengurus admin berjaya ditambah.", "Admin member added successfully."),
+            onComplete
+        ) {
             repository.addAdminMember(targetUid, displayName, roleTitle)
         }
     }
 
     fun removeAdminMember(targetUid: String) {
-        runMutation("Akses admin pengurus telah dicabut.") {
+        runMutation(AppLanguageManager.tr("Akses admin pengurus telah ditarik balik.", "Admin access revoked.")) {
             repository.removeAdminMember(targetUid)
         }
     }
@@ -513,10 +638,15 @@ class BulletinViewModel(
         birthDateIso: String,
         baptismStatus: BaptismStatus,
         denomination: String,
+        maritalStatus: MaritalStatus,
         onComplete: () -> Unit = {}
     ) {
         runMutation(
-            successMessage = if (existingId == null) "Ahli jemaat berjaya didaftarkan." else "Maklumat ahli berjaya dikemas kini.",
+            successMessage = if (existingId == null) {
+                AppLanguageManager.tr("Ahli jemaat berjaya didaftarkan.", "Congregation member registered successfully.")
+            } else {
+                AppLanguageManager.tr("Maklumat ahli berjaya dikemas kini.", "Member information updated successfully.")
+            },
             onComplete = {
                 if (existingId != null && _selectedMemberDetail.value?.id == existingId) {
                     _selectedMemberDetail.value = _selectedMemberDetail.value?.copy(
@@ -524,7 +654,8 @@ class BulletinViewModel(
                         gender = gender.code,
                         birthDate = birthDateIso.trim(),
                         baptismStatus = baptismStatus.code,
-                        denomination = denomination.trim()
+                        denomination = denomination.trim(),
+                        maritalStatus = maritalStatus.code
                     )
                 }
                 onComplete()
@@ -532,11 +663,11 @@ class BulletinViewModel(
         ) {
             if (existingId == null) {
                 repository.createChurchMember(
-                    fullName, gender, birthDateIso, baptismStatus, denomination
+                    fullName, gender, birthDateIso, baptismStatus, denomination, maritalStatus
                 )
             } else {
                 repository.updateChurchMember(
-                    existingId, fullName, gender, birthDateIso, baptismStatus, denomination
+                    existingId, fullName, gender, birthDateIso, baptismStatus, denomination, maritalStatus
                 )
             }
         }
@@ -544,7 +675,10 @@ class BulletinViewModel(
 
     fun deleteChurchMember(memberId: String, onComplete: () -> Unit = {}) {
         runMutation(
-            successMessage = "Ahli jemaat telah dipadam daripada senarai.",
+            successMessage = AppLanguageManager.tr(
+                "Ahli jemaat telah dipadam daripada senarai.",
+                "Member removed from the directory."
+            ),
             onComplete = {
                 if (_selectedMemberDetail.value?.id == memberId) {
                     _selectedMemberDetail.value = null
@@ -579,7 +713,12 @@ class BulletinViewModel(
                     _snackbarMessage.tryEmit(successMessage)
                     onComplete()
                 }.onFailure { err ->
-                    _snackbarMessage.tryEmit(err.localizedMessage ?: "Terjadi kesalahan saat menyimpan data.")
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Ralat berlaku semasa menyimpan data.",
+                            "An error occurred while saving data."
+                        )
+                    )
                 }
             } finally {
                 _isBusy.value = false

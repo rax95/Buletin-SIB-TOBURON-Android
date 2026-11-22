@@ -1,6 +1,8 @@
 package com.example.data
 
 import androidx.annotation.Keep
+import com.example.ui.i18n.AppLanguage
+import com.example.ui.i18n.AppLanguageManager
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
@@ -16,12 +18,15 @@ sealed interface UiState<out T> {
     data class Error(val message: String) : UiState<Nothing>
 }
 
-enum class NewsCategory(val code: String, val label: String) {
-    WARTA("WARTA", "Warta Jemaat"),
-    PENGUMUMAN("PENGUMUMAN", "Pengumuman"),
-    RENUNGAN("RENUNGAN", "Renungan"),
-    PELAYANAN("PELAYANAN", "Pelayanan"),
-    PEMUDA("PEMUDA", "Pemuda");
+enum class NewsCategory(val code: String, val label: String, val labelEn: String) {
+    WARTA("WARTA", "Warta Jemaat", "Church Bulletin"),
+    PENGUMUMAN("PENGUMUMAN", "Pengumuman", "Announcements"),
+    RENUNGAN("RENUNGAN", "Renungan", "Devotional"),
+    PELAYANAN("PELAYANAN", "Pelayanan", "Ministry"),
+    PEMUDA("PEMUDA", "Belia & Pemuda", "Youth");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): NewsCategory =
@@ -29,13 +34,16 @@ enum class NewsCategory(val code: String, val label: String) {
     }
 }
 
-enum class ScheduleCategory(val code: String, val label: String) {
-    IBADAH("IBADAH", "Ibadah Raya"),
-    DOA("DOA", "Persekutuan Doa"),
-    PEMUDA("PEMUDA", "Pemuda & Remaja"),
-    SEKOLAH_MINGGU("SEKOLAH_MINGGU", "Sekolah Minggu"),
-    PERSEKUTUAN("PERSEKUTUAN", "Persekutuan"),
-    RAPAT("RAPAT", "Rapat Pelayanan");
+enum class ScheduleCategory(val code: String, val label: String, val labelEn: String) {
+    IBADAH("IBADAH", "Ibadah Raya", "Sunday Worship"),
+    DOA("DOA", "Persekutuan Doa", "Prayer Fellowship"),
+    PEMUDA("PEMUDA", "Belia & Remaja", "Youth & Teens"),
+    SEKOLAH_MINGGU("SEKOLAH_MINGGU", "Sekolah Minggu", "Sunday School"),
+    PERSEKUTUAN("PERSEKUTUAN", "Persekutuan", "Fellowship"),
+    RAPAT("RAPAT", "Mesyuarat Pelayanan", "Ministry Meeting");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): ScheduleCategory =
@@ -43,12 +51,15 @@ enum class ScheduleCategory(val code: String, val label: String) {
     }
 }
 
-enum class GalleryCategory(val code: String, val label: String) {
-    IBADAH("IBADAH", "Ibadah"),
-    PEMUDA("PEMUDA", "Pemuda"),
-    SEKOLAH_MINGGU("SEKOLAH_MINGGU", "Sekolah Minggu"),
-    PELAYANAN("PELAYANAN", "Pelayanan"),
-    UMUM("UMUM", "Kebersamaan");
+enum class GalleryCategory(val code: String, val label: String, val labelEn: String) {
+    IBADAH("IBADAH", "Ibadah", "Worship"),
+    PEMUDA("PEMUDA", "Belia", "Youth"),
+    SEKOLAH_MINGGU("SEKOLAH_MINGGU", "Sekolah Minggu", "Sunday School"),
+    PELAYANAN("PELAYANAN", "Pelayanan", "Ministry"),
+    UMUM("UMUM", "Kebersamaan", "Fellowship");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): GalleryCategory =
@@ -56,11 +67,14 @@ enum class GalleryCategory(val code: String, val label: String) {
     }
 }
 
-enum class CoverPreset(val code: String, val label: String) {
-    SANCTUARY("SANCTUARY", "Gedung SIB Toburon"),
-    WORSHIP("WORSHIP", "Pujian & Penyembahan"),
-    FELLOWSHIP("FELLOWSHIP", "Persekutuan Jemaat"),
-    CUSTOM("CUSTOM", "Foto Kustom");
+enum class CoverPreset(val code: String, val label: String, val labelEn: String) {
+    SANCTUARY("SANCTUARY", "Bangunan SIB Toburon", "SIB Toburon Sanctuary"),
+    WORSHIP("WORSHIP", "Pujian & Penyembahan", "Praise & Worship"),
+    FELLOWSHIP("FELLOWSHIP", "Persekutuan Jemaat", "Congregation Fellowship"),
+    CUSTOM("CUSTOM", "Foto Tersuai", "Custom Photo");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): CoverPreset =
@@ -68,13 +82,16 @@ enum class CoverPreset(val code: String, val label: String) {
     }
 }
 
-enum class FellowshipGroup(val code: String, val label: String) {
-    UMUM("UMUM", "Jemaat Umum"),
-    PEMUDA("PEMUDA", "Pemuda & Remaja (PPR)"),
-    KAUM_IBU("KAUM_IBU", "Persekutuan Wanita (PW)"),
-    KAUM_BAPAK("KAUM_BAPAK", "Persekutuan Pria (PP)"),
-    SEKOLAH_MINGGU("SEKOLAH_MINGGU", "Sekolah Minggu"),
-    PELAYAN("PELAYAN", "Pelayan & Majelis");
+enum class FellowshipGroup(val code: String, val label: String, val labelEn: String) {
+    UMUM("UMUM", "Jemaat Umum", "General Congregation"),
+    PEMUDA("PEMUDA", "Belia & Remaja (PMM)", "Youth & Teens"),
+    KAUM_IBU("KAUM_IBU", "Persekutuan Wanita (PW)", "Women's Fellowship"),
+    KAUM_BAPAK("KAUM_BAPAK", "Persekutuan Kaum Bapa (PKB)", "Men's Fellowship"),
+    SEKOLAH_MINGGU("SEKOLAH_MINGGU", "Sekolah Minggu", "Sunday School"),
+    PELAYAN("PELAYAN", "Pelayan & Majlis", "Ministers & Elders");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): FellowshipGroup =
@@ -118,6 +135,7 @@ data class ChurchSchedule(
     val sortOrder: Long = 0L,
     val recurring: Boolean = false,
     val published: Boolean = true,
+    val featuredInNews: Boolean = false,
     val authorId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -162,9 +180,11 @@ data class AdminMember(
 data class UserProfile(
     @DocumentId val id: String = "",
     val displayName: String = "",
+    val email: String = "",
     val fellowshipGroup: String = FellowshipGroup.UMUM.code,
     @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    @ServerTimestamp val updatedAt: Timestamp? = null,
+    @ServerTimestamp val lastLoginAt: Timestamp? = null
 ) {
     fun resolvedGroup(): FellowshipGroup = FellowshipGroup.fromCode(fellowshipGroup)
 }
@@ -210,9 +230,12 @@ data class BulletinAlert(
     val authorId: String
 )
 
-enum class MemberGender(val code: String, val label: String) {
-    LELAKI("LELAKI", "Lelaki"),
-    PEREMPUAN("PEREMPUAN", "Perempuan");
+enum class MemberGender(val code: String, val label: String, val labelEn: String) {
+    LELAKI("LELAKI", "Lelaki", "Male"),
+    PEREMPUAN("PEREMPUAN", "Perempuan", "Female");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): MemberGender =
@@ -220,13 +243,31 @@ enum class MemberGender(val code: String, val label: String) {
     }
 }
 
-enum class BaptismStatus(val code: String, val label: String) {
-    DIBAPTIS("DIBAPTIS", "Dibaptis"),
-    BELUM_DIBAPTIS("BELUM_DIBAPTIS", "Belum Dibaptis");
+enum class BaptismStatus(val code: String, val label: String, val labelEn: String) {
+    DIBAPTIS("DIBAPTIS", "Dibaptis", "Baptized"),
+    BELUM_DIBAPTIS("BELUM_DIBAPTIS", "Belum Dibaptis", "Not Yet Baptized");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
 
     companion object {
         fun fromCode(raw: String?): BaptismStatus =
             entries.firstOrNull { it.code == raw } ?: BELUM_DIBAPTIS
+    }
+}
+
+enum class MaritalStatus(val code: String, val label: String, val labelEn: String) {
+    BUJANG("BUJANG", "Bujang", "Single"),
+    BERKAHWIN("BERKAHWIN", "Berkahwin", "Married"),
+    BALU_DUDA("BALU_DUDA", "Balu / Duda", "Widowed"),
+    BERCERAI("BERCERAI", "Bercerai", "Divorced");
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) labelEn else label
+
+    companion object {
+        fun fromCode(raw: String?): MaritalStatus =
+            entries.firstOrNull { it.code == raw } ?: BUJANG
     }
 }
 
@@ -242,11 +283,13 @@ data class ChurchMemberPublic(
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
-    fun resolvedGenderLabel(): String =
-        MemberGender.entries.firstOrNull { it.code == gender }?.label ?: "Belum dikemas kini"
+    fun resolvedGenderLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        MemberGender.entries.firstOrNull { it.code == gender }?.localizedLabel(lang)
+            ?: if (lang == AppLanguage.EN) "Not yet updated" else "Belum dikemas kini"
 
-    fun resolvedBaptismLabel(): String =
-        BaptismStatus.entries.firstOrNull { it.code == baptismStatus }?.label ?: "Belum dikemas kini"
+    fun resolvedBaptismLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        BaptismStatus.entries.firstOrNull { it.code == baptismStatus }?.localizedLabel(lang)
+            ?: if (lang == AppLanguage.EN) "Not yet updated" else "Belum dikemas kini"
 }
 
 @Keep
@@ -258,12 +301,17 @@ data class ChurchMemberDetail(
     val birthDate: String = "",
     val baptismStatus: String = BaptismStatus.BELUM_DIBAPTIS.code,
     val denomination: String = "SIB",
+    val maritalStatus: String = "",
     val authorId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     fun resolvedGender(): MemberGender = MemberGender.fromCode(gender)
     fun resolvedBaptismStatus(): BaptismStatus = BaptismStatus.fromCode(baptismStatus)
+    fun resolvedMaritalStatus(): MaritalStatus = MaritalStatus.fromCode(maritalStatus)
+    fun resolvedMaritalStatusLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        MaritalStatus.entries.firstOrNull { it.code == maritalStatus }?.localizedLabel(lang)
+            ?: if (lang == AppLanguage.EN) "Not yet updated" else "Belum dikemas kini"
     fun calculatedAge(): Int? = calculateAgeFromIsoDate(birthDate)
 }
 
@@ -305,7 +353,7 @@ fun calculateAgeFromIsoDate(isoDate: String): Int? {
 /**
  * Formats an ISO date ("YYYY-MM-DD") into a readable date string (e.g. "14 Jun 1995").
  */
-fun formatBirthDateReadable(isoDate: String): String {
+fun formatBirthDateReadable(isoDate: String, lang: AppLanguage = AppLanguageManager.current()): String {
     val parts = isoDate.trim().split("-")
     if (parts.size != 3) return isoDate
     val year = parts[0].toIntOrNull() ?: return isoDate
@@ -315,7 +363,7 @@ fun formatBirthDateReadable(isoDate: String): String {
     val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
         set(year, month - 1, day, 0, 0, 0)
     }
-    val fmt = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).apply {
+    val fmt = SimpleDateFormat("dd MMM yyyy", lang.locale).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
     return fmt.format(cal.time)

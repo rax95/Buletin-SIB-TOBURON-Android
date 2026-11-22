@@ -122,6 +122,10 @@
           "type": "boolean",
           "description": "Status publikasi jadwal ke seluruh jemaat"
         },
+        "featuredInNews": {
+          "type": "boolean",
+          "description": "Penanda kegiatan penting yang ditampilkan di atas pencarian pada menu utama Berita"
+        },
         "authorId": {
           "type": "string",
           "description": "UID admin pembuat jadwal"
@@ -256,12 +260,16 @@
     },
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Profil pribadi jemaat SIB Toburon (terisolasi per pemilik akun).",
+      "description": "Profil pribadi jemaat SIB Toburon (pemilik akun dapat membaca/mengedit; Admin dapat memantau daftar pengguna login Google).",
       "type": "object",
       "properties": {
         "displayName": {
           "type": "string",
           "description": "Nama tampilan jemaat (1-80 karakter)"
+        },
+        "email": {
+          "type": "string",
+          "description": "Alamat email akun Google pengguna (opsional, maks 160 karakter)"
         },
         "fellowshipGroup": {
           "type": "string",
@@ -277,6 +285,11 @@
           "type": "string",
           "format": "date-time",
           "description": "Waktu pembaruan profil (FieldValue.serverTimestamp())"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu login Google terakhir (FieldValue.serverTimestamp())"
         }
       },
       "required": ["displayName", "fellowshipGroup", "createdAt", "updatedAt"]
@@ -458,6 +471,11 @@
         "denomination": {
           "type": "string",
           "description": "Denominasi gereja (1-80 karakter)"
+        },
+        "maritalStatus": {
+          "type": "string",
+          "enum": ["BUJANG", "BERKAHWIN", "BALU_DUDA", "BERCERAI"],
+          "description": "Status perkahwinan (Marital Status) ahli jemaat"
         },
         "authorId": {
           "type": "string",

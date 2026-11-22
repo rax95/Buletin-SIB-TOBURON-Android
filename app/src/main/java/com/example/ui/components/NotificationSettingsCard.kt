@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.notifications.BulletinNotificationManager
+import com.example.ui.i18n.tr
 
 @Composable
 fun NotificationSettingsCard(
@@ -101,7 +102,7 @@ fun NotificationSettingsCard(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = stringResource(R.string.notif_title_section),
+                        text = tr("Notifikasi Tolak Masa Nyata (FCM)", "Real-Time Push Notifications (FCM)"),
                         style = MaterialTheme.typography.titleLarge
                     )
                 }
@@ -112,7 +113,7 @@ fun NotificationSettingsCard(
                     else MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(
-                        text = if (hasPermission) "Aktif" else "Belum Aktif",
+                        text = if (hasPermission) tr("Aktif", "Active") else tr("Belum Aktif", "Inactive"),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (hasPermission) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.onErrorContainer,
@@ -123,9 +124,12 @@ fun NotificationSettingsCard(
 
             Text(
                 text = if (hasPermission) {
-                    stringResource(R.string.notif_permission_granted)
+                    tr("Kebenaran Notifikasi Aktif", "Notification Permission Active")
                 } else {
-                    "Aktifkan izin notifikasi perangkat agar tidak melewatkan warta jemaat dan jadwal ibadah terbaru SIB Toburon."
+                    tr(
+                        "Aktifkan kebenaran notifikasi peranti agar tidak terlepas warta jemaat dan jadual ibadah terbaharu SIB Toburon.",
+                        "Enable device notification permission so you never miss the latest SIB Toburon news and worship schedules."
+                    )
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -149,7 +153,7 @@ fun NotificationSettingsCard(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = stringResource(R.string.notif_enable_permission),
+                        text = tr("Aktifkan Kebenaran Notifikasi", "Enable Notification Permission"),
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -176,11 +180,11 @@ fun NotificationSettingsCard(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = stringResource(R.string.notif_news_toggle),
+                            text = tr("Berita & Warta Terkini", "Latest Church News"),
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            text = "Topik FCM: ${BulletinNotificationManager.TOPIC_NEWS}",
+                            text = tr("Topik FCM: ", "FCM Topic: ") + BulletinNotificationManager.TOPIC_NEWS,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -217,11 +221,11 @@ fun NotificationSettingsCard(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = stringResource(R.string.notif_schedules_toggle),
+                            text = tr("Jadual Kegiatan Gereja", "Church Event Schedules"),
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            text = "Topik FCM: ${BulletinNotificationManager.TOPIC_SCHEDULES}",
+                            text = tr("Topik FCM: ", "FCM Topic: ") + BulletinNotificationManager.TOPIC_SCHEDULES,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -246,7 +250,10 @@ fun NotificationSettingsCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Info Admin: Setiap Berita atau Jadwal yang dipublikasikan otomatis mencatat event ke koleksi notification_events dan langsung memicu notifikasi real-time untuk jemaat.",
+                        text = tr(
+                            "Info Admin: Setiap Berita atau Jadual yang diterbitkan akan mencetuskan notifikasi masa nyata secara automatik kepada jemaat.",
+                            "Admin Info: Every published News article or Schedule automatically triggers real-time push notifications to the congregation."
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(12.dp)

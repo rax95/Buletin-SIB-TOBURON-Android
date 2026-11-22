@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,9 +27,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -41,6 +47,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,16 +58,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.ChurchSchedule
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
 import com.example.data.UiState
@@ -71,10 +80,13 @@ import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.formatIndonesianTimestamp
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 
 @Composable
 fun NewsScreen(
     newsState: UiState<List<NewsArticle>>,
+    featuredSchedules: List<ChurchSchedule>,
     searchQuery: String,
     selectedCategory: NewsCategory?,
     bookmarkedIds: Set<String>,
@@ -85,6 +97,8 @@ fun NewsScreen(
     onSearchQueryChange: (String) -> Unit,
     onSelectCategory: (NewsCategory?) -> Unit,
     onToggleBookmark: (NewsArticle) -> Unit,
+    onOpenFeaturedSchedule: (ChurchSchedule) -> Unit,
+    onRemoveFeaturedSchedule: (ChurchSchedule) -> Unit,
     onEditNews: (NewsArticle) -> Unit,
     onDeleteNews: (NewsArticle) -> Unit,
     onAddNews: () -> Unit,
@@ -143,6 +157,7 @@ fun NewsScreen(
         Row(modifier = modifier.fillMaxSize()) {
             NewsListPane(
                 newsState = newsState,
+                featuredSchedules = featuredSchedules,
                 filteredArticles = filteredArticles,
                 searchQuery = searchQuery,
                 selectedCategory = selectedCategory,
@@ -153,6 +168,8 @@ fun NewsScreen(
                 onSelectCategory = onSelectCategory,
                 onArticleClick = { selectedArticleId = it.id },
                 onToggleBookmark = onToggleBookmark,
+                onOpenFeaturedSchedule = onOpenFeaturedSchedule,
+                onRemoveFeaturedSchedule = onRemoveFeaturedSchedule,
                 onAddNews = onAddNews,
                 modifier = Modifier
                     .weight(0.46f)
@@ -182,8 +199,11 @@ fun NewsScreen(
                 } else {
                     EmptyBulletinState(
                         icon = Icons.Filled.Newspaper,
-                        title = "Pilih Berita untuk Membaca",
-                        description = "Ketuk salah satu warta di panel kiri untuk membaca berita lengkap SIB Toburon.",
+                        title = tr("Pilih Berita untuk Membaca", "Select News to Read"),
+                        description = tr(
+                            "Ketik salah satu warta di panel kiri untuk membaca berita lengkap SIB Toburon.",
+                            "Tap any bulletin article on the left panel to read the full SIB Toburon news."
+                        ),
                         isAdmin = false
                     )
                 }
@@ -192,6 +212,7 @@ fun NewsScreen(
     } else {
         NewsListPane(
             newsState = newsState,
+            featuredSchedules = featuredSchedules,
             filteredArticles = filteredArticles,
             searchQuery = searchQuery,
             selectedCategory = selectedCategory,
@@ -202,6 +223,8 @@ fun NewsScreen(
             onSelectCategory = onSelectCategory,
             onArticleClick = { selectedArticleId = it.id },
             onToggleBookmark = onToggleBookmark,
+            onOpenFeaturedSchedule = onOpenFeaturedSchedule,
+            onRemoveFeaturedSchedule = onRemoveFeaturedSchedule,
             onAddNews = onAddNews,
             modifier = modifier.fillMaxSize()
         )
@@ -211,6 +234,7 @@ fun NewsScreen(
 @Composable
 private fun NewsListPane(
     newsState: UiState<List<NewsArticle>>,
+    featuredSchedules: List<ChurchSchedule>,
     filteredArticles: List<NewsArticle>,
     searchQuery: String,
     selectedCategory: NewsCategory?,
@@ -221,6 +245,8 @@ private fun NewsListPane(
     onSelectCategory: (NewsCategory?) -> Unit,
     onArticleClick: (NewsArticle) -> Unit,
     onToggleBookmark: (NewsArticle) -> Unit,
+    onOpenFeaturedSchedule: (ChurchSchedule) -> Unit,
+    onRemoveFeaturedSchedule: (ChurchSchedule) -> Unit,
     onAddNews: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -233,21 +259,35 @@ private fun NewsListPane(
             SanctuaryHeroHeader(isAdmin = isAdmin)
         }
 
+        // Featured Important Church Schedules displayed RIGHT ABOVE the Search Bar
+        if (featuredSchedules.isNotEmpty()) {
+            items(featuredSchedules, key = { "featured_schedule_${it.id}" }) { schedule ->
+                FeaturedImportantScheduleCard(
+                    schedule = schedule,
+                    isAdmin = isAdmin,
+                    onClick = { onOpenFeaturedSchedule(schedule) },
+                    onRemove = { onRemoveFeaturedSchedule(schedule) },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        }
+
         item(key = "search_bar") {
             EditorialSearchBar(
                 query = searchQuery,
                 onQueryChange = onSearchQueryChange,
-                placeholder = stringResource(R.string.search_news_hint),
+                placeholder = tr("Cari warta atau pengumuman...", "Search news or announcements..."),
                 testTagName = "news_search_input",
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
 
         item(key = "category_chips") {
+            val lang = LocalAppLanguage.current
             CategoryFilterRow(
                 items = NewsCategory.entries,
                 selected = selectedCategory,
-                labelProvider = { it.label },
+                labelProvider = { it.localizedLabel(lang) },
                 onSelect = onSelectCategory
             )
         }
@@ -275,12 +315,24 @@ private fun NewsListPane(
                     item(key = "empty_news") {
                         EmptyBulletinState(
                             icon = Icons.Filled.Newspaper,
-                            title = if (newsState.data.isEmpty()) stringResource(R.string.empty_news_title)
-                            else "Berita Tidak Ditemukan",
-                            description = if (newsState.data.isEmpty()) stringResource(R.string.empty_news_desc)
-                            else "Coba ubah kata kunci pencarian atau pilih kategori lain.",
+                            title = if (newsState.data.isEmpty()) {
+                                tr("Belum Ada Berita Gereja", "No Church News Yet")
+                            } else {
+                                tr("Berita Tidak Dijumpai", "No News Found")
+                            },
+                            description = if (newsState.data.isEmpty()) {
+                                tr(
+                                    "Warta jemaat SIB Toburon akan dipaparkan secara automatik di sini sebaik sahaja diterbitkan oleh Admin.",
+                                    "SIB Toburon church news will appear here automatically once published by an Admin."
+                                )
+                            } else {
+                                tr(
+                                    "Cuba ubah kata kunci carian atau pilih kategori lain.",
+                                    "Try changing your search keywords or selecting another category."
+                                )
+                            },
                             isAdmin = isAdmin && newsState.data.isEmpty(),
-                            primaryActionLabel = stringResource(R.string.action_add_news),
+                            primaryActionLabel = tr("Tulis Berita", "Write News"),
                             onPrimaryAction = onAddNews
                         )
                     }
@@ -302,6 +354,187 @@ private fun NewsListPane(
 }
 
 @Composable
+private fun FeaturedImportantScheduleCard(
+    schedule: ChurchSchedule,
+    isAdmin: Boolean,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val ribbonColor = MaterialTheme.colorScheme.error
+    val onRibbonColor = MaterialTheme.colorScheme.onError
+
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        ),
+        border = BorderStroke(1.5.dp, ribbonColor.copy(alpha = 0.38f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag("featured_schedule_card_${schedule.id}")
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+        ) {
+            // Card Content with generous right padding on top so text never collides with corner ribbon
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 68.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = schedule.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    if (!schedule.published) {
+                        Icon(
+                            imageVector = Icons.Filled.VisibilityOff,
+                            contentDescription = tr("Draf", "Draft"),
+                            tint = ribbonColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = schedule.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 56.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "${schedule.dateLabel} • ${schedule.timeLabel}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = schedule.location,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = tr("Lihat butiran kegiatan", "View event details"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    if (isAdmin) {
+                        TextButton(
+                            onClick = onRemove,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.testTag("remove_featured_schedule_${schedule.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = tr("Keluarkan dari Berita", "Remove from News"),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = tr("Keluarkan", "Remove"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Diagonal Top-Right Corner Ribbon ("PENTING" / "IMPORTANT")
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 34.dp, y = 16.dp)
+                    .rotate(45f)
+                    .width(124.dp)
+                    .background(ribbonColor)
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = tr("PENTING", "IMPORTANT"),
+                    color = onRibbonColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.2.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun SanctuaryHeroHeader(isAdmin: Boolean) {
     Box(
         modifier = Modifier
@@ -312,7 +545,7 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
     ) {
         Image(
             painter = painterResource(id = R.drawable.img_hero_sanctuary),
-            contentDescription = stringResource(R.string.cd_sanctuary_banner),
+            contentDescription = tr("Ilustrasi Gereja SIB Toburon", "SIB Toburon Church Illustration"),
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -346,7 +579,7 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
                         color = MaterialTheme.colorScheme.secondary
                     ) {
                         Text(
-                            text = stringResource(R.string.admin_badge),
+                            text = tr("Admin Buletin", "Bulletin Admin"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -357,13 +590,16 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
 
             Column {
                 Text(
-                    text = stringResource(R.string.app_name),
+                    text = tr("Buletin SIB Toburon", "SIB Toburon Bulletin"),
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color.White
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(R.string.church_motto),
+                    text = tr(
+                        "Bersatu dalam Kasih, Bertumbuh dalam Iman",
+                        "United in Love, Growing in Faith"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.88f)
                 )
@@ -429,7 +665,7 @@ private fun NewsArticleCard(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
                     ) {
                         Text(
-                            text = article.resolvedCategory().label,
+                            text = article.resolvedCategory().localizedLabel(LocalAppLanguage.current),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -452,7 +688,7 @@ private fun NewsArticleCard(
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = "Utama",
+                                    text = tr("Utama", "Featured"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSecondary
                                 )
@@ -476,7 +712,7 @@ private fun NewsArticleCard(
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = "Draf",
+                                    text = tr("Draf", "Draft"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onError
                                 )
@@ -498,7 +734,7 @@ private fun NewsArticleCard(
                     ) {
                         Icon(
                             imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = stringResource(R.string.cd_bookmark_toggle),
+                            contentDescription = tr("Simpan penanda buku", "Toggle bookmark"),
                             tint = if (isBookmarked) MaterialTheme.colorScheme.secondaryContainer else Color.White
                         )
                     }
@@ -534,7 +770,7 @@ private fun NewsArticleCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = formatIndonesianTimestamp(article.updatedAt ?: article.createdAt),
+                        text = formatIndonesianTimestamp(article.updatedAt ?: article.createdAt, LocalAppLanguage.current),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -594,7 +830,7 @@ private fun NewsDetailPane(
                         IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.cd_navigate_back),
+                                contentDescription = tr("Kembali", "Back"),
                                 tint = Color.White
                             )
                         }
@@ -608,7 +844,7 @@ private fun NewsDetailPane(
                         IconButton(onClick = onToggleBookmark, modifier = Modifier.size(48.dp)) {
                             Icon(
                                 imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = stringResource(R.string.cd_bookmark_toggle),
+                                contentDescription = tr("Simpan penanda buku", "Toggle bookmark"),
                                 tint = if (isBookmarked) MaterialTheme.colorScheme.secondaryContainer else Color.White
                             )
                         }
@@ -618,7 +854,7 @@ private fun NewsDetailPane(
                             IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = stringResource(R.string.action_edit),
+                                    contentDescription = tr("Edit", "Edit"),
                                     tint = Color.White
                                 )
                             }
@@ -627,7 +863,7 @@ private fun NewsDetailPane(
                             IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
-                                    contentDescription = stringResource(R.string.action_delete),
+                                    contentDescription = tr("Padam", "Delete"),
                                     tint = Color.White
                                 )
                             }
@@ -638,6 +874,7 @@ private fun NewsDetailPane(
         }
 
         Column(modifier = Modifier.padding(20.dp)) {
+            val lang = LocalAppLanguage.current
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -647,7 +884,7 @@ private fun NewsDetailPane(
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
-                        text = article.resolvedCategory().label,
+                        text = article.resolvedCategory().localizedLabel(lang),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
@@ -659,7 +896,7 @@ private fun NewsDetailPane(
                         color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
                     ) {
                         Text(
-                            text = "Belum Dipublikasi (Draf)",
+                            text = tr("Belum Diterbitkan (Draf)", "Unpublished (Draft)"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -675,8 +912,10 @@ private fun NewsDetailPane(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(8.dp))
+            val defaultAuthor = tr("Setiausaha SIB Toburon", "SIB Toburon Secretariat")
+            val byPrefix = tr("Oleh", "By")
             Text(
-                text = "Oleh ${article.authorName.ifBlank { "Sekretariat SIB Toburon" }} • ${formatIndonesianTimestamp(article.updatedAt ?: article.createdAt)}",
+                text = "$byPrefix ${article.authorName.ifBlank { defaultAuthor }} • ${formatIndonesianTimestamp(article.updatedAt ?: article.createdAt, lang)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

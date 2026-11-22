@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import com.example.ui.i18n.AppLanguageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -37,7 +38,8 @@ object MemberExportUtils {
 
     fun suggestedFileName(format: MemberExportFormat): String {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
-        return "Senarai_Ahli_SIB_Toburon_${stamp}.${format.extension}"
+        val prefix = AppLanguageManager.tr("Senarai_Ahli_SIB_Toburon", "SIB_Toburon_Members_List")
+        return "${prefix}_${stamp}.${format.extension}"
     }
 
     suspend fun exportMembersToUri(
@@ -52,7 +54,12 @@ object MemberExportUtils {
                 MemberExportFormat.PDF -> buildPdfDocumentBytes(members)
             }
             val outputStream: OutputStream = context.contentResolver.openOutputStream(uri)
-                ?: throw IllegalStateException("Tidak dapat membuka storan peranti untuk menyimpan fail.")
+                ?: throw IllegalStateException(
+                    AppLanguageManager.tr(
+                        "Tidak dapat membuka storan peranti untuk menyimpan fail.",
+                        "Unable to open device storage to save the file."
+                    )
+                )
             outputStream.use { out ->
                 out.write(bytes)
                 out.flush()
@@ -68,26 +75,43 @@ object MemberExportUtils {
      * Opens natively in Microsoft Excel, Google Sheets, WPS Office, and LibreOffice.
      */
     private fun buildExcelWorkbookBytes(members: List<ChurchMemberDetail>): ByteArray {
-        val exportTimestamp = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID")).format(Date())
+        val lang = AppLanguageManager.current()
+        val exportTimestamp = SimpleDateFormat("dd MMM yyyy, HH:mm", lang.locale).format(Date())
         val headers = listOf(
-            "No",
-            "Nama Penuh",
-            "Jantina",
-            "Tarikh Lahir",
-            "Umur (Tahun)",
-            "Status Baptisan",
-            "Denominasi"
+            AppLanguageManager.tr("Bil", "No"),
+            AppLanguageManager.tr("Nama Penuh", "Full Name"),
+            AppLanguageManager.tr("Jantina", "Gender"),
+            AppLanguageManager.tr("Tarikh Lahir", "Date of Birth"),
+            AppLanguageManager.tr("Umur (Tahun)", "Age (Years)"),
+            AppLanguageManager.tr("Status Baptisan", "Baptism Status"),
+            AppLanguageManager.tr("Denominasi", "Denomination"),
+            AppLanguageManager.tr("Status Perkahwinan", "Marital Status")
         )
 
         val rowsXml = StringBuilder()
         // Title row (Row 1)
         rowsXml.append("""<row r="1" ht="24" customHeight="1">""")
-        rowsXml.append(inlineStringCell("A1", "SENARAI AHLI JEMAAT SIB TOBURON", style = 2))
+        rowsXml.append(
+            inlineStringCell(
+                "A1",
+                AppLanguageManager.tr("SENARAI AHLI JEMAAT SIB TOBURON", "SIB TOBURON CONGREGATION MEMBERS LIST"),
+                style = 2
+            )
+        )
         rowsXml.append("""</row>""")
 
         // Subtitle / Export metadata row (Row 2)
         rowsXml.append("""<row r="2" ht="18" customHeight="1">""")
-        rowsXml.append(inlineStringCell("A2", "Dieksport pada: $exportTimestamp  •  Jumlah Ahli: ${members.size}", style = 3))
+        rowsXml.append(
+            inlineStringCell(
+                "A2",
+                AppLanguageManager.tr(
+                    "Dieksport pada: $exportTimestamp  •  Jumlah Ahli: ${members.size}",
+                    "Exported on: $exportTimestamp  •  Total Members: ${members.size}"
+                ),
+                style = 3
+            )
+        )
         rowsXml.append("""</row>""")
 
         // Blank spacer row (Row 3)
@@ -105,15 +129,16 @@ object MemberExportUtils {
         members.forEachIndexed { idx, member ->
             val rowNum = idx + 5
             val ageText = member.calculatedAge()?.toString() ?: "-"
-            val birthReadable = formatBirthDateReadable(member.birthDate)
+            val birthReadable = formatBirthDateReadable(member.birthDate, lang)
             val values = listOf(
                 (idx + 1).toString(),
                 member.fullName,
-                member.resolvedGender().label,
+                member.resolvedGender().localizedLabel(lang),
                 birthReadable,
                 ageText,
-                member.resolvedBaptismStatus().label,
-                member.denomination
+                member.resolvedBaptismStatus().localizedLabel(lang),
+                member.denomination,
+                member.resolvedMaritalStatusLabel(lang)
             )
             rowsXml.append("""<row r="$rowNum">""")
             values.forEachIndexed { colIdx, value ->
@@ -137,13 +162,14 @@ object MemberExportUtils {
     <col min="5" max="5" width="15" customWidth="1"/>
     <col min="6" max="6" width="18" customWidth="1"/>
     <col min="7" max="7" width="18" customWidth="1"/>
+    <col min="8" max="8" width="18" customWidth="1"/>
   </cols>
   <sheetData>
     $rowsXml
   </sheetData>
   <mergeCells count="2">
-    <mergeCell ref="A1:G1"/>
-    <mergeCell ref="A2:G2"/>
+    <mergeCell ref="A1:H1"/>
+    <mergeCell ref="A2:H2"/>
   </mergeCells>
 </worksheet>"""
 
@@ -161,10 +187,11 @@ object MemberExportUtils {
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>"""
 
+        val sheetName = AppLanguageManager.tr("Senarai Ahli", "Members List")
         val workbookXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="Senarai Ahli" sheetId="1" r:id="rId1"/>
+    <sheet name="$sheetName" sheetId="1" r:id="rId1"/>
   </sheets>
 </workbook>"""
 
@@ -250,9 +277,19 @@ object MemberExportUtils {
         val headerRowHeight = 26f
         val tableWidth = pageWidth - marginX * 2f
 
+        val lang = AppLanguageManager.current()
         // Column proportions summing to 1.0f
-        val colWeights = floatArrayOf(0.05f, 0.28f, 0.11f, 0.16f, 0.08f, 0.16f, 0.16f)
-        val colTitles = listOf("No", "Nama Penuh", "Jantina", "Tarikh Lahir", "Umur", "Status Baptisan", "Denominasi")
+        val colWeights = floatArrayOf(0.05f, 0.24f, 0.10f, 0.14f, 0.07f, 0.14f, 0.12f, 0.14f)
+        val colTitles = listOf(
+            AppLanguageManager.tr("Bil", "No"),
+            AppLanguageManager.tr("Nama Penuh", "Full Name"),
+            AppLanguageManager.tr("Jantina", "Gender"),
+            AppLanguageManager.tr("Tarikh Lahir", "Date of Birth"),
+            AppLanguageManager.tr("Umur", "Age"),
+            AppLanguageManager.tr("Status Baptisan", "Baptism Status"),
+            AppLanguageManager.tr("Denominasi", "Denomination"),
+            AppLanguageManager.tr("Status Perkahwinan", "Marital Status")
+        )
         val colWidths = colWeights.map { it * tableWidth }
 
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -291,7 +328,7 @@ object MemberExportUtils {
             textSize = 9f
         }
 
-        val exportTimestamp = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID")).format(Date())
+        val exportTimestamp = SimpleDateFormat("dd MMM yyyy, HH:mm", lang.locale).format(Date())
         val firstPageStartY = topMargin + 54f
         val otherPageStartY = topMargin + 26f
         val maxContentY = pageHeight - bottomMargin
@@ -322,16 +359,32 @@ object MemberExportUtils {
 
                 var currentY = topMargin
                 if (pageIndex == 0) {
-                    canvas.drawText("SENARAI AHLI JEMAAT SIB TOBURON", marginX, currentY + 14f, titlePaint)
                     canvas.drawText(
-                        "Dieksport pada: $exportTimestamp   •   Jumlah Ahli Berdaftar: ${members.size}",
+                        AppLanguageManager.tr("SENARAI AHLI JEMAAT SIB TOBURON", "SIB TOBURON CONGREGATION MEMBERS LIST"),
+                        marginX,
+                        currentY + 14f,
+                        titlePaint
+                    )
+                    canvas.drawText(
+                        AppLanguageManager.tr(
+                            "Dieksport pada: $exportTimestamp   •   Jumlah Ahli Berdaftar: ${members.size}",
+                            "Exported on: $exportTimestamp   •   Total Registered Members: ${members.size}"
+                        ),
                         marginX,
                         currentY + 32f,
                         subtitlePaint
                     )
                     currentY = firstPageStartY
                 } else {
-                    canvas.drawText("Senarai Ahli Jemaat SIB Toburon (Sambungan)", marginX, currentY + 12f, subtitlePaint)
+                    canvas.drawText(
+                        AppLanguageManager.tr(
+                            "Senarai Ahli Jemaat SIB Toburon (Sambungan)",
+                            "SIB Toburon Congregation Members List (Continued)"
+                        ),
+                        marginX,
+                        currentY + 12f,
+                        subtitlePaint
+                    )
                     currentY = otherPageStartY
                 }
 
@@ -356,15 +409,17 @@ object MemberExportUtils {
                     }
                     canvas.drawRect(marginX, currentY, marginX + tableWidth, currentY + rowHeight, borderPaint)
 
-                    val ageStr = member.calculatedAge()?.let { "$it thn" } ?: "-"
+                    val ageUnit = AppLanguageManager.tr("thn", "yrs")
+                    val ageStr = member.calculatedAge()?.let { "$it $ageUnit" } ?: "-"
                     val rowValues = listOf(
                         seqNo.toString(),
                         member.fullName,
-                        member.resolvedGender().label,
-                        formatBirthDateReadable(member.birthDate),
+                        member.resolvedGender().localizedLabel(lang),
+                        formatBirthDateReadable(member.birthDate, lang),
                         ageStr,
-                        member.resolvedBaptismStatus().label,
-                        member.denomination
+                        member.resolvedBaptismStatus().localizedLabel(lang),
+                        member.denomination,
+                        member.resolvedMaritalStatusLabel(lang)
                     )
 
                     var cellX = marginX
@@ -385,12 +440,18 @@ object MemberExportUtils {
 
                 // Footer
                 canvas.drawText(
-                    "Buletin SIB Toburon • Dokumen Rasmi Pengurusan Admin",
+                    AppLanguageManager.tr(
+                        "Buletin SIB Toburon • Dokumen Rasmi Pengurusan Admin",
+                        "Buletin SIB Toburon • Official Admin Directory Report"
+                    ),
                     marginX,
                     pageHeight - 18f,
                     footerPaint
                 )
-                val pageLabel = "Halaman ${pageIndex + 1} / ${pages.size}"
+                val pageLabel = AppLanguageManager.tr(
+                    "Halaman ${pageIndex + 1} / ${pages.size}",
+                    "Page ${pageIndex + 1} / ${pages.size}"
+                )
                 val pageLabelWidth = footerPaint.measureText(pageLabel)
                 canvas.drawText(
                     pageLabel,

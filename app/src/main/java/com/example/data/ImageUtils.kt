@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Base64
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.example.ui.i18n.AppLanguageManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,7 +37,12 @@ object ImageUtils {
             try {
                 val decoded = decodeBitmapSafely(context, uri)
                     ?: return@withContext Result.failure(
-                        IllegalArgumentException("Format gambar tidak didukung atau file tidak dapat dibaca.")
+                        IllegalArgumentException(
+                            AppLanguageManager.tr(
+                                "Format gambar tidak disokong atau fail tidak dapat dibaca.",
+                                "Unsupported image format or unreadable file."
+                            )
+                        )
                     )
 
                 var workingBitmap = scaleBitmapDown(decoded, INITIAL_MAX_DIMENSION_PX)
@@ -55,7 +61,12 @@ object ImageUtils {
                         if (!compressedOk) {
                             workingBitmap.recycle()
                             return@withContext Result.failure(
-                                IllegalStateException("Gagal mengompresi gambar ke format JPEG.")
+                                IllegalStateException(
+                                    AppLanguageManager.tr(
+                                        "Gagal memampatkan gambar ke format JPEG.",
+                                        "Failed to compress image to JPEG format."
+                                    )
+                                )
                             )
                         }
                         val bytes = out.toByteArray()
@@ -92,14 +103,25 @@ object ImageUtils {
                     Result.success(encodedResult)
                 } else {
                     Result.failure(
-                        IllegalArgumentException("Ukuran gambar masih terlalu besar setelah kompresi. Coba pilih foto lain.")
+                        IllegalArgumentException(
+                            AppLanguageManager.tr(
+                                "Saiz gambar masih terlalu besar selepas pemampatan. Sila pilih foto lain.",
+                                "Image size is still too large after compression. Please pick another photo."
+                            )
+                        )
                     )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Result.failure(
-                    IllegalStateException("Gagal membaca foto dari perangkat: ${e.localizedMessage ?: "Kesalahan tidak diketahui"}", e)
+                    IllegalStateException(
+                        AppLanguageManager.tr(
+                            "Gagal membaca foto daripada peranti: ${e.localizedMessage ?: "Ralat tidak diketahui"}",
+                            "Failed to read photo from device: ${e.localizedMessage ?: "Unknown error"}"
+                        ),
+                        e
+                    )
                 )
             }
         }

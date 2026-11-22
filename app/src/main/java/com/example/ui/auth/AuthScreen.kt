@@ -58,6 +58,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import com.example.R
+import com.example.ui.i18n.AppLanguageManager
+import com.example.ui.i18n.CompactLanguageTogglePill
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 
 @Composable
 fun AuthScreen(
@@ -87,6 +91,8 @@ fun AuthScreen(
         )
     }
 
+    val currentLanguage = LocalAppLanguage.current
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -100,7 +106,10 @@ fun AuthScreen(
         ) {
             Image(
                 painter = painterResource(id = R.drawable.img_hero_sanctuary),
-                contentDescription = stringResource(R.string.cd_sanctuary_banner),
+                contentDescription = tr(
+                    "Foto bangunan gereja SIB Toburon bermandikan cahaya pagi",
+                    "Photo of SIB Toburon church sanctuary in morning light"
+                ),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -129,7 +138,21 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 480.dp)
+            ) {
+                CompactLanguageTogglePill(
+                    selectedLanguage = currentLanguage,
+                    onSelectLanguage = { lang ->
+                        AppLanguageManager.setLanguage(context, lang)
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Church crest medallion
             Surface(
@@ -168,7 +191,7 @@ fun AuthScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = stringResource(R.string.auth_sync_badge),
+                        text = tr("Penyegerakan Masa Nyata Firebase", "Firebase Real-Time Sync"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
@@ -198,14 +221,20 @@ fun AuthScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = stringResource(R.string.church_motto),
+                        text = tr(
+                            "Bertumbuh dalam Kasih, Bersatu dalam Pelayanan",
+                            "Growing in Love, United in Service"
+                        ),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.secondary,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = stringResource(R.string.auth_welcome_desc),
+                        text = tr(
+                            "Akses berita terkini, jadual ibadah dan kegiatan gereja, serta galeri foto jemaat yang disegerakkan secara masa nyata.",
+                            "Access the latest church news, worship and event schedules, and congregation photo gallery synced in real time."
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -220,18 +249,27 @@ fun AuthScreen(
                     ) {
                         AuthFeatureRow(
                             icon = Icons.Filled.Newspaper,
-                            title = "Berita & Warta Terkini",
-                            subtitle = "Pembaruan langsung dari pengurus gereja"
+                            title = tr("Berita & Warta Terkini", "Latest Church News"),
+                            subtitle = tr(
+                                "Kemas kini langsung daripada pengurus gereja",
+                                "Direct real-time updates from church leaders"
+                            )
                         )
                         AuthFeatureRow(
                             icon = Icons.Filled.CalendarMonth,
-                            title = "Jadwal Kegiatan Real-Time",
-                            subtitle = "Ibadah raya, doa, pemuda & sekolah minggu"
+                            title = tr("Jadual Kegiatan Masa Nyata", "Real-Time Event Schedules"),
+                            subtitle = tr(
+                                "Ibadah raya, doa, belia & sekolah minggu",
+                                "Sunday worship, prayer, youth & Sunday school"
+                            )
                         )
                         AuthFeatureRow(
                             icon = Icons.Filled.PhotoLibrary,
-                            title = "Galeri Foto Interaktif",
-                            subtitle = "Zoom, geser album & berikan apresiasi jemaat"
+                            title = tr("Galeri Foto Interaktif", "Interactive Photo Gallery"),
+                            subtitle = tr(
+                                "Zum, leret album & berikan tanda suka",
+                                "Zoom, swipe albums & like congregation photos"
+                            )
                         )
                     }
 
@@ -295,7 +333,7 @@ fun AuthScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = stringResource(R.string.auth_signing_in),
+                                text = tr("Menghubungkan akaun Google…", "Connecting Google account…"),
                                 style = MaterialTheme.typography.labelLarge
                             )
                         } else {
@@ -306,7 +344,7 @@ fun AuthScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = stringResource(R.string.auth_sign_in_google),
+                                text = tr("Log Masuk dengan Google", "Sign in with Google"),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -331,7 +369,7 @@ fun AuthScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = stringResource(R.string.auth_continue_guest),
+                            text = tr("Masuk sebagai Tetamu (Lihat Buletin)", "Continue as Guest (View Bulletin)"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -340,7 +378,10 @@ fun AuthScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = stringResource(R.string.auth_guest_hint),
+                        text = tr(
+                            "Mod Tetamu boleh membaca Berita, Jadual, dan Galeri secara masa nyata tanpa akaun Google.",
+                            "Guest Mode lets you read News, Schedule, and Gallery in real time without a Google account."
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center

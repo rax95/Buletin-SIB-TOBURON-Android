@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,13 +29,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +47,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
@@ -58,11 +64,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.R
 import com.example.data.ChurchSchedule
 import com.example.data.ScheduleCategory
 import com.example.data.UiState
@@ -71,6 +75,8 @@ import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.LiveSyncStatusPill
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.tr
 import com.example.ui.theme.HarvestGold
 import com.example.ui.theme.SanctuaryPine
 import com.example.ui.theme.SanctuaryPineDeep
@@ -82,12 +88,14 @@ fun SchedulesScreen(
     selectedCategory: ScheduleCategory?,
     bookmarkedIds: Set<String>,
     isAdmin: Boolean,
+    isBusy: Boolean,
     isExpandedScreen: Boolean,
     focusedScheduleId: String?,
     onConsumeFocusedSchedule: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSelectCategory: (ScheduleCategory?) -> Unit,
     onToggleBookmark: (ChurchSchedule) -> Unit,
+    onToggleFeaturedInNews: (ChurchSchedule) -> Unit,
     onEditSchedule: (ChurchSchedule) -> Unit,
     onDeleteSchedule: (ChurchSchedule) -> Unit,
     onAddSchedule: () -> Unit,
@@ -128,9 +136,11 @@ fun SchedulesScreen(
             schedule = activeSchedule,
             isBookmarked = bookmarkedIds.contains(activeSchedule.id),
             isAdmin = isAdmin,
+            isBusy = isBusy,
             showBackButton = true,
             onBack = { selectedScheduleId = null },
             onToggleBookmark = { onToggleBookmark(activeSchedule) },
+            onToggleFeaturedInNews = { onToggleFeaturedInNews(activeSchedule) },
             onEdit = { onEditSchedule(activeSchedule) },
             onDelete = {
                 onDeleteSchedule(activeSchedule)
@@ -171,9 +181,11 @@ fun SchedulesScreen(
                         schedule = activeSchedule,
                         isBookmarked = bookmarkedIds.contains(activeSchedule.id),
                         isAdmin = isAdmin,
+                        isBusy = isBusy,
                         showBackButton = false,
                         onBack = {},
                         onToggleBookmark = { onToggleBookmark(activeSchedule) },
+                        onToggleFeaturedInNews = { onToggleFeaturedInNews(activeSchedule) },
                         onEdit = { onEditSchedule(activeSchedule) },
                         onDelete = {
                             onDeleteSchedule(activeSchedule)
@@ -184,8 +196,11 @@ fun SchedulesScreen(
                 } else {
                     EmptyBulletinState(
                         icon = Icons.Filled.CalendarMonth,
-                        title = "Pilih Jadwal Kegiatan",
-                        description = "Ketuk salah satu agenda gereja di sebelah kiri untuk melihat detail waktu, lokasi, dan pelayan.",
+                        title = tr("Pilih Jadual Kegiatan", "Select Event Schedule"),
+                        description = tr(
+                            "Ketik salah satu agenda gereja di sebelah kiri untuk melihat butiran masa, lokasi, dan pelayan.",
+                            "Tap any church event on the left to view time, location, and speaker details."
+                        ),
                         isAdmin = false
                     )
                 }
@@ -242,17 +257,18 @@ private fun ScheduleListPane(
             EditorialSearchBar(
                 query = searchQuery,
                 onQueryChange = onSearchQueryChange,
-                placeholder = stringResource(R.string.search_schedule_hint),
+                placeholder = tr("Cari ibadah, lokasi, atau pelayan...", "Search service, location, or speaker..."),
                 testTagName = "schedule_search_input",
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
 
         item(key = "schedule_chips") {
+            val lang = LocalAppLanguage.current
             CategoryFilterRow(
                 items = ScheduleCategory.entries,
                 selected = selectedCategory,
-                labelProvider = { it.label },
+                labelProvider = { it.localizedLabel(lang) },
                 onSelect = onSelectCategory
             )
         }
@@ -280,12 +296,24 @@ private fun ScheduleListPane(
                     item(key = "empty_schedules") {
                         EmptyBulletinState(
                             icon = Icons.Filled.CalendarMonth,
-                            title = if (schedulesState.data.isEmpty()) stringResource(R.string.empty_schedules_title)
-                            else "Jadwal Tidak Ditemukan",
-                            description = if (schedulesState.data.isEmpty()) stringResource(R.string.empty_schedules_desc)
-                            else "Coba ubah filter kategori atau kata pencarian.",
+                            title = if (schedulesState.data.isEmpty()) {
+                                tr("Belum Ada Jadual Kegiatan", "No Event Schedules Yet")
+                            } else {
+                                tr("Jadual Tidak Dijumpai", "No Schedules Found")
+                            },
+                            description = if (schedulesState.data.isEmpty()) {
+                                tr(
+                                    "Jadual ibadah dan kegiatan pelayanan gereja akan disegerakkan di sini.",
+                                    "Church worship services and ministry schedules will be synced here."
+                                )
+                            } else {
+                                tr(
+                                    "Cuba ubah penapis kategori atau kata carian.",
+                                    "Try changing the category filter or search keywords."
+                                )
+                            },
                             isAdmin = isAdmin && schedulesState.data.isEmpty(),
-                            primaryActionLabel = stringResource(R.string.action_add_schedule),
+                            primaryActionLabel = tr("Tambah Jadual", "Add Schedule"),
                             onPrimaryAction = onAddSchedule
                         )
                     }
@@ -331,14 +359,14 @@ private fun ScheduleSpotlightBanner(
             ) {
                 LiveSyncStatusPill(darkBackdrop = true)
                 Text(
-                    text = "$totalCount Agenda Aktif",
+                    text = tr("$totalCount Agenda Aktif", "$totalCount Active Events"),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White.copy(alpha = 0.86f)
                 )
             }
             Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = "Jadwal Kegiatan Gereja",
+                text = tr("Jadual Kegiatan Gereja", "Church Activity Schedule"),
                 style = MaterialTheme.typography.headlineMedium,
                 color = Color.White
             )
@@ -351,7 +379,7 @@ private fun ScheduleSpotlightBanner(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "AGENDA UTAMA • ${highlightSchedule.dateLabel}",
+                            text = "${tr("AGENDA UTAMA", "FEATURED EVENT")} • ${highlightSchedule.dateLabel}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFFFD8A8)
                         )
@@ -370,7 +398,10 @@ private fun ScheduleSpotlightBanner(
                 }
             } else {
                 Text(
-                    text = "Ibadah Raya, Persekutuan Doa, Pemuda, dan Pelayanan SIB Toburon tersinkronisasi otomatis.",
+                    text = tr(
+                        "Ibadah Raya, Persekutuan Doa, Pemuda, dan Pelayanan SIB Toburon disegerakkan secara automatik.",
+                        "Sunday Worship, Prayer Fellowship, Youth, and SIB Toburon Ministries synced automatically."
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.86f)
                 )
@@ -443,7 +474,7 @@ private fun ScheduleTimelineCard(
                             color = accentColor.copy(alpha = 0.14f)
                         ) {
                             Text(
-                                text = schedule.resolvedCategory().label,
+                                text = schedule.resolvedCategory().localizedLabel(LocalAppLanguage.current),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accentColor,
                                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
@@ -466,9 +497,33 @@ private fun ScheduleTimelineCard(
                                     )
                                     Spacer(Modifier.width(3.dp))
                                     Text(
-                                        text = "Rutin",
+                                        text = tr("Berkala", "Recurring"),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        if (schedule.featuredInNews) {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PushPin,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(11.dp),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = tr("Di Berita", "In News"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
                             }
@@ -476,7 +531,7 @@ private fun ScheduleTimelineCard(
                         if (!schedule.published) {
                             Icon(
                                 imageVector = Icons.Filled.VisibilityOff,
-                                contentDescription = "Draf",
+                                contentDescription = tr("Draf", "Draft"),
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -489,7 +544,7 @@ private fun ScheduleTimelineCard(
                     ) {
                         Icon(
                             imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = stringResource(R.string.cd_bookmark_toggle),
+                            contentDescription = tr("Simpan penanda buku", "Toggle bookmark"),
                             tint = if (isBookmarked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -541,9 +596,11 @@ private fun ScheduleDetailPane(
     schedule: ChurchSchedule,
     isBookmarked: Boolean,
     isAdmin: Boolean,
+    isBusy: Boolean,
     showBackButton: Boolean,
     onBack: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onToggleFeaturedInNews: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -563,7 +620,7 @@ private fun ScheduleDetailPane(
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.cd_navigate_back)
+                            contentDescription = tr("Kembali", "Back")
                         )
                     }
                 }
@@ -575,18 +632,18 @@ private fun ScheduleDetailPane(
                 IconButton(onClick = onToggleBookmark, modifier = Modifier.size(48.dp)) {
                     Icon(
                         imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = stringResource(R.string.cd_bookmark_toggle),
+                        contentDescription = tr("Simpan penanda buku", "Toggle bookmark"),
                         tint = if (isBookmarked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
                     )
                 }
                 if (isAdmin) {
                     IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.action_edit))
+                        Icon(Icons.Filled.Edit, contentDescription = tr("Edit", "Edit"))
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                         Icon(
                             Icons.Filled.Delete,
-                            contentDescription = stringResource(R.string.action_delete),
+                            contentDescription = tr("Padam", "Delete"),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
@@ -601,7 +658,7 @@ private fun ScheduleDetailPane(
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
             Text(
-                text = schedule.resolvedCategory().label,
+                text = schedule.resolvedCategory().localizedLabel(LocalAppLanguage.current),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
@@ -614,6 +671,54 @@ private fun ScheduleDetailPane(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface
         )
+
+        if (isAdmin) {
+            Spacer(modifier = Modifier.height(14.dp))
+            if (schedule.featuredInNews) {
+                OutlinedButton(
+                    onClick = onToggleFeaturedInNews,
+                    enabled = !isBusy,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("toggle_featured_in_news_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        tr(
+                            "Dipaparkan di Menu Utama Berita (Keluarkan)",
+                            "Featured on News Main Menu (Remove)"
+                        )
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onToggleFeaturedInNews,
+                    enabled = !isBusy,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("toggle_featured_in_news_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Campaign,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(tr("Tambahkan ke Menu Utama Berita", "Add to News Main Menu"))
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(18.dp))
 
         Surface(
@@ -625,14 +730,22 @@ private fun ScheduleDetailPane(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(16.dp)
             ) {
-                DetailInfoRow(Icons.Filled.CalendarMonth, "Hari / Tanggal", schedule.dateLabel)
-                DetailInfoRow(Icons.Filled.AccessTime, "Waktu Pelaksanaan", schedule.timeLabel)
-                DetailInfoRow(Icons.Filled.LocationOn, "Lokasi", schedule.location)
+                DetailInfoRow(Icons.Filled.CalendarMonth, tr("Hari / Tarikh", "Day / Date"), schedule.dateLabel)
+                DetailInfoRow(Icons.Filled.AccessTime, tr("Waktu Pelaksanaan", "Time"), schedule.timeLabel)
+                DetailInfoRow(Icons.Filled.LocationOn, tr("Lokasi", "Location"), schedule.location)
                 if (schedule.speaker.isNotBlank()) {
-                    DetailInfoRow(Icons.Filled.Person, "Pelayan Firman / Koordinator", schedule.speaker)
+                    DetailInfoRow(
+                        Icons.Filled.Person,
+                        tr("Pelayan Firman / Penyelaras", "Speaker / Coordinator"),
+                        schedule.speaker
+                    )
                 }
                 if (schedule.recurring) {
-                    DetailInfoRow(Icons.Filled.Repeat, "Frekuensi", "Kegiatan Rutin Mingguan")
+                    DetailInfoRow(
+                        Icons.Filled.Repeat,
+                        tr("Kekerapan", "Frequency"),
+                        tr("Kegiatan Berkala Mingguan", "Weekly Recurring Activity")
+                    )
                 }
             }
         }
@@ -642,7 +755,7 @@ private fun ScheduleDetailPane(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Keterangan & Informasi Jemaat",
+            text = tr("Keterangan & Maklumat Jemaat", "Details & Congregation Info"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
