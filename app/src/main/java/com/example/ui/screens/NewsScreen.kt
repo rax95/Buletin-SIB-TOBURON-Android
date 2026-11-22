@@ -88,6 +88,7 @@ import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NewsCommentComposerBar
 import com.example.ui.components.NewsCommentsSection
 import com.example.ui.components.formatIndonesianTimestamp
+import com.example.ui.components.formatScheduleTimeDisplay
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
 import kotlinx.coroutines.launch
@@ -489,7 +490,7 @@ private fun FeaturedImportantScheduleCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "${schedule.dateLabel} • ${schedule.timeLabel}",
+                        text = "${schedule.dateLabel} • ${formatScheduleTimeDisplay(schedule.timeLabel)}",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

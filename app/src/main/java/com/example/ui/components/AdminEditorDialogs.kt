@@ -401,17 +401,25 @@ private fun buildScheduleSortOrder(utcMillis: Long, startHour: Int, startMinute:
     return year * 100000000L + month * 1000000L + day * 10000L + startHour * 100L + startMinute
 }
 
-private fun formatHourMinute(hour: Int, minute: Int): String =
-    String.format(Locale.US, "%02d:%02d", hour, minute)
-
 private fun parseInitialTimeRange(raw: String?): List<Int> {
     if (raw.isNullOrBlank()) return listOf(8, 0, 10, 0, 1)
-    val matches = Regex("(\\d{1,2})[:.](\\d{2})").findAll(raw).toList()
+    val matches = Regex("(\\d{1,2})[:.](\\d{2})(?:\\s*(AM|PM))?", RegexOption.IGNORE_CASE).findAll(raw).toList()
     if (matches.isEmpty()) return listOf(8, 0, 10, 0, 1)
-    val sh = matches[0].groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: 8
+
+    fun extractHour24(match: MatchResult, fallback: Int): Int {
+        val rawHour = match.groupValues[1].toIntOrNull() ?: return fallback
+        val meridiem = match.groupValues[3].uppercase(Locale.US)
+        return when (meridiem) {
+            "AM" -> if (rawHour == 12) 0 else rawHour.coerceIn(0, 11)
+            "PM" -> if (rawHour == 12) 12 else (rawHour.coerceIn(1, 11) + 12)
+            else -> rawHour.coerceIn(0, 23)
+        }
+    }
+
+    val sh = extractHour24(matches[0], 8)
     val sm = matches[0].groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
     return if (matches.size >= 2) {
-        val eh = matches[1].groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: ((sh + 2) % 24)
+        val eh = extractHour24(matches[1], (sh + 2) % 24)
         val em = matches[1].groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: sm
         listOf(sh, sm, eh, em, 1)
     } else {
@@ -465,11 +473,11 @@ fun AdminScheduleEditorDialog(
     var useEndTime by remember { mutableStateOf(parsedTimes[4] == 1) }
 
     val formattedTimeLabel = remember(startHour, startMinute, endHour, endMinute, useEndTime) {
-        val startStr = formatHourMinute(startHour, startMinute)
+        val startStr = formatTimeAmPm(startHour, startMinute)
         if (useEndTime) {
-            "$startStr - ${formatHourMinute(endHour, endMinute)} MYT"
+            "$startStr - ${formatTimeAmPm(endHour, endMinute)}"
         } else {
-            "$startStr MYT"
+            startStr
         }
     }
 
@@ -629,7 +637,7 @@ fun AdminScheduleEditorDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = formatHourMinute(startHour, startMinute),
+                                    text = formatTimeAmPm(startHour, startMinute),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -666,7 +674,7 @@ fun AdminScheduleEditorDialog(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = formatHourMinute(endHour, endMinute),
+                                        text = formatTimeAmPm(endHour, endMinute),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -831,7 +839,7 @@ fun AdminScheduleEditorDialog(
         val timeState = rememberTimePickerState(
             initialHour = startHour,
             initialMinute = startMinute,
-            is24Hour = true
+            is24Hour = false
         )
         AlertDialog(
             onDismissRequest = { showStartTimePicker = false },
@@ -866,7 +874,7 @@ fun AdminScheduleEditorDialog(
         val timeState = rememberTimePickerState(
             initialHour = endHour,
             initialMinute = endMinute,
-            is24Hour = true
+            is24Hour = false
         )
         AlertDialog(
             onDismissRequest = { showEndTimePicker = false },

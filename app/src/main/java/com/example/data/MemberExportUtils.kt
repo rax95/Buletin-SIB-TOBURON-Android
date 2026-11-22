@@ -76,7 +76,8 @@ object MemberExportUtils {
      */
     private fun buildExcelWorkbookBytes(members: List<ChurchMemberDetail>): ByteArray {
         val lang = AppLanguageManager.current()
-        val exportTimestamp = SimpleDateFormat("dd MMM yyyy, HH:mm", lang.locale).format(Date())
+        val now = Date()
+        val exportTimestamp = "${SimpleDateFormat("dd MMM yyyy", lang.locale).format(now)}, ${SimpleDateFormat("h:mm a", Locale.US).format(now)}"
         val headers = listOf(
             AppLanguageManager.tr("Bil", "No"),
             AppLanguageManager.tr("Nama Penuh", "Full Name"),
@@ -328,7 +329,8 @@ object MemberExportUtils {
             textSize = 9f
         }
 
-        val exportTimestamp = SimpleDateFormat("dd MMM yyyy, HH:mm", lang.locale).format(Date())
+        val now = Date()
+        val exportTimestamp = "${SimpleDateFormat("dd MMM yyyy", lang.locale).format(now)}, ${SimpleDateFormat("h:mm a", Locale.US).format(now)}"
         val firstPageStartY = topMargin + 54f
         val otherPageStartY = topMargin + 26f
         val maxContentY = pageHeight - bottomMargin

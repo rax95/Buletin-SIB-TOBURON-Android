@@ -104,7 +104,7 @@ import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NotificationSettingsCard
 import com.example.ui.components.formatIndonesianTimestamp
 import com.example.ui.i18n.AppLanguageManager
-import com.example.ui.i18n.LanguageSelectorCard
+import com.example.ui.i18n.CompactLanguageTogglePill
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
 import kotlinx.coroutines.launch
@@ -230,6 +230,28 @@ fun ProfileAdminScreen(
                 .fillMaxWidth()
                 .widthIn(max = 760.dp)
         ) {
+            // Top bar with compact BM / EN toggle in top-right corner
+            item(key = "account_top_bar") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = tr("Akaun", "Account"),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    CompactLanguageTogglePill(
+                        selectedLanguage = lang,
+                        onSelectLanguage = { AppLanguageManager.setLanguage(context, it) },
+                        darkBackdrop = false,
+                        tagPrefix = "account"
+                    )
+                }
+            }
+
             // 1. Account Identity Header (Tap avatar to change photo, tap name to open Member Profile)
             item(key = "account_header") {
                 Card(
@@ -426,14 +448,6 @@ fun ProfileAdminScreen(
                         }
                     }
                 }
-            }
-
-            // 1b. Language Selector (Bahasa Malaysia / English)
-            item(key = "language_settings") {
-                LanguageSelectorCard(
-                    selectedLanguage = lang,
-                    onSelectLanguage = { AppLanguageManager.setLanguage(context, it) }
-                )
             }
 
             // 2. Admin Real-Time Console (Visible to Admins)
@@ -975,6 +989,27 @@ private fun GuestAccountView(
                 .fillMaxWidth()
                 .widthIn(max = 640.dp)
         ) {
+            item(key = "guest_top_bar") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = tr("Akaun", "Account"),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    CompactLanguageTogglePill(
+                        selectedLanguage = lang,
+                        onSelectLanguage = { AppLanguageManager.setLanguage(context, it) },
+                        darkBackdrop = false,
+                        tagPrefix = "account_guest"
+                    )
+                }
+            }
+
             item(key = "guest_identity_card") {
                 Card(
                     shape = MaterialTheme.shapes.large,
@@ -1113,13 +1148,6 @@ private fun GuestAccountView(
                         }
                     }
                 }
-            }
-
-            item(key = "guest_language_settings") {
-                LanguageSelectorCard(
-                    selectedLanguage = lang,
-                    onSelectLanguage = { AppLanguageManager.setLanguage(context, it) }
-                )
             }
 
             item(key = "guest_notification_settings") {

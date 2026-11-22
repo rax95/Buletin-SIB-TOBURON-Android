@@ -364,6 +364,50 @@ fun formatIndonesianTimestamp(
     lang: AppLanguage = AppLanguageManager.current()
 ): String {
     val date = (timestamp ?: Timestamp.now()).toDate()
-    val formatter = SimpleDateFormat("dd MMM yyyy • HH:mm", lang.locale)
-    return formatter.format(date)
+    val datePart = SimpleDateFormat("dd MMM yyyy", lang.locale).format(date)
+    val timePart = SimpleDateFormat("h:mm a", java.util.Locale.US).format(date)
+    return "$datePart • $timePart"
 }
+
+fun formatTimeAmPm(hour24: Int, minute: Int): String {
+    val safeHour = hour24.coerceIn(0, 23)
+    val safeMinute = minute.coerceIn(0, 59)
+    val period = if (safeHour < 12) "AM" else "PM"
+    val hour12 = when {
+        safeHour == 0 -> 12
+        safeHour > 12 -> safeHour - 12
+        else -> safeHour
+    }
+    return String.format(java.util.Locale.US, "%d:%02d %s", hour12, safeMinute, period)
+}
+
+fun formatScheduleTimeDisplay(rawTimeLabel: String): String {
+    val trimmed = rawTimeLabel.trim()
+    if (trimmed.isEmpty()) return trimmed
+    val timeRegex = Regex("(\\d{1,2})[:.](\\d{2})(?:\\s*(AM|PM))?", RegexOption.IGNORE_CASE)
+    val matches = timeRegex.findAll(trimmed).toList()
+    if (matches.isEmpty()) {
+        return trimmed
+            .replace(Regex("\\s*(MYT|WITA|WIB)\\b", RegexOption.IGNORE_CASE), "")
+            .trim()
+    }
+
+    fun matchToAmPm(m: MatchResult): String {
+        val rawHour = m.groupValues[1].toIntOrNull() ?: 8
+        val minute = (m.groupValues[2].toIntOrNull() ?: 0).coerceIn(0, 59)
+        val meridiem = m.groupValues[3].uppercase(java.util.Locale.US)
+        val hour24 = when (meridiem) {
+            "AM" -> if (rawHour == 12) 0 else rawHour.coerceIn(0, 11)
+            "PM" -> if (rawHour == 12) 12 else (rawHour.coerceIn(1, 11) + 12)
+            else -> rawHour.coerceIn(0, 23)
+        }
+        return formatTimeAmPm(hour24, minute)
+    }
+
+    return if (matches.size >= 2) {
+        "${matchToAmPm(matches[0])} - ${matchToAmPm(matches[1])}"
+    } else {
+        matchToAmPm(matches[0])
+    }
+}
+

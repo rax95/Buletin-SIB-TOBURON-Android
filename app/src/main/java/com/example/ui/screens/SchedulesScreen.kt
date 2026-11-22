@@ -75,6 +75,7 @@ import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.LiveSyncStatusPill
+import com.example.ui.components.formatScheduleTimeDisplay
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
 import com.example.ui.theme.HarvestGold
@@ -390,7 +391,7 @@ private fun ScheduleSpotlightBanner(
                             color = Color.White
                         )
                         Text(
-                            text = "${highlightSchedule.timeLabel} • ${highlightSchedule.location}",
+                            text = "${formatScheduleTimeDisplay(highlightSchedule.timeLabel)} • ${highlightSchedule.location}",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
@@ -559,7 +560,10 @@ private fun ScheduleTimelineCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                ScheduleMetaLine(icon = Icons.Filled.CalendarMonth, text = "${schedule.dateLabel} • ${schedule.timeLabel}")
+                ScheduleMetaLine(
+                    icon = Icons.Filled.CalendarMonth,
+                    text = "${schedule.dateLabel} • ${formatScheduleTimeDisplay(schedule.timeLabel)}"
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 ScheduleMetaLine(icon = Icons.Filled.LocationOn, text = schedule.location)
                 if (schedule.speaker.isNotBlank()) {
@@ -731,7 +735,11 @@ private fun ScheduleDetailPane(
                 modifier = Modifier.padding(16.dp)
             ) {
                 DetailInfoRow(Icons.Filled.CalendarMonth, tr("Hari / Tarikh", "Day / Date"), schedule.dateLabel)
-                DetailInfoRow(Icons.Filled.AccessTime, tr("Waktu Pelaksanaan", "Time"), schedule.timeLabel)
+                DetailInfoRow(
+                    Icons.Filled.AccessTime,
+                    tr("Waktu Pelaksanaan", "Time"),
+                    formatScheduleTimeDisplay(schedule.timeLabel)
+                )
                 DetailInfoRow(Icons.Filled.LocationOn, tr("Lokasi", "Location"), schedule.location)
                 if (schedule.speaker.isNotBlank()) {
                     DetailInfoRow(

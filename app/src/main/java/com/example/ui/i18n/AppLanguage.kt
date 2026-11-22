@@ -200,13 +200,41 @@ fun LanguageSelectorCard(
 fun CompactLanguageTogglePill(
     selectedLanguage: AppLanguage,
     onSelectLanguage: (AppLanguage) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    darkBackdrop: Boolean = true,
+    tagPrefix: String = "auth"
 ) {
+    val containerColor = if (darkBackdrop) {
+        Color.Black.copy(alpha = 0.48f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val borderColor = if (darkBackdrop) {
+        Color.White.copy(alpha = 0.28f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+    val activeContainerColor = if (darkBackdrop) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val activeTextColor = if (darkBackdrop) {
+        MaterialTheme.colorScheme.onSecondary
+    } else {
+        MaterialTheme.colorScheme.onPrimary
+    }
+    val inactiveTextColor = if (darkBackdrop) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Surface(
         shape = RoundedCornerShape(50),
-        color = Color.Black.copy(alpha = 0.48f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
-        modifier = modifier.testTag("auth_language_toggle")
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = modifier.testTag("${tagPrefix}_language_toggle")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -216,11 +244,11 @@ fun CompactLanguageTogglePill(
                 val isSelected = selectedLanguage == option
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (isSelected) MaterialTheme.colorScheme.secondary else Color.Transparent,
+                    color = if (isSelected) activeContainerColor else Color.Transparent,
                     modifier = Modifier
                         .heightIn(min = 36.dp)
                         .clickable { onSelectLanguage(option) }
-                        .testTag("auth_lang_${option.code}")
+                        .testTag("${tagPrefix}_lang_${option.code}")
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -230,7 +258,7 @@ fun CompactLanguageTogglePill(
                             text = option.shortLabel,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) MaterialTheme.colorScheme.onSecondary else Color.White
+                            color = if (isSelected) activeTextColor else inactiveTextColor
                         )
                     }
                 }
@@ -238,3 +266,4 @@ fun CompactLanguageTogglePill(
         }
     }
 }
+
