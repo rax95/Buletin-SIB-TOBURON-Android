@@ -100,6 +100,7 @@ import com.example.ui.components.AdminNewsEditorDialog
 import com.example.ui.components.AdminPhotoEditorDialog
 import com.example.ui.components.AdminScheduleEditorDialog
 import com.example.ui.components.AppUpdateAvailableDialog
+import com.example.ui.components.MemberQrScannerDialog
 import com.example.ui.components.PushNotificationOptInDialog
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
@@ -337,6 +338,7 @@ private fun BuletinMainShell(
     var isExportingFile by remember { mutableStateOf(false) }
     var pendingExportMembers by remember { mutableStateOf<List<ChurchMemberDetail>>(emptyList()) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
+    var showMemberQrScanner by remember { mutableStateOf(false) }
     var dismissedUpdateVersionCode by rememberSaveable { mutableStateOf(0) }
     var forceShowUpdateDialog by remember { mutableStateOf(false) }
     var dismissedPushOptInThisSession by rememberSaveable { mutableStateOf(false) }
@@ -843,6 +845,9 @@ private fun BuletinMainShell(
                                     },
                                     onDeleteMember = { memberId ->
                                         viewModel.deleteChurchMember(memberId)
+                                    },
+                                    onScanMemberQrClick = {
+                                        showMemberQrScanner = true
                                     }
                                 )
                             }
@@ -1100,6 +1105,16 @@ private fun BuletinMainShell(
                 viewModel.addAdminMember(targetUid, name, role) {
                     showAddAdminDialog = false
                 }
+            }
+        )
+    }
+
+    if (showMemberQrScanner && isAdmin && currentUser != null) {
+        MemberQrScannerDialog(
+            onDismiss = { showMemberQrScanner = false },
+            onValidMemberQrScanned = { rawQr ->
+                showMemberQrScanner = false
+                viewModel.loadMemberDetailFromQr(rawQr)
             }
         )
     }

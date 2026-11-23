@@ -106,7 +106,9 @@ import com.example.ui.components.AppVersionFooterCard
 import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NotificationSettingsCard
 import com.example.ui.components.OwnMemberIdCard
+import com.example.ui.components.PhotoSourceChooserDialog
 import com.example.ui.components.formatIndonesianTimestamp
+import com.example.ui.components.rememberCameraCaptureLauncher
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.CompactLanguageTogglePill
 import com.example.ui.i18n.LocalAppLanguage
@@ -182,18 +184,26 @@ fun ProfileAdminScreen(
     }
 
     var showMemberProfileDialog by remember { mutableStateOf(false) }
+    var showAvatarSourceDialog by remember { mutableStateOf(false) }
     var isUpdatingPhoto by remember { mutableStateOf(false) }
 
-    fun handlePickedAvatarUri(uri: Uri?) {
-        if (uri == null) return
+    fun handlePickedAvatarUri(uri: Uri?, onCleanup: (() -> Unit)? = null) {
+        if (uri == null) {
+            onCleanup?.invoke()
+            return
+        }
         isUpdatingPhoto = true
         scope.launch {
-            val encodedResult = ImageUtils.encodeUriToBase64(
-                context = context,
-                uri = uri,
-                maxBase64Length = 120_000,
-                initialMaxDimensionPx = 420
-            )
+            val encodedResult = try {
+                ImageUtils.encodeUriToBase64(
+                    context = context,
+                    uri = uri,
+                    maxBase64Length = 120_000,
+                    initialMaxDimensionPx = 420
+                )
+            } finally {
+                onCleanup?.invoke()
+            }
             encodedResult.onSuccess { encoded ->
                 onUpdateProfilePhoto(encoded.base64) {
                     isUpdatingPhoto = false
@@ -218,7 +228,12 @@ fun ProfileAdminScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri -> handlePickedAvatarUri(uri) }
 
-    fun launchAvatarPicker() {
+    val launchAvatarCamera = rememberCameraCaptureLauncher(
+        onPhotoCaptured = { uri, cleanup -> handlePickedAvatarUri(uri, cleanup) },
+        onError = { message -> onProfilePhotoError(message) }
+    )
+
+    fun launchAvatarGalleryPicker() {
         if (isUpdatingPhoto || isBusy) return
         try {
             avatarPhotoPickerLauncher.launch(
@@ -227,6 +242,11 @@ fun ProfileAdminScreen(
         } catch (_: ActivityNotFoundException) {
             openAvatarDocLauncher.launch(arrayOf("image/*"))
         }
+    }
+
+    fun launchAvatarCameraPicker() {
+        if (isUpdatingPhoto || isBusy) return
+        launchAvatarCamera()
     }
 
     Box(
@@ -292,7 +312,7 @@ fun ProfileAdminScreen(
                                         .size(62.dp)
                                         .clip(CircleShape)
                                         .clickable(enabled = !isUpdatingPhoto && !isBusy) {
-                                            launchAvatarPicker()
+                                            showAvatarSourceDialog = true
                                         }
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -793,7 +813,9 @@ fun ProfileAdminScreen(
             photoBase64 = currentPhotoBase64,
             isBusy = isBusy,
             isUpdatingPhoto = isUpdatingPhoto,
-            onChangePhotoClick = { launchAvatarPicker() },
+            onTakePhotoClick = { launchAvatarCameraPicker() },
+            onChooseGalleryClick = { launchAvatarGalleryPicker() },
+            onOpenPhotoSourceDialog = { showAvatarSourceDialog = true },
             onRemovePhotoClick = {
                 isUpdatingPhoto = true
                 onUpdateProfilePhoto(null) { isUpdatingPhoto = false }
@@ -804,6 +826,25 @@ fun ProfileAdminScreen(
                     showMemberProfileDialog = false
                 }
             }
+        )
+    }
+
+    if (showAvatarSourceDialog) {
+        PhotoSourceChooserDialog(
+            title = tr("Kemas Kini Gambar Profil", "Update Profile Photo"),
+            subtitle = tr(
+                "Pilih untuk mengambil gambar terus daripada kamera atau muat naik daripada galeri.",
+                "Choose to take a new photo with your camera or upload one from your gallery."
+            ),
+            hasExistingPhoto = !currentPhotoBase64.isNullOrBlank(),
+            onTakePhotoClick = { launchAvatarCameraPicker() },
+            onChooseGalleryClick = { launchAvatarGalleryPicker() },
+            onRemovePhotoClick = {
+                isUpdatingPhoto = true
+                onUpdateProfilePhoto(null) { isUpdatingPhoto = false }
+            },
+            onDismiss = { showAvatarSourceDialog = false },
+            tagPrefix = "profile_avatar"
         )
     }
 }
@@ -817,7 +858,9 @@ private fun MemberProfileDialog(
     photoBase64: String?,
     isBusy: Boolean,
     isUpdatingPhoto: Boolean,
-    onChangePhotoClick: () -> Unit,
+    onTakePhotoClick: () -> Unit,
+    onChooseGalleryClick: () -> Unit,
+    onOpenPhotoSourceDialog: () -> Unit,
     onRemovePhotoClick: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, FellowshipGroup) -> Unit
@@ -857,7 +900,7 @@ private fun MemberProfileDialog(
                         modifier = Modifier
                             .size(64.dp)
                             .clip(CircleShape)
-                            .clickable(enabled = !isUpdatingPhoto && !isBusy) { onChangePhotoClick() }
+                            .clickable(enabled = !isUpdatingPhoto && !isBusy) { onOpenPhotoSourceDialog() }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             if (avatarBitmap != null) {
@@ -904,12 +947,15 @@ private fun MemberProfileDialog(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             FilledTonalButton(
-                                onClick = onChangePhotoClick,
+                                onClick = onTakePhotoClick,
                                 enabled = !isUpdatingPhoto && !isBusy,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.testTag("dialog_change_profile_photo_button")
+                                modifier = Modifier.testTag("dialog_camera_profile_photo_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.PhotoCamera,
@@ -918,7 +964,24 @@ private fun MemberProfileDialog(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = tr("Tukar Foto", "Change Photo"),
+                                    text = tr("Kamera", "Camera"),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = onChooseGalleryClick,
+                                enabled = !isUpdatingPhoto && !isBusy,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("dialog_change_profile_photo_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PhotoLibrary,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = tr("Galeri", "Gallery"),
                                     style = MaterialTheme.typography.labelMedium
                                 )
                             }

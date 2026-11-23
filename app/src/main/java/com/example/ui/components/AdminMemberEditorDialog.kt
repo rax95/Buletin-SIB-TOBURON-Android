@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -166,6 +168,7 @@ fun AdminMemberEditorDialog(
     var isEncodingPhoto by remember { mutableStateOf(false) }
     var photoStatusNote by remember { mutableStateOf<String?>(null) }
     var photoError by remember { mutableStateOf<String?>(null) }
+    var showPhotoSourceDialog by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
@@ -177,17 +180,24 @@ fun AdminMemberEditorDialog(
         registeredUsers.filter { it.email.isNotBlank() }
     }
 
-    fun handleSelectedPhotoUri(uri: Uri?) {
-        if (uri == null) return
+    fun handleSelectedPhotoUri(uri: Uri?, onCleanup: (() -> Unit)? = null) {
+        if (uri == null) {
+            onCleanup?.invoke()
+            return
+        }
         isEncodingPhoto = true
         photoError = null
         coroutineScope.launch {
-            val encoded = ImageUtils.encodeUriToBase64(
-                context = context,
-                uri = uri,
-                maxBase64Length = 120_000,
-                initialMaxDimensionPx = 420
-            )
+            val encoded = try {
+                ImageUtils.encodeUriToBase64(
+                    context = context,
+                    uri = uri,
+                    maxBase64Length = 120_000,
+                    initialMaxDimensionPx = 420
+                )
+            } finally {
+                onCleanup?.invoke()
+            }
             encoded.onSuccess { result ->
                 passportPhotoBase64 = result.base64
                 photoStatusNote = "${result.width}x${result.height} • ${result.sizeKb} KB"
@@ -210,7 +220,12 @@ fun AdminMemberEditorDialog(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri -> handleSelectedPhotoUri(uri) }
 
-    fun launchPassportPicker() {
+    val launchPassportCamera = rememberCameraCaptureLauncher(
+        onPhotoCaptured = { uri, cleanup -> handleSelectedPhotoUri(uri, cleanup) },
+        onError = { message -> photoError = message }
+    )
+
+    fun launchPassportGalleryPicker() {
         try {
             photoPickerLauncher.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -368,7 +383,7 @@ fun AdminMemberEditorDialog(
                                         .height(110.dp)
                                         .clip(RoundedCornerShape(10.dp))
                                         .clickable(enabled = !isBusy && !isEncodingPhoto) {
-                                            launchPassportPicker()
+                                            showPhotoSourceDialog = true
                                         }
                                         .testTag("member_passport_photo_preview")
                                 ) {
@@ -437,28 +452,42 @@ fun AdminMemberEditorDialog(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
 
-                                    Row(
+                                    FlowRow(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         FilledTonalButton(
-                                            onClick = { launchPassportPicker() },
+                                            onClick = { launchPassportCamera() },
                                             enabled = !isBusy && !isEncodingPhoto,
                                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                            modifier = Modifier.testTag("member_pick_passport_photo_button")
+                                            modifier = Modifier.testTag("member_take_passport_photo_button")
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Filled.AddAPhoto,
+                                                imageVector = Icons.Filled.PhotoCamera,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                             Spacer(Modifier.width(6.dp))
                                             Text(
-                                                text = if (passportPhotoBase64 != null) {
-                                                    tr("Tukar", "Change")
-                                                } else {
-                                                    tr("Pilih Foto", "Pick Photo")
-                                                },
+                                                text = tr("Kamera", "Camera"),
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { launchPassportGalleryPicker() },
+                                            enabled = !isBusy && !isEncodingPhoto,
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                            modifier = Modifier.testTag("member_pick_passport_photo_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.PhotoLibrary,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = tr("Galeri", "Gallery"),
                                                 style = MaterialTheme.typography.labelMedium
                                             )
                                         }
@@ -1121,5 +1150,25 @@ fun AdminMemberEditorDialog(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showPhotoSourceDialog) {
+        PhotoSourceChooserDialog(
+            title = tr("Gambar Kad Ahli", "Member Card Photo"),
+            subtitle = tr(
+                "Ambil gambar baharu dengan kamera atau pilih foto saiz pasport daripada galeri.",
+                "Take a new photo with your camera or choose a passport-style photo from your gallery."
+            ),
+            hasExistingPhoto = passportPhotoBase64 != null,
+            onTakePhotoClick = { launchPassportCamera() },
+            onChooseGalleryClick = { launchPassportGalleryPicker() },
+            onRemovePhotoClick = {
+                passportPhotoBase64 = null
+                photoStatusNote = null
+                photoError = null
+            },
+            onDismiss = { showPhotoSourceDialog = false },
+            tagPrefix = "member_passport"
+        )
     }
 }

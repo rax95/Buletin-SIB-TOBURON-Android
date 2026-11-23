@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Wc
@@ -49,7 +51,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,6 +76,7 @@ import com.example.data.BaptismStatus
 import com.example.data.ChurchMemberDetail
 import com.example.data.ImageUtils
 import com.example.data.MaritalStatus
+import com.example.data.MemberQrUtils
 import com.example.data.UserProfile
 import com.example.data.formatBirthDateReadable
 import com.example.ui.i18n.LocalAppLanguage
@@ -121,9 +127,18 @@ fun OwnMemberIdCard(
     val calculatedAge = ownMemberDetail?.calculatedAge()
     val ageBadgeText = calculatedAge?.let { tr("$it thn", "$it yrs") }
 
-    val memberCode = remember(ownMemberDetail?.id, ownMemberDetail?.sibMembershipNumber, userProfile?.id) {
-        ownMemberDetail?.sibMembershipNumber?.takeIf { it.isNotBlank() }
-            ?: formatMemberIdCode(ownMemberDetail?.id ?: userProfile?.id ?: "SIB")
+    val memberQrPayload = remember(
+        ownMemberDetail?.id,
+        ownMemberDetail?.sibMembershipNumber,
+        currentUserEmail,
+        userProfile?.id
+    ) {
+        MemberQrUtils.buildMemberQrPayload(
+            memberId = ownMemberDetail?.id,
+            email = currentUserEmail ?: userProfile?.email,
+            uid = userProfile?.id,
+            sibNumber = ownMemberDetail?.sibMembershipNumber
+        )
     }
 
     Surface(
@@ -282,7 +297,13 @@ fun OwnMemberIdCard(
             }
 
             MemberIdCardFooterStrip(
-                memberCode = memberCode,
+                qrPayload = memberQrPayload,
+                memberName = effectiveName,
+                sibBadgeLabel = if (hasSibNumber) {
+                    "SIB: $sibNumberDisplay"
+                } else {
+                    tr("NO. SIB: Belum ada", "SIB NO: Not yet assigned")
+                },
                 footerLabel = if (ownMemberDetail != null) {
                     tr("KAD AHLI RASMI • SIB TOBURON", "OFFICIAL MEMBER CARD • SIB TOBURON")
                 } else {
@@ -311,8 +332,12 @@ fun AdminMemberIdCardDialog(
     val myKadDisplay = detail.myKadNumber?.takeIf { it.isNotBlank() } ?: "-"
     val sibNumberDisplay = detail.resolvedSibMembershipLabel(lang)
     val hasSibNumber = !detail.sibMembershipNumber.isNullOrBlank()
-    val memberCode = remember(detail.id, detail.sibMembershipNumber) {
-        detail.sibMembershipNumber?.takeIf { it.isNotBlank() } ?: formatMemberIdCode(detail.id)
+    val memberQrPayload = remember(detail.id, detail.sibMembershipNumber, detail.memberEmail) {
+        MemberQrUtils.buildMemberQrPayload(
+            memberId = detail.id,
+            email = detail.memberEmail,
+            sibNumber = detail.sibMembershipNumber
+        )
     }
     val isBaptized = detail.resolvedBaptismStatus() == BaptismStatus.DIBAPTIS
     val isMarried = detail.resolvedMaritalStatus() == MaritalStatus.BERKAHWIN
@@ -461,7 +486,15 @@ fun AdminMemberIdCardDialog(
                     }
                 }
 
-                MemberIdCardFooterStrip(memberCode = memberCode)
+                MemberIdCardFooterStrip(
+                    qrPayload = memberQrPayload,
+                    memberName = detail.fullName,
+                    sibBadgeLabel = if (hasSibNumber) {
+                        "SIB: $sibNumberDisplay"
+                    } else {
+                        tr("NO. SIB: Belum ada", "SIB NO: Not yet assigned")
+                    }
+                )
 
                 // Admin Actions: Padam & Edit
                 Row(
@@ -866,9 +899,16 @@ private fun IdCardFieldTile(
 
 @Composable
 private fun MemberIdCardFooterStrip(
-    memberCode: String,
+    qrPayload: String,
+    memberName: String,
+    sibBadgeLabel: String,
     footerLabel: String = tr("AHLI BERDAFTAR • SIB TOBURON", "REGISTERED MEMBER • SIB TOBURON")
 ) {
+    var showEnlargedQr by remember { mutableStateOf(false) }
+    val qrBitmap = remember(qrPayload) {
+        MemberQrUtils.generateQrCodeBitmap(content = qrPayload, sizePx = 512)
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
@@ -880,62 +920,203 @@ private fun MemberIdCardFooterStrip(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 9.dp)
+                    .padding(horizontal = 18.dp, vertical = 12.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.VerifiedUser,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Text(
-                        text = footerLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.6.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                // Subtle decorative ID barcode accent derived from memberCode
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(1.5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val widths = remember(memberCode) {
-                        val seed = memberCode.hashCode()
-                        List(14) { i ->
-                            if (((seed shr (i % 16)) and 1) == 1) 2.2.dp else 1.1.dp
-                        }
-                    }
-                    widths.forEach { barWidth ->
-                        Box(
-                            modifier = Modifier
-                                .width(barWidth)
-                                .height(16.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                                    RoundedCornerShape(1.dp)
-                                )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.VerifiedUser,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
                         )
+                        Text(
+                            text = footerLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.6.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.QrCode2,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = tr(
+                                "Ketik Kod QR untuk besarkan & imbas",
+                                "Tap QR Code to enlarge & scan"
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                // Scannable Member QR Code (tappable to enlarge full-size for effortless Admin scanning)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .size(68.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { showEnlargedQr = true }
+                        .testTag("member_card_qr_code")
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp)
+                    ) {
+                        if (qrBitmap != null) {
+                            Image(
+                                bitmap = qrBitmap,
+                                contentDescription = tr("Kod QR Kad Ahli $memberName", "Member Card QR Code for $memberName"),
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.QrCode2,
+                                contentDescription = tr("Kod QR Ahli", "Member QR Code"),
+                                tint = SanctuaryPineDeep,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
                     }
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         }
     }
-}
 
-private fun formatMemberIdCode(rawId: String): String {
-    val clean = rawId.filter { it.isLetterOrDigit() }.uppercase()
-    val suffix = if (clean.length >= 6) clean.take(6) else clean.padEnd(6, '0')
-    return "SIB-$suffix"
+    if (showEnlargedQr) {
+        Dialog(
+            onDismissRequest = { showEnlargedQr = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shadowElevation = 10.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .widthIn(max = 380.dp)
+                    .testTag("member_qr_enlarged_dialog")
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(22.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.QrCode2,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = tr("Kod QR Kad Ahli", "Member Card QR Code"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        IconButton(
+                            onClick = { showEnlargedQr = false },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = tr("Tutup", "Close")
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        shadowElevation = 3.dp,
+                        modifier = Modifier.size(240.dp)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp)
+                        ) {
+                            if (qrBitmap != null) {
+                                Image(
+                                    bitmap = qrBitmap,
+                                    contentDescription = tr("Kod QR besar $memberName", "Enlarged QR Code for $memberName"),
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = memberName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = sibBadgeLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    Text(
+                        text = tr(
+                            "Tunjukkan Kod QR ini kepada Admin SIB Toburon untuk melihat maklumat penuh ahli anda.",
+                            "Show this QR Code to an SIB Toburon Admin to view your full church member details."
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
 }

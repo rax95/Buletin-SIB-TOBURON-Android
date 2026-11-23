@@ -18,6 +18,7 @@ import com.example.data.GalleryComment
 import com.example.data.GalleryPhoto
 import com.example.data.MaritalStatus
 import com.example.data.MemberGender
+import com.example.data.MemberQrUtils
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
 import com.example.data.NewsComment
@@ -435,6 +436,69 @@ class BulletinViewModel(
                         err.localizedMessage ?: AppLanguageManager.tr(
                             "Gagal memuat maklumat ahli.",
                             "Failed to load member details."
+                        )
+                    )
+                }
+            } finally {
+                _isLoadingMemberDetail.value = false
+            }
+        }
+    }
+
+    fun loadMemberDetailFromQr(rawQrValue: String) {
+        if (!isAdmin.value) return
+        val parsed = MemberQrUtils.parseMemberQrPayload(rawQrValue)
+        if (parsed == null) {
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Kod QR ini bukan Kad Ahli SIB Toburon yang sah.",
+                    "This QR code is not a valid SIB Toburon Member Card."
+                )
+            )
+            return
+        }
+
+        if (!parsed.memberId.isNullOrBlank()) {
+            loadMemberDetail(parsed.memberId)
+            return
+        }
+
+        // Fallback when member had not linked a record yet when QR was generated: look up by email
+        val targetEmail = parsed.email
+        if (targetEmail.isNullOrBlank()) {
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Ahli ini belum melengkapkan pendaftaran maklumat Kad Ahli.",
+                    "This member has not completed their Member Card registration yet."
+                )
+            )
+            return
+        }
+
+        val memberIds = (membersState.value as? UiState.Success)?.data?.map { it.id }.orEmpty()
+        viewModelScope.launch {
+            _isLoadingMemberDetail.value = true
+            try {
+                val result = repository.getAllChurchMemberDetails(memberIds, isBootstrappedAdmin)
+                result.onSuccess { details ->
+                    val matched = details.firstOrNull {
+                        it.memberEmail.equals(targetEmail, ignoreCase = true)
+                    }
+                    if (matched != null) {
+                        _selectedMemberDetail.value = matched
+                    } else {
+                        _snackbarMessage.tryEmit(
+                            AppLanguageManager.tr(
+                                "Ahli ($targetEmail) belum melengkapkan pendaftaran maklumat ahli.",
+                                "Member ($targetEmail) has not completed member details registration yet."
+                            )
+                        )
+                    }
+                }.onFailure { err ->
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal memuat maklumat ahli daripada Kod QR.",
+                            "Failed to load member details from QR Code."
                         )
                     )
                 }
