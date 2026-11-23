@@ -391,16 +391,6 @@ private fun formatScheduleDateLabel(
     return fmt.format(Date(utcMillis))
 }
 
-private fun buildScheduleSortOrder(utcMillis: Long, startHour: Int, startMinute: Int): Long {
-    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-        timeInMillis = utcMillis
-    }
-    val year = cal.get(Calendar.YEAR).toLong()
-    val month = (cal.get(Calendar.MONTH) + 1).toLong()
-    val day = cal.get(Calendar.DAY_OF_MONTH).toLong()
-    return year * 100000000L + month * 1000000L + day * 10000L + startHour * 100L + startMinute
-}
-
 private fun parseInitialTimeRange(raw: String?): List<Int> {
     if (raw.isNullOrBlank()) return listOf(8, 0, 10, 0, 1)
     val matches = Regex("(\\d{1,2})[:.](\\d{2})(?:\\s*(AM|PM))?", RegexOption.IGNORE_CASE).findAll(raw).toList()
@@ -441,7 +431,6 @@ fun AdminScheduleEditorDialog(
         timeLabel: String,
         location: String,
         speaker: String,
-        sortOrder: Long,
         recurring: Boolean,
         published: Boolean
     ) -> Unit
@@ -487,11 +476,6 @@ fun AdminScheduleEditorDialog(
         )
     }
     var speaker by remember { mutableStateOf(initial?.speaker ?: "") }
-    var sortOrderText by remember {
-        mutableStateOf(
-            (initial?.sortOrder ?: buildScheduleSortOrder(defaultUtcToday, parsedTimes[0], parsedTimes[1])).toString()
-        )
-    }
     var recurring by remember { mutableStateOf(initial?.recurring ?: false) }
     var published by remember { mutableStateOf(initial?.published ?: true) }
     var validationError by remember { mutableStateOf<String?>(null) }
@@ -712,14 +696,6 @@ fun AdminScheduleEditorDialog(
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = sortOrderText,
-                    onValueChange = { sortOrderText = it.filter { ch -> ch.isDigit() }.take(12) },
-                    label = { Text(tr("Nombor Urutan Paparan (kecil di atas)", "Display Sort Order (smaller first)")) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
 
                 Text(tr("Kategori Kegiatan", "Event Category"), style = MaterialTheme.typography.labelLarge)
                 FlowRow(
@@ -771,7 +747,6 @@ fun AdminScheduleEditorDialog(
                     val dt = dateLabel.trim()
                     val tm = formattedTimeLabel.trim()
                     val loc = location.trim()
-                    val order = sortOrderText.toLongOrNull() ?: 500L
                     when {
                         t.length < 3 -> validationError = AppLanguageManager.tr(
                             "Nama kegiatan minimum 3 aksara.",
@@ -793,7 +768,7 @@ fun AdminScheduleEditorDialog(
                             "Keterangan kegiatan wajib diisi.",
                             "Event details are required."
                         )
-                        else -> onSave(t, d, category, dt, tm, loc, speaker.trim(), order, recurring, published)
+                        else -> onSave(t, d, category, dt, tm, loc, speaker.trim(), recurring, published)
                     }
                 },
                 modifier = Modifier.testTag("save_schedule_button")
@@ -818,7 +793,6 @@ fun AdminScheduleEditorDialog(
                         datePickerState.selectedDateMillis?.let { millis ->
                             selectedDateMillis = millis
                             dateLabel = formatScheduleDateLabel(millis, lang)
-                            sortOrderText = buildScheduleSortOrder(millis, startHour, startMinute).toString()
                             validationError = null
                         }
                         showDatePicker = false
@@ -857,7 +831,6 @@ fun AdminScheduleEditorDialog(
                     onClick = {
                         startHour = timeState.hour
                         startMinute = timeState.minute
-                        sortOrderText = buildScheduleSortOrder(selectedDateMillis, startHour, startMinute).toString()
                         showStartTimePicker = false
                     }
                 ) {

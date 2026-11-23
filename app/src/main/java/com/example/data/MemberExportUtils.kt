@@ -81,12 +81,15 @@ object MemberExportUtils {
         val headers = listOf(
             AppLanguageManager.tr("Bil", "No"),
             AppLanguageManager.tr("Nama Penuh", "Full Name"),
+            AppLanguageManager.tr("No. MyKad", "MyKad No."),
             AppLanguageManager.tr("Jantina", "Gender"),
             AppLanguageManager.tr("Tarikh Lahir", "Date of Birth"),
             AppLanguageManager.tr("Umur (Tahun)", "Age (Years)"),
+            AppLanguageManager.tr("Status Perkahwinan", "Marital Status"),
+            AppLanguageManager.tr("Nama Pasangan", "Spouse Name"),
             AppLanguageManager.tr("Status Baptisan", "Baptism Status"),
             AppLanguageManager.tr("Denominasi", "Denomination"),
-            AppLanguageManager.tr("Status Perkahwinan", "Marital Status")
+            AppLanguageManager.tr("No. Keanggotaan SIB", "SIB Membership No.")
         )
 
         val rowsXml = StringBuilder()
@@ -131,20 +134,25 @@ object MemberExportUtils {
             val rowNum = idx + 5
             val ageText = member.calculatedAge()?.toString() ?: "-"
             val birthReadable = formatBirthDateReadable(member.birthDate, lang)
+            val denomText = member.denomination.takeIf { it.isNotBlank() } ?: "-"
+            val spouseText = member.spouseName?.takeIf { it.isNotBlank() } ?: "-"
             val values = listOf(
                 (idx + 1).toString(),
                 member.fullName,
+                member.myKadNumber?.takeIf { it.isNotBlank() } ?: "-",
                 member.resolvedGender().localizedLabel(lang),
                 birthReadable,
                 ageText,
+                member.resolvedMaritalStatusLabel(lang),
+                spouseText,
                 member.resolvedBaptismStatus().localizedLabel(lang),
-                member.denomination,
-                member.resolvedMaritalStatusLabel(lang)
+                denomText,
+                member.resolvedSibMembershipLabel(lang)
             )
             rowsXml.append("""<row r="$rowNum">""")
             values.forEachIndexed { colIdx, value ->
                 val ref = "${colLetter(colIdx)}$rowNum"
-                if (colIdx == 0 || (colIdx == 4 && value.toIntOrNull() != null)) {
+                if (colIdx == 0 || (colIdx == 5 && value.toIntOrNull() != null)) {
                     rowsXml.append("""<c r="$ref" s="4"><v>$value</v></c>""")
                 } else {
                     rowsXml.append(inlineStringCell(ref, value, style = 4))
@@ -157,20 +165,23 @@ object MemberExportUtils {
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <cols>
     <col min="1" max="1" width="6" customWidth="1"/>
-    <col min="2" max="2" width="32" customWidth="1"/>
-    <col min="3" max="3" width="14" customWidth="1"/>
-    <col min="4" max="4" width="18" customWidth="1"/>
-    <col min="5" max="5" width="15" customWidth="1"/>
-    <col min="6" max="6" width="18" customWidth="1"/>
+    <col min="2" max="2" width="28" customWidth="1"/>
+    <col min="3" max="3" width="18" customWidth="1"/>
+    <col min="4" max="4" width="12" customWidth="1"/>
+    <col min="5" max="5" width="16" customWidth="1"/>
+    <col min="6" max="6" width="13" customWidth="1"/>
     <col min="7" max="7" width="18" customWidth="1"/>
-    <col min="8" max="8" width="18" customWidth="1"/>
+    <col min="8" max="8" width="22" customWidth="1"/>
+    <col min="9" max="9" width="18" customWidth="1"/>
+    <col min="10" max="10" width="16" customWidth="1"/>
+    <col min="11" max="11" width="20" customWidth="1"/>
   </cols>
   <sheetData>
     $rowsXml
   </sheetData>
   <mergeCells count="2">
-    <mergeCell ref="A1:H1"/>
-    <mergeCell ref="A2:H2"/>
+    <mergeCell ref="A1:K1"/>
+    <mergeCell ref="A2:K2"/>
   </mergeCells>
 </worksheet>"""
 
@@ -280,16 +291,17 @@ object MemberExportUtils {
 
         val lang = AppLanguageManager.current()
         // Column proportions summing to 1.0f
-        val colWeights = floatArrayOf(0.05f, 0.24f, 0.10f, 0.14f, 0.07f, 0.14f, 0.12f, 0.14f)
+        val colWeights = floatArrayOf(0.04f, 0.19f, 0.13f, 0.08f, 0.12f, 0.06f, 0.14f, 0.12f, 0.12f)
         val colTitles = listOf(
             AppLanguageManager.tr("Bil", "No"),
             AppLanguageManager.tr("Nama Penuh", "Full Name"),
+            AppLanguageManager.tr("No. MyKad", "MyKad"),
             AppLanguageManager.tr("Jantina", "Gender"),
-            AppLanguageManager.tr("Tarikh Lahir", "Date of Birth"),
+            AppLanguageManager.tr("Tarikh Lahir", "Birth Date"),
             AppLanguageManager.tr("Umur", "Age"),
-            AppLanguageManager.tr("Status Baptisan", "Baptism Status"),
-            AppLanguageManager.tr("Denominasi", "Denomination"),
-            AppLanguageManager.tr("Status Perkahwinan", "Marital Status")
+            AppLanguageManager.tr("Perkahwinan", "Marital"),
+            AppLanguageManager.tr("Baptisan", "Baptism"),
+            AppLanguageManager.tr("No. SIB", "SIB No.")
         )
         val colWidths = colWeights.map { it * tableWidth }
 
@@ -413,15 +425,26 @@ object MemberExportUtils {
 
                     val ageUnit = AppLanguageManager.tr("thn", "yrs")
                     val ageStr = member.calculatedAge()?.let { "$it $ageUnit" } ?: "-"
+                    val maritalSummary = if (!member.spouseName.isNullOrBlank()) {
+                        "${member.resolvedMaritalStatusLabel(lang)} (${member.spouseName})"
+                    } else {
+                        member.resolvedMaritalStatusLabel(lang)
+                    }
+                    val baptismSummary = if (member.denomination.isNotBlank()) {
+                        "${member.resolvedBaptismStatus().localizedLabel(lang)} (${member.denomination})"
+                    } else {
+                        member.resolvedBaptismStatus().localizedLabel(lang)
+                    }
                     val rowValues = listOf(
                         seqNo.toString(),
                         member.fullName,
+                        member.myKadNumber?.takeIf { it.isNotBlank() } ?: "-",
                         member.resolvedGender().localizedLabel(lang),
                         formatBirthDateReadable(member.birthDate, lang),
                         ageStr,
-                        member.resolvedBaptismStatus().localizedLabel(lang),
-                        member.denomination,
-                        member.resolvedMaritalStatusLabel(lang)
+                        maritalSummary,
+                        baptismSummary,
+                        member.resolvedSibMembershipLabel(lang)
                     )
 
                     var cellX = marginX

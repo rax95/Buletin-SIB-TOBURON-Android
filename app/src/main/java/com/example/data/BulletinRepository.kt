@@ -139,8 +139,9 @@ class BulletinRepository(
             sourceFlow
                 .map { list ->
                     list.sortedWith(
-                        compareBy<ChurchSchedule> { it.sortOrder }
-                            .thenByDescending { it.createdAt ?: Timestamp(0, 0) }
+                        compareByDescending<ChurchSchedule> { it.createdAt ?: Timestamp(0, 0) }
+                            .thenByDescending { it.updatedAt ?: Timestamp(0, 0) }
+                            .thenBy { it.title.lowercase() }
                     )
                 }
                 .catch { error ->
@@ -295,11 +296,15 @@ class BulletinRepository(
         )
     }
 
-    fun observeNotificationEvents(uid: String?): Flow<List<NotificationEvent>> = flow {
+    fun observeNotificationEvents(uid: String?, isAdmin: Boolean = false): Flow<List<NotificationEvent>> = flow {
         val path = "notification_events"
-        emitAll(
+        val query = if (isAdmin && !uid.isNullOrBlank()) {
             db.collection("notification_events")
-                .whereEqualTo("published", true)
+        } else {
+            db.collection("notification_events").whereEqualTo("published", true)
+        }
+        emitAll(
+            query
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -1447,11 +1452,46 @@ class BulletinRepository(
                     snapshot.toObjects(
                         ChurchMemberPublic::class.java,
                         DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                    ).sortedBy { it.fullName.lowercase() }
+                    ).sortedWith(
+                        compareByDescending<ChurchMemberPublic> {
+                            (it.createdAt ?: Timestamp(0, 0)).seconds
+                        }.thenByDescending {
+                            (it.createdAt ?: Timestamp(0, 0)).nanoseconds
+                        }.thenBy {
+                            it.fullName.lowercase()
+                        }
+                    )
                 }
                 .catch { error ->
                     logStreamErrorIfActive(uid, error, OperationType.LIST, path)
                     throw error
+                }
+        )
+    }
+
+    fun observeOwnChurchMemberDetail(uid: String?, email: String?): Flow<ChurchMemberDetail?> = flow {
+        val cleanEmail = email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        if (uid.isNullOrBlank() || cleanEmail == null) {
+            emit(null)
+            return@flow
+        }
+        val path = "church_member_details"
+        emitAll(
+            db.collection("church_member_details")
+                .whereEqualTo("memberEmail", cleanEmail)
+                .limit(1)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.documents.firstOrNull()?.toObject(
+                        ChurchMemberDetail::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    )
+                }
+                .catch { error ->
+                    // Gracefully emit null if account email isn't verified or not linked yet
+                    val firestoreErr = unwrapFirestoreException(error)
+                    if (firestoreErr == null && error is CancellationException) throw error
+                    emit(null)
                 }
         )
     }
@@ -1512,21 +1552,38 @@ class BulletinRepository(
 
     suspend fun createChurchMember(
         fullName: String,
+        myKadNumber: String?,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
         denomination: String,
-        maritalStatus: MaritalStatus
+        maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String? = null,
+        memberEmail: String? = null
     ): Result<Unit> {
         var docPath = "church_members"
         return try {
             val uid = requireUserId()
             val cleanName = fullName.trim()
+            val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
             val cleanBirth = birthDateIso.trim()
-            val cleanDenom = denomination.trim()
+            val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
+            val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+                spouseName?.trim()?.takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+            val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanEmail = memberEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
             require(cleanName.length in 2..120) {
                 AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
+            }
+            require(cleanMyKad == null || cleanMyKad.length <= 30) {
+                AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
             }
             require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
                 AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
@@ -1534,41 +1591,186 @@ class BulletinRepository(
             require(calculateAgeFromIsoDate(cleanBirth) != null) {
                 AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
             }
-            require(cleanDenom.length in 1..80) {
-                AppLanguageManager.tr("Denominasi wajib diisi (maks 80 aksara).", "Denomination is required (max 80 characters).")
+            if (baptismStatus == BaptismStatus.DIBAPTIS) {
+                require(cleanDenom.length in 1..80) {
+                    AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
+                }
+            }
+            require(cleanSpouse == null || cleanSpouse.length <= 120) {
+                AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
+            }
+            require(cleanSibNo == null || cleanSibNo.length <= 40) {
+                AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
+            }
+            require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
+                AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
+            }
+            require(cleanEmail == null || cleanEmail.length <= 160) {
+                AppLanguageManager.tr("Alamat emel terlalu panjang (maks 160 aksara).", "Email address is too long (max 160 characters).")
             }
 
             val publicRef = db.collection("church_members").document()
             val detailRef = db.collection("church_member_details").document(publicRef.id)
             docPath = publicRef.path
 
+            val publicPayload = buildMap<String, Any?> {
+                put("fullName", cleanName)
+                put("gender", gender.code)
+                put("baptismStatus", baptismStatus.code)
+                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
+                put("published", true)
+                put("authorId", uid)
+                put("createdAt", FieldValue.serverTimestamp())
+                put("updatedAt", FieldValue.serverTimestamp())
+            }
+            val detailPayload = buildMap<String, Any?> {
+                put("fullName", cleanName)
+                if (cleanMyKad != null) put("myKadNumber", cleanMyKad)
+                put("gender", gender.code)
+                put("birthDate", cleanBirth)
+                put("baptismStatus", baptismStatus.code)
+                put("denomination", cleanDenom)
+                put("maritalStatus", maritalStatus.code)
+                if (cleanSpouse != null) put("spouseName", cleanSpouse)
+                if (cleanSibNo != null) put("sibMembershipNumber", cleanSibNo)
+                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
+                if (cleanEmail != null) put("memberEmail", cleanEmail)
+                put("authorId", uid)
+                put("createdAt", FieldValue.serverTimestamp())
+                put("updatedAt", FieldValue.serverTimestamp())
+            }
+
             val batch = db.batch()
-            batch.set(
-                publicRef,
-                mapOf(
-                    "fullName" to cleanName,
-                    "gender" to gender.code,
-                    "baptismStatus" to baptismStatus.code,
-                    "published" to true,
-                    "authorId" to uid,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
+            batch.set(publicRef, publicPayload)
+            batch.set(detailRef, detailPayload)
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Allows a signed-in user with a verified Google email to self-register their own
+     * church member details directly from the Account tab.
+     * Atomically writes /church_members/{member_$uid}, /church_member_details/{member_$uid},
+     * and an admin-only MEMBER_REGISTERED notification event.
+     */
+    suspend fun registerOwnChurchMember(
+        fullName: String,
+        myKadNumber: String?,
+        gender: MemberGender,
+        birthDateIso: String,
+        baptismStatus: BaptismStatus,
+        denomination: String,
+        maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String? = null,
+        verifiedMemberEmail: String
+    ): Result<Unit> {
+        var docPath = "church_members"
+        return try {
+            val uid = requireUserId()
+            val cleanEmail = verifiedMemberEmail.trim().lowercase()
+            require(cleanEmail.isNotEmpty() && cleanEmail.length <= 160) {
+                AppLanguageManager.tr(
+                    "Emel akaun Google yang disahkan diperlukan untuk mendaftar Kad Ahli.",
+                    "A verified Google account email is required to register your Member Card."
                 )
+            }
+            val cleanName = fullName.trim()
+            val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanBirth = birthDateIso.trim()
+            val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
+            val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+                spouseName?.trim()?.takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+            val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
+
+            require(cleanName.length in 2..120) {
+                AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
+            }
+            require(cleanMyKad == null || cleanMyKad.length <= 30) {
+                AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
+            }
+            require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
+                AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
+            }
+            require(calculateAgeFromIsoDate(cleanBirth) != null) {
+                AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
+            }
+            if (baptismStatus == BaptismStatus.DIBAPTIS) {
+                require(cleanDenom.length in 1..80) {
+                    AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
+                }
+            }
+            require(cleanSpouse == null || cleanSpouse.length <= 120) {
+                AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
+            }
+            require(cleanSibNo == null || cleanSibNo.length <= 40) {
+                AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
+            }
+            require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
+                AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
+            }
+
+            val memberId = "member_$uid"
+            val publicRef = db.collection("church_members").document(memberId)
+            val detailRef = db.collection("church_member_details").document(memberId)
+            val notifRef = db.collection("notification_events").document()
+            docPath = publicRef.path
+
+            val publicPayload = buildMap<String, Any?> {
+                put("fullName", cleanName)
+                put("gender", gender.code)
+                put("baptismStatus", baptismStatus.code)
+                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
+                put("published", true)
+                put("authorId", uid)
+                put("createdAt", FieldValue.serverTimestamp())
+                put("updatedAt", FieldValue.serverTimestamp())
+            }
+            val detailPayload = buildMap<String, Any?> {
+                put("fullName", cleanName)
+                if (cleanMyKad != null) put("myKadNumber", cleanMyKad)
+                put("gender", gender.code)
+                put("birthDate", cleanBirth)
+                put("baptismStatus", baptismStatus.code)
+                put("denomination", cleanDenom)
+                put("maritalStatus", maritalStatus.code)
+                if (cleanSpouse != null) put("spouseName", cleanSpouse)
+                if (cleanSibNo != null) put("sibMembershipNumber", cleanSibNo)
+                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
+                put("memberEmail", cleanEmail)
+                put("authorId", uid)
+                put("createdAt", FieldValue.serverTimestamp())
+                put("updatedAt", FieldValue.serverTimestamp())
+            }
+            val adminNotifPayload = mapOf(
+                "title" to AppLanguageManager.tr("Ahli Baharu Berdaftar", "New Member Registered"),
+                "body" to AppLanguageManager.tr(
+                    "$cleanName telah mengisi maklumat ahli SIB Toburon.",
+                    "$cleanName has registered their SIB Toburon member details."
+                ).take(320),
+                "eventType" to BulletinNotificationManager.TYPE_MEMBER_REGISTERED,
+                "targetId" to memberId,
+                "topic" to BulletinNotificationManager.TOPIC_ADMIN_MEMBERS,
+                "published" to false,
+                "authorId" to uid,
+                "createdAt" to FieldValue.serverTimestamp()
             )
-            batch.set(
-                detailRef,
-                mapOf(
-                    "fullName" to cleanName,
-                    "gender" to gender.code,
-                    "birthDate" to cleanBirth,
-                    "baptismStatus" to baptismStatus.code,
-                    "denomination" to cleanDenom,
-                    "maritalStatus" to maritalStatus.code,
-                    "authorId" to uid,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            )
+
+            val batch = db.batch()
+            batch.set(publicRef, publicPayload)
+            batch.set(detailRef, detailPayload)
+            batch.set(notifRef, adminNotifPayload)
             batch.commit().await()
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -1582,22 +1784,39 @@ class BulletinRepository(
     suspend fun updateChurchMember(
         memberId: String,
         fullName: String,
+        myKadNumber: String?,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
         denomination: String,
-        maritalStatus: MaritalStatus
+        maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String? = null,
+        memberEmail: String? = null
     ): Result<Unit> {
         val docPath = "church_members/$memberId"
         return try {
             requireUserId()
             require(memberId.isNotBlank()) { AppLanguageManager.tr("ID ahli tidak sah.", "Invalid member ID.") }
             val cleanName = fullName.trim()
+            val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
             val cleanBirth = birthDateIso.trim()
-            val cleanDenom = denomination.trim()
+            val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
+            val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+                spouseName?.trim()?.takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+            val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
+            val cleanEmail = memberEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
             require(cleanName.length in 2..120) {
                 AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
+            }
+            require(cleanMyKad == null || cleanMyKad.length <= 30) {
+                AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
             }
             require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
                 AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
@@ -1605,8 +1824,22 @@ class BulletinRepository(
             require(calculateAgeFromIsoDate(cleanBirth) != null) {
                 AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
             }
-            require(cleanDenom.length in 1..80) {
-                AppLanguageManager.tr("Denominasi wajib diisi (maks 80 aksara).", "Denomination is required (max 80 characters).")
+            if (baptismStatus == BaptismStatus.DIBAPTIS) {
+                require(cleanDenom.length in 1..80) {
+                    AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
+                }
+            }
+            require(cleanSpouse == null || cleanSpouse.length <= 120) {
+                AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
+            }
+            require(cleanSibNo == null || cleanSibNo.length <= 40) {
+                AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
+            }
+            require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
+                AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
+            }
+            require(cleanEmail == null || cleanEmail.length <= 160) {
+                AppLanguageManager.tr("Alamat emel terlalu panjang (maks 160 aksara).", "Email address is too long (max 160 characters).")
             }
 
             val publicRef = db.collection("church_members").document(memberId)
@@ -1619,6 +1852,7 @@ class BulletinRepository(
                     "fullName" to cleanName,
                     "gender" to gender.code,
                     "baptismStatus" to baptismStatus.code,
+                    "passportPhotoBase64" to cleanPhoto,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
@@ -1626,11 +1860,16 @@ class BulletinRepository(
                 detailRef,
                 mapOf(
                     "fullName" to cleanName,
+                    "myKadNumber" to cleanMyKad,
                     "gender" to gender.code,
                     "birthDate" to cleanBirth,
                     "baptismStatus" to baptismStatus.code,
                     "denomination" to cleanDenom,
                     "maritalStatus" to maritalStatus.code,
+                    "spouseName" to cleanSpouse,
+                    "sibMembershipNumber" to cleanSibNo,
+                    "passportPhotoBase64" to cleanPhoto,
+                    "memberEmail" to cleanEmail,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
@@ -1658,6 +1897,69 @@ class BulletinRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    // --- APP VERSION CONFIG (/app_config/version) ---
+
+    fun observeAppVersionConfig(uid: String?): Flow<AppVersionConfig?> =
+        db.collection("app_config").document("version")
+            .snapshots()
+            .map { snapshot ->
+                if (!snapshot.exists()) null
+                else snapshot.toObject(AppVersionConfig::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            }
+            .catch { error ->
+                logStreamErrorIfActive(uid, error, OperationType.GET, "app_config/version")
+                emit(null)
+            }
+
+    suspend fun saveAppVersionConfig(
+        latestVersionCode: Int,
+        latestVersionName: String,
+        releaseNotes: String,
+        updateUrl: String,
+        forceUpdate: Boolean
+    ): Result<Unit> {
+        val docPath = "app_config/version"
+        return try {
+            val uid = requireUserId()
+            val cleanName = latestVersionName.trim()
+            val cleanNotes = releaseNotes.trim()
+            val cleanUrl = updateUrl.trim()
+
+            require(latestVersionCode in 1..1_000_000) {
+                AppLanguageManager.tr("Kod versi tidak sah (1-1000000).", "Invalid version code (1-1000000).")
+            }
+            require(cleanName.length in 1..32) {
+                AppLanguageManager.tr("Nama versi wajib diisi (maks 32 aksara).", "Version name is required (max 32 characters).")
+            }
+            require(cleanNotes.length <= 1000) {
+                AppLanguageManager.tr("Nota perubahan maks 1000 aksara.", "Release notes max 1000 characters.")
+            }
+            require(cleanUrl.length <= 500 && (cleanUrl.isEmpty() || cleanUrl.startsWith("https://"))) {
+                AppLanguageManager.tr("Pautan kemas kini mesti bermula dengan https://", "Update URL must start with https://")
+            }
+
+            db.collection("app_config").document("version")
+                .set(
+                    mapOf(
+                        "latestVersionCode" to latestVersionCode,
+                        "latestVersionName" to cleanName,
+                        "releaseNotes" to cleanNotes,
+                        "updateUrl" to cleanUrl,
+                        "forceUpdate" to forceUpdate,
+                        "updatedBy" to uid,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
             Result.failure(e)
         }
     }

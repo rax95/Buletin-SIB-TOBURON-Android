@@ -1,13 +1,30 @@
 package com.example.ui.components
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -15,11 +32,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
@@ -27,6 +50,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -44,18 +68,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.BaptismStatus
 import com.example.data.ChurchMemberDetail
+import com.example.data.ImageUtils
 import com.example.data.MaritalStatus
 import com.example.data.MemberGender
+import com.example.data.UserProfile
 import com.example.data.calculateAgeFromIsoDate
 import com.example.data.epochMillisToIsoDate
 import com.example.data.formatBirthDateReadable
@@ -63,6 +94,7 @@ import com.example.data.isoDateToEpochMillis
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 private val COMMON_DENOMINATIONS = listOf(
@@ -78,38 +110,136 @@ private val COMMON_DENOMINATIONS = listOf(
 @Composable
 fun AdminMemberEditorDialog(
     initial: ChurchMemberDetail?,
+    registeredUsers: List<UserProfile> = emptyList(),
+    isSelfRegistration: Boolean = false,
+    defaultFullName: String? = null,
+    defaultEmail: String? = null,
     isBusy: Boolean,
     onDismiss: () -> Unit,
     onSave: (
         fullName: String,
+        myKadNumber: String?,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
         denomination: String,
-        maritalStatus: MaritalStatus
+        maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String?,
+        memberEmail: String?
     ) -> Unit
 ) {
     val lang = LocalAppLanguage.current
-    var fullName by remember(initial) { mutableStateOf(initial?.fullName ?: "") }
-    var gender by remember(initial) { mutableStateOf(initial?.resolvedGender() ?: MemberGender.LELAKI) }
-    var birthDateIso by remember(initial) { mutableStateOf(initial?.birthDate ?: "") }
-    var baptismStatus by remember(initial) {
-        mutableStateOf(initial?.resolvedBaptismStatus() ?: BaptismStatus.BELUM_DIBAPTIS)
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var fullName by remember(initial, defaultFullName) {
+        mutableStateOf(initial?.fullName ?: defaultFullName?.takeIf { isSelfRegistration } ?: "")
     }
-    var denomination by remember(initial) { mutableStateOf(initial?.denomination?.ifBlank { "SIB" } ?: "SIB") }
+    var myKadNumber by remember(initial) { mutableStateOf(initial?.myKadNumber ?: "") }
+    var birthDateIso by remember(initial) { mutableStateOf(initial?.birthDate ?: "") }
+    var gender by remember(initial) { mutableStateOf(initial?.resolvedGender() ?: MemberGender.LELAKI) }
     var maritalStatus by remember(initial) {
         mutableStateOf(initial?.resolvedMaritalStatus() ?: MaritalStatus.BUJANG)
     }
+    var spouseName by remember(initial) { mutableStateOf(initial?.spouseName ?: "") }
+    var baptismStatus by remember(initial) {
+        mutableStateOf(initial?.resolvedBaptismStatus() ?: BaptismStatus.BELUM_DIBAPTIS)
+    }
+    var denomination by remember(initial) {
+        mutableStateOf(
+            if (initial?.resolvedBaptismStatus() == BaptismStatus.DIBAPTIS) {
+                initial.denomination.ifBlank { "SIB" }
+            } else {
+                initial?.denomination ?: ""
+            }
+        )
+    }
+    var sibMembershipNumber by remember(initial) { mutableStateOf(initial?.sibMembershipNumber ?: "") }
+    var memberEmail by remember(initial, defaultEmail) {
+        mutableStateOf(initial?.memberEmail ?: defaultEmail?.takeIf { isSelfRegistration } ?: "")
+    }
+    var passportPhotoBase64 by remember(initial) {
+        mutableStateOf(initial?.passportPhotoBase64?.takeIf { it.isNotBlank() })
+    }
+    var isEncodingPhoto by remember { mutableStateOf(false) }
+    var photoStatusNote by remember { mutableStateOf<String?>(null) }
+    var photoError by remember { mutableStateOf<String?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
+
+    val decodedPassportBitmap = remember(passportPhotoBase64) {
+        ImageUtils.decodeBase64ToImageBitmap(passportPhotoBase64)
+    }
+
+    val linkableUsers = remember(registeredUsers) {
+        registeredUsers.filter { it.email.isNotBlank() }
+    }
+
+    fun handleSelectedPhotoUri(uri: Uri?) {
+        if (uri == null) return
+        isEncodingPhoto = true
+        photoError = null
+        coroutineScope.launch {
+            val encoded = ImageUtils.encodeUriToBase64(
+                context = context,
+                uri = uri,
+                maxBase64Length = 120_000,
+                initialMaxDimensionPx = 420
+            )
+            encoded.onSuccess { result ->
+                passportPhotoBase64 = result.base64
+                photoStatusNote = "${result.width}x${result.height} • ${result.sizeKb} KB"
+                photoError = null
+            }.onFailure { err ->
+                photoError = err.localizedMessage ?: AppLanguageManager.tr(
+                    "Gagal memproses foto pasport.",
+                    "Failed to process passport photo."
+                )
+            }
+            isEncodingPhoto = false
+        }
+    }
+
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri -> handleSelectedPhotoUri(uri) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri -> handleSelectedPhotoUri(uri) }
+
+    fun launchPassportPicker() {
+        try {
+            photoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (_: Exception) {
+            openDocumentLauncher.launch(arrayOf("image/*"))
+        }
+    }
 
     val calculatedAge = remember(birthDateIso) { calculateAgeFromIsoDate(birthDateIso) }
     val isoPattern = remember { Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") }
     val isBirthDateValid = birthDateIso.trim().matches(isoPattern) && calculatedAge != null
+    val isDenominationValid = baptismStatus != BaptismStatus.DIBAPTIS || denomination.trim().length in 1..80
 
     val isFormValid = fullName.trim().length in 2..120 &&
         isBirthDateValid &&
-        denomination.trim().length in 1..80
+        isDenominationValid &&
+        !isEncodingPhoto
+
+    val spouseFieldLabel = if (gender == MemberGender.PEREMPUAN) {
+        tr("Nama Suami", "Husband's Name")
+    } else {
+        tr("Nama Isteri", "Wife's Name")
+    }
+    val spouseFieldPlaceholder = if (gender == MemberGender.PEREMPUAN) {
+        tr("Masukkan nama penuh suami", "Enter husband's full name")
+    } else {
+        tr("Masukkan nama penuh isteri", "Enter wife's full name")
+    }
 
     Dialog(
         onDismissRequest = { if (!isBusy) onDismiss() },
@@ -134,19 +264,36 @@ fun AdminMemberEditorDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (initial == null) {
-                                tr("Daftar Ahli Jemaat Baharu", "Register New Church Member")
-                            } else {
-                                tr("Edit Maklumat Ahli", "Edit Member Details")
+                            text = when {
+                                isSelfRegistration && initial == null -> tr(
+                                    "Isi Maklumat Ahli SIB Toburon",
+                                    "Fill SIB Toburon Member Details"
+                                )
+                                isSelfRegistration -> tr(
+                                    "Kemas Kini Maklumat Ahli",
+                                    "Update Your Member Details"
+                                )
+                                initial == null -> tr(
+                                    "Daftar Ahli Jemaat Baharu",
+                                    "Register New Church Member"
+                                )
+                                else -> tr("Edit Maklumat Ahli", "Edit Member Details")
                             },
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = tr(
-                                "Jemaat hanya dapat melihat nama, jantina, dan status baptisan; maklumat penuh hanya untuk Admin.",
-                                "Regular members only see name, gender, and baptism status; full details are Admin-only."
-                            ),
+                            text = if (isSelfRegistration) {
+                                tr(
+                                    "Maklumat ini akan memaparkan Kad Ahli anda dan memaklumkan Admin secara automatik.",
+                                    "These details populate your Member Card and notify Admin automatically."
+                                )
+                            } else {
+                                tr(
+                                    "Maklumat ini terpaut secara langsung dengan Kad Ahli jemaat di tab Akaun.",
+                                    "These details sync directly with the member's ID Card in the Account tab."
+                                )
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -164,7 +311,7 @@ fun AdminMemberEditorDialog(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Scrollable Form Body
+                // Scrollable Form Body (Exact numbered order 1–7)
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
@@ -172,20 +319,219 @@ fun AdminMemberEditorDialog(
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    // 1. Nama Penuh
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = tr("1. Nama Penuh", "1. Full Name"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    // 1. Gambar User & Nama Penuh
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Badge,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = tr("1. Gambar Ahli & Nama Penuh", "1. Member Photo & Full Name"),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                // 3:4 Passport Portrait Preview Frame
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                    border = BorderStroke(
+                                        width = 1.5.dp,
+                                        color = if (decodedPassportBitmap != null) {
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                        } else {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        }
+                                    ),
+                                    shadowElevation = 2.dp,
+                                    modifier = Modifier
+                                        .width(84.dp)
+                                        .height(110.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable(enabled = !isBusy && !isEncodingPhoto) {
+                                            launchPassportPicker()
+                                        }
+                                        .testTag("member_passport_photo_preview")
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        if (decodedPassportBitmap != null) {
+                                            Image(
+                                                bitmap = decodedPassportBitmap,
+                                                contentDescription = tr("Pratonton foto pasport ahli", "Member passport photo preview"),
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+                                                    .padding(6.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Person,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(34.dp)
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = "3:4",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                        if (isEncodingPhoto) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f))
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    strokeWidth = 2.5.dp,
+                                                    modifier = Modifier.size(26.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = tr(
+                                            "Gambar saiz pasport untuk Kad Ahli SIB Toburon.",
+                                            "Passport-size photo for SIB Toburon Member Card."
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        FilledTonalButton(
+                                            onClick = { launchPassportPicker() },
+                                            enabled = !isBusy && !isEncodingPhoto,
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                            modifier = Modifier.testTag("member_pick_passport_photo_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.AddAPhoto,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = if (passportPhotoBase64 != null) {
+                                                    tr("Tukar", "Change")
+                                                } else {
+                                                    tr("Pilih Foto", "Pick Photo")
+                                                },
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { openDocumentLauncher.launch(arrayOf("image/*")) },
+                                            enabled = !isBusy && !isEncodingPhoto,
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                            modifier = Modifier.testTag("member_pick_passport_file_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.FolderOpen,
+                                                contentDescription = tr("Pilih daripada fail", "Pick from files"),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (passportPhotoBase64 != null) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = photoStatusNote ?: tr("Foto pasport siap", "Passport photo ready"),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            TextButton(
+                                                onClick = {
+                                                    passportPhotoBase64 = null
+                                                    photoStatusNote = null
+                                                    photoError = null
+                                                },
+                                                enabled = !isBusy && !isEncodingPhoto,
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.testTag("member_remove_passport_photo_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.DeleteOutline,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(
+                                                    text = tr("Padam", "Remove"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (photoError != null) {
+                                        Text(
+                                            text = photoError ?: "",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = fullName,
                             onValueChange = {
                                 fullName = it
                                 validationError = null
                             },
-                            label = { Text(tr("Nama penuh jemaat", "Member full name")) },
+                            label = { Text(tr("Nama penuh ahli *", "Member full name *")) },
                             placeholder = { Text(tr("Contoh: Johanes bin Lukas", "Example: John Lukas")) },
                             leadingIcon = {
                                 Icon(Icons.Filled.Person, contentDescription = null)
@@ -197,10 +543,154 @@ fun AdminMemberEditorDialog(
                         )
                     }
 
-                    // 2. Jantina
+                    // 2. Nombor MyKad
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = tr("2. Jantina", "2. Gender"),
+                            text = tr("2. Nombor MyKad", "2. MyKad Number"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        OutlinedTextField(
+                            value = myKadNumber,
+                            onValueChange = {
+                                if (it.length <= 30) {
+                                    myKadNumber = it
+                                    validationError = null
+                                }
+                            },
+                            label = { Text(tr("Nombor ID (MyKad)", "ID Number (MyKad)")) },
+                            placeholder = { Text("950614-12-5431") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.CreditCard, contentDescription = null)
+                            },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("member_mykad_input")
+                        )
+                    }
+
+                    // 3. Tarikh Lahir (Date Picker + Auto Umur di sebelah kanan)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = tr("3. Tarikh Lahir *", "3. Date of Birth *"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Clickable Date Picker Selector on the left
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (isBirthDateValid) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                                    } else {
+                                        MaterialTheme.colorScheme.outline
+                                    }
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 56.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(enabled = !isBusy) { showDatePicker = true }
+                                    .testTag("member_birthdate_picker_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CalendarMonth,
+                                        contentDescription = tr("Pilih tarikh lahir", "Pick date of birth"),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isBirthDateValid) {
+                                                formatBirthDateReadable(birthDateIso, lang)
+                                            } else {
+                                                tr("Pilih tarikh lahir", "Select date of birth")
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isBirthDateValid) FontWeight.SemiBold else FontWeight.Normal,
+                                            color = if (isBirthDateValid) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = if (isBirthDateValid) {
+                                                birthDateIso
+                                            } else {
+                                                tr("Ketik untuk buka kalendar", "Tap to open calendar")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Auto-calculated Age Box immediately on the right
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (calculatedAge != null) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                },
+                                modifier = Modifier
+                                    .heightIn(min = 56.dp)
+                                    .testTag("member_auto_age_preview")
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = tr("UMUR", "AGE"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (calculatedAge != null) {
+                                            MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                    Text(
+                                        text = if (calculatedAge != null) {
+                                            tr("$calculatedAge thn", "$calculatedAge yrs")
+                                        } else {
+                                            "--"
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (calculatedAge != null) {
+                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Jantina
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = tr("4. Jantina", "4. Gender"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -225,202 +715,10 @@ fun AdminMemberEditorDialog(
                         }
                     }
 
-                    // 3. Tarikh Lahir (Automatik Show Umur)
+                    // 5. Status Perkahwinan (Marital Status) + Conditional Nama Suami / Nama Isteri
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = tr("3. Tarikh Lahir (Umur Automatik)", "3. Date of Birth (Auto Age)"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = birthDateIso,
-                                onValueChange = {
-                                    birthDateIso = it
-                                    validationError = null
-                                },
-                                label = { Text("YYYY-MM-DD") },
-                                placeholder = { Text(tr("Contoh: 1995-06-14", "Example: 1995-06-14")) },
-                                leadingIcon = {
-                                    Icon(Icons.Filled.Cake, contentDescription = null)
-                                },
-                                singleLine = true,
-                                isError = birthDateIso.isNotBlank() && !isBirthDateValid,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("member_birthdate_input")
-                            )
-                            OutlinedButton(
-                                onClick = { showDatePicker = true },
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .height(56.dp)
-                                    .testTag("member_birthdate_picker_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.CalendarMonth,
-                                    contentDescription = tr("Pilih tarikh lahir", "Pick date of birth"),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(tr("Pilih", "Pick"))
-                            }
-                        }
-
-                        // Auto-calculated Age Preview Pill
-                        Surface(
-                            shape = MaterialTheme.shapes.medium,
-                            color = if (calculatedAge != null) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerLow
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("member_auto_age_preview")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                Column {
-                                    Text(
-                                        text = if (calculatedAge != null) {
-                                            formatBirthDateReadable(birthDateIso, lang)
-                                        } else {
-                                            tr(
-                                                "Sila pilih atau masukkan tarikh lahir",
-                                                "Please pick or enter date of birth"
-                                            )
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (calculatedAge != null) {
-                                            MaterialTheme.colorScheme.onSecondaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                    if (birthDateIso.isNotBlank() && !isBirthDateValid) {
-                                        Text(
-                                            text = tr(
-                                                "Gunakan format YYYY-MM-DD (tidak melebihi hari ini).",
-                                                "Use YYYY-MM-DD format (not in the future)."
-                                            ),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = if (calculatedAge != null) {
-                                        MaterialTheme.colorScheme.secondary
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceContainerHighest
-                                    }
-                                ) {
-                                    Text(
-                                        text = if (calculatedAge != null) {
-                                            tr("Umur: $calculatedAge tahun", "Age: $calculatedAge yrs")
-                                        } else {
-                                            tr("Umur: --", "Age: --")
-                                        },
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (calculatedAge != null) {
-                                            MaterialTheme.colorScheme.onSecondary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 4. Status Baptisan
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = tr("4. Status Baptisan", "4. Baptism Status"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            BaptismStatus.entries.forEach { status ->
-                                FilterChip(
-                                    selected = baptismStatus == status,
-                                    onClick = { baptismStatus = status },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Filled.WaterDrop,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    },
-                                    label = { Text(status.localizedLabel(lang)) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("member_baptism_${status.code.lowercase()}")
-                                )
-                            }
-                        }
-                    }
-
-                    // 5. Denominasi
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = tr("5. Denominasi", "5. Denomination"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        OutlinedTextField(
-                            value = denomination,
-                            onValueChange = {
-                                denomination = it
-                                validationError = null
-                            },
-                            label = { Text(tr("Denominasi gereja", "Church denomination")) },
-                            placeholder = { Text(tr("Contoh: SIB", "Example: SIB")) },
-                            leadingIcon = {
-                                Icon(Icons.Filled.Church, contentDescription = null)
-                            },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("member_denomination_input")
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            COMMON_DENOMINATIONS.forEach { preset ->
-                                FilterChip(
-                                    selected = denomination.trim().equals(preset, ignoreCase = true),
-                                    onClick = { denomination = preset },
-                                    label = { Text(preset, style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
-                        }
-                    }
-
-                    // 6. Status Perkahwinan / Marital Status
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = tr("6. Status Perkahwinan", "6. Marital Status"),
+                            text = tr("5. Status Perkahwinan", "5. Marital Status"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -432,7 +730,12 @@ fun AdminMemberEditorDialog(
                             MaritalStatus.entries.forEach { status ->
                                 FilterChip(
                                     selected = maritalStatus == status,
-                                    onClick = { maritalStatus = status },
+                                    onClick = {
+                                        maritalStatus = status
+                                        if (status != MaritalStatus.BERKAHWIN) {
+                                            spouseName = ""
+                                        }
+                                    },
                                     leadingIcon = {
                                         Icon(
                                             imageVector = Icons.Filled.Favorite,
@@ -448,6 +751,235 @@ fun AdminMemberEditorDialog(
                                     ),
                                     modifier = Modifier.testTag("member_marital_${status.code.lowercase()}")
                                 )
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = maritalStatus == MaritalStatus.BERKAHWIN,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            OutlinedTextField(
+                                value = spouseName,
+                                onValueChange = {
+                                    if (it.length <= 120) {
+                                        spouseName = it
+                                        validationError = null
+                                    }
+                                },
+                                label = { Text(spouseFieldLabel) },
+                                placeholder = { Text(spouseFieldPlaceholder) },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Favorite, contentDescription = null)
+                                },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp)
+                                    .testTag("member_spouse_name_input")
+                            )
+                        }
+                    }
+
+                    // 6. Status Baptisan + Conditional Denominasi Gereja (only when Sudah Dibaptis)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = tr("6. Status Baptisan", "6. Baptism Status"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            BaptismStatus.entries.forEach { status ->
+                                FilterChip(
+                                    selected = baptismStatus == status,
+                                    onClick = {
+                                        baptismStatus = status
+                                        if (status == BaptismStatus.DIBAPTIS && denomination.isBlank()) {
+                                            denomination = "SIB"
+                                        }
+                                        validationError = null
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.WaterDrop,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = status.localizedLabel(lang),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("member_baptism_${status.code.lowercase()}")
+                                )
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = baptismStatus == BaptismStatus.DIBAPTIS,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(top = 2.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = denomination,
+                                    onValueChange = {
+                                        if (it.length <= 80) {
+                                            denomination = it
+                                            validationError = null
+                                        }
+                                    },
+                                    label = { Text(tr("Nama Denominasi Gereja *", "Church Denomination *")) },
+                                    placeholder = { Text(tr("Contoh: SIB", "Example: SIB")) },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Church, contentDescription = null)
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("member_denomination_input")
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    COMMON_DENOMINATIONS.forEach { preset ->
+                                        FilterChip(
+                                            selected = denomination.trim().equals(preset, ignoreCase = true),
+                                            onClick = { denomination = preset },
+                                            label = { Text(preset, style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 7. Nombor Keanggotaan SIB (Jika ada; kosong = "Belum ada")
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = tr("7. Nombor Keanggotaan SIB", "7. SIB Membership Number"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        OutlinedTextField(
+                            value = sibMembershipNumber,
+                            onValueChange = {
+                                if (it.length <= 40) {
+                                    sibMembershipNumber = it
+                                    validationError = null
+                                }
+                            },
+                            label = { Text(tr("Nombor Keanggotaan SIB (Jika ada)", "SIB Membership Number (Optional)")) },
+                            placeholder = { Text(tr("Belum ada", "Not yet assigned")) },
+                            leadingIcon = {
+                                Icon(Icons.Filled.ConfirmationNumber, contentDescription = null)
+                            },
+                            supportingText = {
+                                Text(
+                                    tr(
+                                        "Biarkan kosong jika belum ada nombor keanggotaan (akan dipaparkan sebagai \"Belum ada\").",
+                                        "Leave empty if unassigned (will be displayed as \"Not yet assigned\")."
+                                    )
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("member_sib_number_input")
+                        )
+                    }
+
+                    if (!isSelfRegistration) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+
+                        // Pautan Emel Akaun Google Ahli (untuk sync Kad Ahli di tab Akaun)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = tr(
+                                    "Pautan Akaun Google Ahli (Untuk Kad Ahli)",
+                                    "Link Member Google Account (For Member Card)"
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            OutlinedTextField(
+                                value = memberEmail,
+                                onValueChange = {
+                                    memberEmail = it
+                                    validationError = null
+                                },
+                                label = { Text(tr("Emel Google ahli (Pilihan)", "Member Google email (Optional)")) },
+                                placeholder = { Text("contoh@gmail.com") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Email, contentDescription = null)
+                                },
+                                supportingText = {
+                                    Text(
+                                        tr(
+                                            "Memautkan rekod ini supaya dipaparkan terus dalam Kad Ahli pengguna di tab Akaun.",
+                                            "Links this record so it syncs directly to the user's Member Card in the Account tab."
+                                        )
+                                    )
+                                },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("member_email_input")
+                            )
+
+                            if (linkableUsers.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = tr(
+                                            "Pilih pantas daripada pengguna berdaftar:",
+                                            "Quick-select from registered users:"
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        linkableUsers.take(8).forEach { user ->
+                                            val isSelected = memberEmail.trim().equals(user.email.trim(), ignoreCase = true)
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = {
+                                                    memberEmail = user.email.trim().lowercase()
+                                                    if (fullName.isBlank() && user.displayName.isNotBlank()) {
+                                                        fullName = user.displayName
+                                                    }
+                                                },
+                                                label = {
+                                                    Text(
+                                                        text = user.displayName.ifBlank { user.email },
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -489,28 +1021,43 @@ fun AdminMemberEditorDialog(
                             }
                             if (!isBirthDateValid) {
                                 validationError = AppLanguageManager.tr(
-                                    "Sila pilih tarikh lahir yang sah (YYYY-MM-DD).",
-                                    "Please select a valid date of birth (YYYY-MM-DD)."
+                                    "Sila pilih tarikh lahir menggunakan kalendar.",
+                                    "Please select a valid date of birth from the calendar."
                                 )
                                 return@Button
                             }
-                            if (denomination.trim().isEmpty()) {
+                            if (baptismStatus == BaptismStatus.DIBAPTIS && denomination.trim().isEmpty()) {
                                 validationError = AppLanguageManager.tr(
-                                    "Sila masukkan denominasi.",
-                                    "Please enter a denomination."
+                                    "Sila masukkan nama denominasi gereja.",
+                                    "Please enter the church denomination."
                                 )
                                 return@Button
+                            }
+                            val effectiveDenomination = if (baptismStatus == BaptismStatus.DIBAPTIS) {
+                                denomination.trim()
+                            } else {
+                                ""
+                            }
+                            val effectiveSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+                                spouseName.trim().takeIf { it.isNotEmpty() }
+                            } else {
+                                null
                             }
                             onSave(
                                 fullName.trim(),
+                                myKadNumber.trim().takeIf { it.isNotEmpty() },
                                 gender,
                                 birthDateIso.trim(),
                                 baptismStatus,
-                                denomination.trim(),
-                                maritalStatus
+                                effectiveDenomination,
+                                maritalStatus,
+                                effectiveSpouse,
+                                sibMembershipNumber.trim().takeIf { it.isNotEmpty() },
+                                passportPhotoBase64,
+                                memberEmail.trim().lowercase().takeIf { it.isNotEmpty() }
                             )
                         },
-                        enabled = !isBusy && isFormValid,
+                        enabled = !isBusy && !isEncodingPhoto && isFormValid,
                         modifier = Modifier.testTag("save_member_button")
                     ) {
                         if (isBusy) {
@@ -521,7 +1068,13 @@ fun AdminMemberEditorDialog(
                             )
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (initial == null) tr("Simpan Ahli", "Save Member") else tr("Kemas Kini", "Update"))
+                        Text(
+                            when {
+                                isSelfRegistration && initial == null -> tr("Daftar & Simpan", "Register & Save")
+                                initial == null -> tr("Simpan Ahli", "Save Member")
+                                else -> tr("Kemas Kini", "Update")
+                            }
+                        )
                     }
                 }
             }

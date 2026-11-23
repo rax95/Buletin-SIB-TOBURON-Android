@@ -23,17 +23,26 @@ class BulletinMessagingService : FirebaseMessagingService() {
         val appContext = applicationContext
         BulletinNotificationManager.saveFcmTokenLocally(appContext, token)
 
+        val masterEnabled = BulletinNotificationManager.isMasterPushEnabled(appContext)
         val newsEnabled = BulletinNotificationManager.isNewsNotificationsEnabled(appContext)
         val schedulesEnabled = BulletinNotificationManager.isScheduleNotificationsEnabled(appContext)
-        BulletinNotificationManager.syncTopicSubscriptions(appContext, newsEnabled, schedulesEnabled)
+        BulletinNotificationManager.syncTopicSubscriptions(
+            context = appContext,
+            newsEnabled = newsEnabled,
+            schedulesEnabled = schedulesEnabled,
+            masterEnabled = masterEnabled
+        )
 
         if (Firebase.auth.currentUser != null && token.length in 10..512) {
             serviceScope.launch {
                 val repo = BulletinRepository(appContext)
-                repo.saveFcmToken(token, newsEnabled, schedulesEnabled)
-                    .onFailure { err ->
-                        Log.w(TAG, "Gagal menyegerakkan token FCM baharu: ${err.message}")
-                    }
+                repo.saveFcmToken(
+                    token = token,
+                    newsEnabled = masterEnabled && newsEnabled,
+                    schedulesEnabled = masterEnabled && schedulesEnabled
+                ).onFailure { err ->
+                    Log.w(TAG, "Gagal menyegerakkan token FCM baharu: ${err.message}")
+                }
             }
         }
     }

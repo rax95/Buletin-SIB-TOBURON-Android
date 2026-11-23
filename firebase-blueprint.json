@@ -422,7 +422,7 @@
     },
     "NotificationEvent": {
       "title": "NotificationEvent",
-      "description": "Antrean/catatan notifikasi push FCM setiap kali admin menerbitkan berita atau jadwal baru.",
+      "description": "Antrean/catatan notifikasi push real-time untuk berita, jadwal baru, dan pendaftaran ahli jemaat baharu (notifikasi ahli baharu khusus untuk Admin).",
       "type": "object",
       "properties": {
         "title": {
@@ -435,25 +435,25 @@
         },
         "eventType": {
           "type": "string",
-          "enum": ["NEWS", "SCHEDULE"],
-          "description": "Jenis konten yang diterbitkan"
+          "enum": ["NEWS", "SCHEDULE", "MEMBER_REGISTERED"],
+          "description": "Jenis acara notifikasi (NEWS/SCHEDULE untuk jemaat, MEMBER_REGISTERED khusus Admin)"
         },
         "targetId": {
           "type": "string",
-          "description": "ID dokumen berita atau jadwal tujuan deep-link"
+          "description": "ID dokumen berita, jadwal, atau ahli baharu tujuan deep-link"
         },
         "topic": {
           "type": "string",
-          "enum": ["sib_toburon_news", "sib_toburon_schedules"],
-          "description": "Topik FCM tujuan siaran jemaat"
+          "enum": ["sib_toburon_news", "sib_toburon_schedules", "sib_toburon_admin_members"],
+          "description": "Topik FCM tujuan siaran"
         },
         "published": {
           "type": "boolean",
-          "description": "Harus true agar dapat diterima jemaat secara real-time"
+          "description": "True untuk siaran jemaat (NEWS/SCHEDULE); false untuk notifikasi khusus Admin (MEMBER_REGISTERED)"
         },
         "authorId": {
           "type": "string",
-          "description": "UID admin yang menerbitkan konten"
+          "description": "UID admin penerbit atau UID jemaat yang mendaftar diri"
         },
         "createdAt": {
           "type": "string",
@@ -507,6 +507,10 @@
           "enum": ["DIBAPTIS", "BELUM_DIBAPTIS"],
           "description": "Status baptisan ahli jemaat"
         },
+        "passportPhotoBase64": {
+          "type": "string",
+          "description": "Foto pasport ahli jemaat terkompresi Base64 opsional (maks 160000 karakter)"
+        },
         "published": {
           "type": "boolean",
           "description": "Status paparan dalam senarai ahli jemaat"
@@ -537,6 +541,10 @@
           "type": "string",
           "description": "Nama penuh ahli jemaat (2-120 karakter)"
         },
+        "myKadNumber": {
+          "type": "string",
+          "description": "Nombor Kad Pengenalan (MyKad) ahli jemaat (pilihan, maks 30 karakter)"
+        },
         "gender": {
           "type": "string",
           "enum": ["LELAKI", "PEREMPUAN"],
@@ -549,16 +557,32 @@
         "baptismStatus": {
           "type": "string",
           "enum": ["DIBAPTIS", "BELUM_DIBAPTIS"],
-          "description": "Status baptisan ahli jemaat"
+          "description": "Status baptisan ahli jemaat (Sudah Dibaptis / Belum Dibaptis)"
         },
         "denomination": {
           "type": "string",
-          "description": "Denominasi gereja (1-80 karakter)"
+          "description": "Denominasi gereja (wajib jika Sudah Dibaptis, maks 80 karakter)"
         },
         "maritalStatus": {
           "type": "string",
           "enum": ["BUJANG", "BERKAHWIN", "BALU_DUDA", "BERCERAI"],
           "description": "Status perkahwinan (Marital Status) ahli jemaat"
+        },
+        "spouseName": {
+          "type": "string",
+          "description": "Nama Suami (jika Perempuan & Berkahwin) atau Nama Isteri (jika Lelaki & Berkahwin), pilihan maks 120 karakter"
+        },
+        "sibMembershipNumber": {
+          "type": "string",
+          "description": "Nombor Keanggotaan SIB (pilihan, maks 40 karakter; dipaparkan sebagai 'Belum ada' jika kosong)"
+        },
+        "passportPhotoBase64": {
+          "type": "string",
+          "description": "Foto pasport ahli jemaat terkompresi Base64 opsional (maks 160000 karakter)"
+        },
+        "memberEmail": {
+          "type": "string",
+          "description": "Alamat emel Google ahli (huruf kecil, pilihan, maks 160 karakter) untuk memautkan Kad ID peribadi ahli"
         },
         "authorId": {
           "type": "string",
@@ -576,6 +600,51 @@
         }
       },
       "required": ["fullName", "gender", "birthDate", "baptismStatus", "denomination", "authorId", "createdAt", "updatedAt"]
+    },
+    "AppVersionConfig": {
+      "title": "AppVersionConfig",
+      "description": "Konfigurasi versi terkini aplikasi Buletin SIB Toburon untuk semakan kemas kini automatik (dokumen /app_config/version).",
+      "type": "object",
+      "properties": {
+        "latestVersionCode": {
+          "type": "integer",
+          "description": "Kod versi bulat terkini aplikasi (1-1000000)"
+        },
+        "latestVersionName": {
+          "type": "string",
+          "description": "Nama versi paparan terkini (cth. 1.1.0, 1-32 karakter)"
+        },
+        "releaseNotes": {
+          "type": "string",
+          "description": "Nota perubahan kemas kini untuk jemaat (0-1000 karakter)"
+        },
+        "updateUrl": {
+          "type": "string",
+          "description": "Pautan HTTPS rasmi Google Play atau halaman muat turun (pilihan, maks 500 karakter)"
+        },
+        "forceUpdate": {
+          "type": "boolean",
+          "description": "Jika benar, notis kemas kini wajib dipaparkan tanpa butang tutup sementara"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID admin yang mengemas kini maklumat versi"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu kemas kini versi terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": [
+        "latestVersionCode",
+        "latestVersionName",
+        "releaseNotes",
+        "updateUrl",
+        "forceUpdate",
+        "updatedBy",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -630,6 +699,10 @@
     "/church_member_details/{memberId}": {
       "schema": { "$ref": "#/entities/ChurchMemberDetail" },
       "description": "Rekod maklumat lengkap ahli jemaat khusus untuk pengurusan Admin"
+    },
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/AppVersionConfig" },
+      "description": "Konfigurasi versi terkini aplikasi (/app_config/version) untuk notis kemas kini automatik"
     }
   }
 }

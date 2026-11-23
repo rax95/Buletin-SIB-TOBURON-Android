@@ -20,10 +20,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -38,10 +36,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
@@ -82,8 +80,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.data.CoverPreset
 import com.example.data.GalleryCategory
 import com.example.data.GalleryComment
@@ -128,6 +124,7 @@ fun GalleryScreen(
         onComplete: () -> Unit
     ) -> Unit,
     onDeleteComment: (photoId: String, commentId: String) -> Unit,
+    onDetailVisibilityChange: (Boolean) -> Unit = {},
     onEditPhoto: (GalleryPhoto) -> Unit,
     onDeletePhoto: (GalleryPhoto) -> Unit,
     onAddPhoto: () -> Unit,
@@ -141,6 +138,48 @@ fun GalleryScreen(
     }
 
     var activePhotoId by remember { mutableStateOf<String?>(null) }
+    val selectedPhoto = activePhotoId?.let { id -> filteredPhotos.firstOrNull { it.id == id } }
+
+    LaunchedEffect(selectedPhoto?.id) {
+        onObserveComments(selectedPhoto?.id)
+        onDetailVisibilityChange(selectedPhoto != null)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onObserveComments(null)
+            onDetailVisibilityChange(false)
+        }
+    }
+
+    if (selectedPhoto != null) {
+        InteractivePhotoDetailPane(
+            photo = selectedPhoto,
+            isLiked = likedPhotoIds.contains(selectedPhoto.id),
+            commentsState = commentsState,
+            isPostingComment = isPostingComment,
+            currentUserId = currentUserId,
+            isGuest = isGuest,
+            isAdmin = isAdmin,
+            onDismiss = { activePhotoId = null },
+            onToggleLike = { onToggleLike(selectedPhoto) },
+            onPostComment = { text, parentId, replyToName, onDone ->
+                onPostComment(selectedPhoto.id, text, parentId, replyToName, onDone)
+            },
+            onDeleteComment = { commentId ->
+                onDeleteComment(selectedPhoto.id, commentId)
+            },
+            onEditPhoto = {
+                activePhotoId = null
+                onEditPhoto(selectedPhoto)
+            },
+            onDeletePhoto = {
+                activePhotoId = null
+                onDeletePhoto(selectedPhoto)
+            },
+            modifier = modifier.fillMaxSize()
+        )
+        return
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val columnCount = when {
@@ -250,42 +289,6 @@ fun GalleryScreen(
                 }
             }
         }
-    }
-
-    val selectedPhoto = activePhotoId?.let { id -> filteredPhotos.firstOrNull { it.id == id } }
-    LaunchedEffect(selectedPhoto?.id) {
-        onObserveComments(selectedPhoto?.id)
-    }
-    DisposableEffect(Unit) {
-        onDispose { onObserveComments(null) }
-    }
-
-    if (selectedPhoto != null) {
-        InteractivePhotoLightbox(
-            photo = selectedPhoto,
-            isLiked = likedPhotoIds.contains(selectedPhoto.id),
-            commentsState = commentsState,
-            isPostingComment = isPostingComment,
-            currentUserId = currentUserId,
-            isGuest = isGuest,
-            isAdmin = isAdmin,
-            onDismiss = { activePhotoId = null },
-            onToggleLike = { onToggleLike(selectedPhoto) },
-            onPostComment = { text, parentId, replyToName, onDone ->
-                onPostComment(selectedPhoto.id, text, parentId, replyToName, onDone)
-            },
-            onDeleteComment = { commentId ->
-                onDeleteComment(selectedPhoto.id, commentId)
-            },
-            onEditPhoto = {
-                activePhotoId = null
-                onEditPhoto(selectedPhoto)
-            },
-            onDeletePhoto = {
-                activePhotoId = null
-                onDeletePhoto(selectedPhoto)
-            }
-        )
     }
 }
 
@@ -445,7 +448,7 @@ private fun GalleryGridCard(
 }
 
 @Composable
-private fun InteractivePhotoLightbox(
+private fun InteractivePhotoDetailPane(
     photo: GalleryPhoto,
     isLiked: Boolean,
     commentsState: UiState<List<GalleryComment>>,
@@ -463,7 +466,8 @@ private fun InteractivePhotoLightbox(
     ) -> Unit,
     onDeleteComment: (String) -> Unit,
     onEditPhoto: () -> Unit,
-    onDeletePhoto: () -> Unit
+    onDeletePhoto: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val slides = remember(photo.id, photo.imageBase64, photo.extraImagesBase64, photo.imageUrl, photo.coverPreset) {
         val b64Images = photo.allBase64Images()
@@ -486,50 +490,41 @@ private fun InteractivePhotoLightbox(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+    BackHandler { onDismiss() }
+
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { slides.size })
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    var commentText by remember(photo.id) { mutableStateOf("") }
+    var replyTarget by remember(photo.id) { mutableStateOf<CommentReplyTarget?>(null) }
+    val commentInputFocusRequester = remember(photo.id) { FocusRequester() }
+    val commentsCount = (commentsState as? UiState.Success)?.data?.size ?: 0
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xF80B1110))
     ) {
-        BackHandler { onDismiss() }
-
-        val pagerState = rememberPagerState(initialPage = 0, pageCount = { slides.size })
-        val scrollState = rememberScrollState()
-        val coroutineScope = rememberCoroutineScope()
-        var commentText by remember(photo.id) { mutableStateOf("") }
-        var replyTarget by remember(photo.id) { mutableStateOf<CommentReplyTarget?>(null) }
-        val commentInputFocusRequester = remember(photo.id) { FocusRequester() }
-        val commentsCount = (commentsState as? UiState.Success)?.data?.size ?: 0
-
-        Column(
+        // Fixed Top Controls Bar
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xF80B1110))
-                .statusBarsPadding()
-                .navigationBarsPadding()
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // Fixed Top Controls Bar
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.12f)) {
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(48.dp).testTag("lightbox_close_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = tr("Tutup", "Close"),
-                            tint = Color.White
-                        )
-                    }
+            Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.12f)) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(48.dp).testTag("lightbox_close_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = tr("Kembali", "Back"),
+                        tint = Color.White
+                    )
                 }
+            }
 
                 Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.14f)) {
                     Row(
@@ -1015,5 +1010,4 @@ private fun InteractivePhotoLightbox(
                 }
             )
         }
-    }
 }

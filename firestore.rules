@@ -187,9 +187,9 @@ service cloud.firestore {
     function isValidNotificationEvent(data) {
       return data.title is string && data.title.size() >= 2 && data.title.size() <= 160 &&
         data.body is string && data.body.size() >= 2 && data.body.size() <= 320 &&
-        data.eventType in ['NEWS', 'SCHEDULE'] &&
+        data.eventType in ['NEWS', 'SCHEDULE', 'MEMBER_REGISTERED'] &&
         isValidId(data.targetId) &&
-        data.topic in ['sib_toburon_news', 'sib_toburon_schedules'] &&
+        data.topic in ['sib_toburon_news', 'sib_toburon_schedules', 'sib_toburon_admin_members'] &&
         data.published is bool &&
         isValidId(data.authorId) &&
         isValidTimestamp(data.createdAt);
@@ -206,6 +206,7 @@ service cloud.firestore {
       return data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
         data.gender in ['LELAKI', 'PEREMPUAN'] &&
         data.baptismStatus in ['DIBAPTIS', 'BELUM_DIBAPTIS'] &&
+        (!('passportPhotoBase64' in data) || data.passportPhotoBase64 == null || (data.passportPhotoBase64 is string && data.passportPhotoBase64.size() <= 160000)) &&
         data.published is bool &&
         isValidId(data.authorId) &&
         isValidTimestamp(data.createdAt) &&
@@ -217,10 +218,53 @@ service cloud.firestore {
         data.gender in ['LELAKI', 'PEREMPUAN'] &&
         data.birthDate is string && data.birthDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
         data.baptismStatus in ['DIBAPTIS', 'BELUM_DIBAPTIS'] &&
-        data.denomination is string && data.denomination.size() >= 1 && data.denomination.size() <= 80 &&
+        data.denomination is string && data.denomination.size() <= 80 &&
+        (data.baptismStatus != 'DIBAPTIS' || data.denomination.size() >= 1) &&
         (!('maritalStatus' in data) || data.maritalStatus in ['BUJANG', 'BERKAHWIN', 'BALU_DUDA', 'BERCERAI']) &&
+        (!('myKadNumber' in data) || data.myKadNumber == null || (data.myKadNumber is string && data.myKadNumber.size() <= 30)) &&
+        (!('spouseName' in data) || data.spouseName == null || (data.spouseName is string && data.spouseName.size() <= 120)) &&
+        (!('sibMembershipNumber' in data) || data.sibMembershipNumber == null || (data.sibMembershipNumber is string && data.sibMembershipNumber.size() <= 40)) &&
+        (!('passportPhotoBase64' in data) || data.passportPhotoBase64 == null || (data.passportPhotoBase64 is string && data.passportPhotoBase64.size() <= 160000)) &&
+        (!('memberEmail' in data) || data.memberEmail == null || (data.memberEmail is string && data.memberEmail.size() <= 160)) &&
         isValidId(data.authorId) &&
         isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function hasVerifiedEmail() {
+      return isSignedIn() &&
+        'email_verified' in request.auth.token &&
+        request.auth.token.email_verified == true &&
+        'email' in request.auth.token;
+    }
+
+    function isOwnMemberDetail(data) {
+      return hasVerifiedEmail() &&
+        'memberEmail' in data &&
+        data.memberEmail is string &&
+        data.memberEmail == request.auth.token.email.lower();
+    }
+
+    function isOwnMemberRecord(memberId) {
+      return hasVerifiedEmail() &&
+        exists(/databases/$(database)/documents/church_member_details/$(memberId)) &&
+        isOwnMemberDetail(get(/databases/$(database)/documents/church_member_details/$(memberId)).data);
+    }
+
+    function isValidAppVersionConfig(data) {
+      return data.latestVersionCode is int &&
+        data.latestVersionCode >= 1 &&
+        data.latestVersionCode <= 1000000 &&
+        data.latestVersionName is string &&
+        data.latestVersionName.size() >= 1 &&
+        data.latestVersionName.size() <= 32 &&
+        data.releaseNotes is string &&
+        data.releaseNotes.size() <= 1000 &&
+        data.updateUrl is string &&
+        data.updateUrl.size() <= 500 &&
+        (data.updateUrl == '' || data.updateUrl.matches('^https://.*')) &&
+        data.forceUpdate is bool &&
+        isValidId(data.updatedBy) &&
         isValidTimestamp(data.updatedAt);
     }
 
@@ -508,7 +552,7 @@ service cloud.firestore {
       allow list: if resource.data.published == true || (
         isSignedIn() && (
           resource.data.authorId == request.auth.uid ||
-          isBootstrappedAdmin()
+          isAdmin()
         )
       );
 
@@ -516,7 +560,6 @@ service cloud.firestore {
         isValidId(eventId) &&
         isValidNotificationEvent(incoming()) &&
         incoming().authorId == request.auth.uid &&
-        incoming().published == true &&
         incoming().keys().hasAll([
           'title', 'body', 'eventType', 'targetId', 'topic',
           'published', 'authorId', 'createdAt'
@@ -524,13 +567,22 @@ service cloud.firestore {
         incoming().keys().hasOnly([
           'title', 'body', 'eventType', 'targetId', 'topic',
           'published', 'authorId', 'createdAt'
-        ]) &&
-        isAdmin();
+        ]) && (
+          (isAdmin() &&
+            incoming().published == true &&
+            incoming().eventType in ['NEWS', 'SCHEDULE'] &&
+            incoming().topic in ['sib_toburon_news', 'sib_toburon_schedules']) ||
+          (hasVerifiedEmail() &&
+            incoming().published == false &&
+            incoming().eventType == 'MEMBER_REGISTERED' &&
+            incoming().topic == 'sib_toburon_admin_members' &&
+            incoming().targetId == 'member_' + request.auth.uid)
+        );
 
       allow delete: if isSignedIn() && isValidId(eventId) && isAdmin();
     }
 
-    // 10. Direktori Nama Penuh Ahli Jemaat (/church_members/{memberId}) - Nama penuh sahaja (Jemaat berdaftar & Admin; Guest disekat)
+    // 10. Direktori Nama Penuh Ahli Jemaat (/church_members/{memberId}) - Admin & pemilik daftar diri (Guest disekat)
     match /church_members/{memberId} {
       allow get: if isSignedIn() && isValidId(memberId) && (
         existing().published == true ||
@@ -550,26 +602,37 @@ service cloud.firestore {
         incoming().authorId == request.auth.uid &&
         incoming().published == true &&
         incoming().keys().hasAll(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
-        incoming().keys().hasOnly(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
-        isAdmin();
+        incoming().keys().hasOnly(['fullName', 'gender', 'baptismStatus', 'passportPhotoBase64', 'published', 'authorId', 'createdAt', 'updatedAt']) && (
+          isAdmin() ||
+          (hasVerifiedEmail() && memberId == 'member_' + request.auth.uid)
+        );
 
       allow update: if isSignedIn() &&
         isValidId(memberId) &&
         isValidChurchMemberPublic(incoming()) &&
         incoming().authorId == existing().authorId &&
         incoming().createdAt == existing().createdAt &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'gender', 'baptismStatus', 'published', 'updatedAt']) &&
-        isAdmin();
+        incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'gender', 'baptismStatus', 'passportPhotoBase64', 'published', 'updatedAt']) && (
+          isAdmin() ||
+          (incoming().published == existing().published && (
+            (hasVerifiedEmail() && existing().authorId == request.auth.uid && memberId == 'member_' + request.auth.uid) ||
+            isOwnMemberRecord(memberId)
+          ))
+        );
 
       allow delete: if isSignedIn() && isValidId(memberId) && isAdmin();
     }
 
-    // 11. Maklumat Lengkap Ahli Jemaat (/church_member_details/{memberId}) - Admin sahaja (PII dilindungi)
+    // 11. Maklumat Lengkap Ahli Jemaat (/church_member_details/{memberId}) - Admin & pemilik akaun emel terverifikasi sahaja (PII dilindungi)
     match /church_member_details/{memberId} {
-      allow get: if isSignedIn() && isValidId(memberId) && isAdmin();
+      allow get: if isSignedIn() && isValidId(memberId) && (
+        isAdmin() || isOwnMemberDetail(existing())
+      );
 
       allow list: if isSignedIn() && (
-        resource.data.authorId == request.auth.uid || isBootstrappedAdmin()
+        resource.data.authorId == request.auth.uid ||
+        isBootstrappedAdmin() ||
+        isOwnMemberDetail(resource.data)
       );
 
       allow create: if isSignedIn() &&
@@ -582,9 +645,12 @@ service cloud.firestore {
         ]) &&
         incoming().keys().hasOnly([
           'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
-          'authorId', 'createdAt', 'updatedAt'
-        ]) &&
-        isAdmin();
+          'myKadNumber', 'spouseName', 'sibMembershipNumber',
+          'passportPhotoBase64', 'memberEmail', 'authorId', 'createdAt', 'updatedAt'
+        ]) && (
+          isAdmin() ||
+          (memberId == 'member_' + request.auth.uid && isOwnMemberDetail(incoming()))
+        );
 
       allow update: if isSignedIn() &&
         isValidId(memberId) &&
@@ -592,11 +658,37 @@ service cloud.firestore {
         incoming().authorId == existing().authorId &&
         incoming().createdAt == existing().createdAt &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus', 'updatedAt'
-        ]) &&
-        isAdmin();
+          'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
+          'myKadNumber', 'spouseName', 'sibMembershipNumber',
+          'passportPhotoBase64', 'memberEmail', 'updatedAt'
+        ]) && (
+          isAdmin() ||
+          (isOwnMemberDetail(existing()) && isOwnMemberDetail(incoming()))
+        );
 
       allow delete: if isSignedIn() && isValidId(memberId) && isAdmin();
+    }
+
+    // 12. Konfigurasi Versi Aplikasi (/app_config/version) - Bacaan umum (get sahaja); hanya Admin boleh ubah
+    match /app_config/{configId} {
+      allow get: if configId == 'version';
+      allow list: if false;
+
+      allow create, update: if isSignedIn() &&
+        isAdmin() &&
+        configId == 'version' &&
+        isValidAppVersionConfig(incoming()) &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'latestVersionCode', 'latestVersionName', 'releaseNotes',
+          'updateUrl', 'forceUpdate', 'updatedBy', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'latestVersionCode', 'latestVersionName', 'releaseNotes',
+          'updateUrl', 'forceUpdate', 'updatedBy', 'updatedAt'
+        ]);
+
+      allow delete: if false;
     }
   }
 }

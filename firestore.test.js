@@ -721,12 +721,13 @@ test("Church members directory exposes full names only; personal details are str
   const guestDb = testEnv.unauthenticatedContext().firestore();
   const ts = pastDate(5000);
 
-  // Admin atomically registers a member across /church_members and /church_member_details
+  // Admin atomically registers a member (with optional passportPhotoBase64) across /church_members and /church_member_details
   const createBatch = adminDb.batch();
   createBatch.set(adminDb.collection("church_members").doc("member_001"), {
     fullName: "Daniel Petrus Toburon",
     gender: "LELAKI",
     baptismStatus: "DIBAPTIS",
+    passportPhotoBase64: "dGVzdF9wYXNzcG9ydF9waG90bw==",
     published: true,
     authorId: ADMIN_UID,
     createdAt: ts,
@@ -739,6 +740,7 @@ test("Church members directory exposes full names only; personal details are str
     baptismStatus: "DIBAPTIS",
     denomination: "SIB",
     maritalStatus: "BUJANG",
+    passportPhotoBase64: "dGVzdF9wYXNzcG9ydF9waG90bw==",
     authorId: ADMIN_UID,
     createdAt: ts,
     updatedAt: ts,
@@ -753,7 +755,7 @@ test("Church members directory exposes full names only; personal details are str
     guestDb.collection("church_members").doc("member_001").get()
   );
 
-  // Signed-in Jemaat CAN read church_members (fullName, gender, baptismStatus only) via filtered query
+  // Signed-in Jemaat CAN read church_members (fullName, gender, baptismStatus, optional passportPhotoBase64) via filtered query
   await assertSucceeds(
     aliceDb.collection("church_members").where("published", "==", true).get()
   );
@@ -797,7 +799,7 @@ test("Church members directory exposes full names only; personal details are str
   );
   await assertFails(aliceDb.collection("church_members").doc("member_001").delete());
 
-  // Admin CAN read single detail & list all details (for Excel/PDF export), update atomically, and delete atomically
+  // Admin CAN read single detail & list all details (for Excel/PDF export), update/clear passport photo atomically, and delete atomically
   await assertSucceeds(
     adminDb.collection("church_member_details").doc("member_001").get()
   );
@@ -811,6 +813,7 @@ test("Church members directory exposes full names only; personal details are str
     fullName: "Daniel Petrus Sibin",
     gender: "LELAKI",
     baptismStatus: "DIBAPTIS",
+    passportPhotoBase64: null,
     updatedAt: updateTs,
   });
   updateBatch.update(adminDb.collection("church_member_details").doc("member_001"), {
@@ -820,9 +823,24 @@ test("Church members directory exposes full names only; personal details are str
     baptismStatus: "DIBAPTIS",
     denomination: "SIB",
     maritalStatus: "BERKAHWIN",
+    passportPhotoBase64: null,
     updatedAt: updateTs,
   });
   await assertSucceeds(updateBatch.commit());
+
+  // Reject oversized passportPhotoBase64 (> 160000 chars) on both collections
+  await assertFails(
+    adminDb.collection("church_members").doc("member_001").update({
+      passportPhotoBase64: "p".repeat(160001),
+      updatedAt: pastDate(600),
+    })
+  );
+  await assertFails(
+    adminDb.collection("church_member_details").doc("member_001").update({
+      passportPhotoBase64: "p".repeat(160001),
+      updatedAt: pastDate(600),
+    })
+  );
 
   // Reject invalid birthDate format and invalid maritalStatus enum
   await assertFails(
@@ -838,9 +856,184 @@ test("Church members directory exposes full names only; personal details are str
     })
   );
 
+  // Admin links member_001 to Alice's verified Google email with MyKad, spouseName, and SIB membership number
+  await assertSucceeds(
+    adminDb.collection("church_member_details").doc("member_001").update({
+      memberEmail: "alice@example.com",
+      myKadNumber: "950614-12-5431",
+      spouseName: "Maria Toburon",
+      sibMembershipNumber: "SIB-TBR-0042",
+      updatedAt: pastDate(300),
+    })
+  );
+
+  // Admin can register an unbaptized member with empty denomination and no SIB membership number
+  await assertSucceeds(
+    adminDb.collection("church_member_details").doc("member_002").set({
+      fullName: "Hannah Lukas",
+      gender: "PEREMPUAN",
+      birthDate: "2004-03-11",
+      baptismStatus: "BELUM_DIBAPTIS",
+      denomination: "",
+      maritalStatus: "BUJANG",
+      myKadNumber: "040311-12-0912",
+      authorId: ADMIN_UID,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Reject baptized member with empty denomination
+  await assertFails(
+    adminDb.collection("church_member_details").doc("member_002").update({
+      baptismStatus: "DIBAPTIS",
+      denomination: "",
+      updatedAt: pastDate(250),
+    })
+  );
+
+  const aliceVerifiedDb = testEnv.authenticatedContext(JEMAAT_ALICE, {
+    email: "Alice@Example.com",
+    email_verified: true,
+  }).firestore();
+  const bobVerifiedDb = testEnv.authenticatedContext(JEMAAT_BOB, {
+    email: "bob@example.com",
+    email_verified: true,
+  }).firestore();
+
+  // Verified Alice CAN query and read ONLY her own linked member detail record
+  await assertSucceeds(
+    aliceVerifiedDb
+      .collection("church_member_details")
+      .where("memberEmail", "==", "alice@example.com")
+      .get()
+  );
+  await assertSucceeds(
+    aliceVerifiedDb.collection("church_member_details").doc("member_001").get()
+  );
+
+  // Verified Bob CANNOT query Alice's record, read member_001, or run an unfiltered list query
+  await assertFails(
+    bobVerifiedDb
+      .collection("church_member_details")
+      .where("memberEmail", "==", "alice@example.com")
+      .get()
+  );
+  await assertFails(
+    bobVerifiedDb.collection("church_member_details").doc("member_001").get()
+  );
+  await assertFails(bobVerifiedDb.collection("church_member_details").get());
+
+  // Unverified Alice token CANNOT read member_001
+  const aliceUnverifiedDb = testEnv.authenticatedContext(JEMAAT_ALICE, {
+    email: "alice@example.com",
+    email_verified: false,
+  }).firestore();
+  await assertFails(
+    aliceUnverifiedDb.collection("church_member_details").doc("member_001").get()
+  );
+
+  // Verified Alice CAN update her own Admin-linked record (member_001) across both collections,
+  // but CANNOT change memberEmail to hijack someone else's email
+  const aliceSelfEditBatch = aliceVerifiedDb.batch();
+  aliceSelfEditBatch.update(aliceVerifiedDb.collection("church_members").doc("member_001"), {
+    fullName: "Alice Petrus Sibin",
+    gender: "PEREMPUAN",
+    baptismStatus: "DIBAPTIS",
+    updatedAt: pastDate(200),
+  });
+  aliceSelfEditBatch.update(aliceVerifiedDb.collection("church_member_details").doc("member_001"), {
+    fullName: "Alice Petrus Sibin",
+    gender: "PEREMPUAN",
+    myKadNumber: "950614-12-5432",
+    updatedAt: pastDate(200),
+  });
+  await assertSucceeds(aliceSelfEditBatch.commit());
+
+  await assertFails(
+    aliceVerifiedDb.collection("church_member_details").doc("member_001").update({
+      memberEmail: "bob@example.com",
+      updatedAt: pastDate(150),
+    })
+  );
+
+  // Verified Bob CAN self-register atomically with doc ID `member_${JEMAAT_BOB}` + admin-only MEMBER_REGISTERED notification
+  const bobSelfId = `member_${JEMAAT_BOB}`;
+  const bobRegTs = pastDate(180);
+  const bobRegBatch = bobVerifiedDb.batch();
+  bobRegBatch.set(bobVerifiedDb.collection("church_members").doc(bobSelfId), {
+    fullName: "Bob Lukas Toburon",
+    gender: "LELAKI",
+    baptismStatus: "BELUM_DIBAPTIS",
+    published: true,
+    authorId: JEMAAT_BOB,
+    createdAt: bobRegTs,
+    updatedAt: bobRegTs,
+  });
+  bobRegBatch.set(bobVerifiedDb.collection("church_member_details").doc(bobSelfId), {
+    fullName: "Bob Lukas Toburon",
+    myKadNumber: "980210-12-1121",
+    gender: "LELAKI",
+    birthDate: "1998-02-10",
+    baptismStatus: "BELUM_DIBAPTIS",
+    denomination: "",
+    maritalStatus: "BUJANG",
+    memberEmail: "bob@example.com",
+    authorId: JEMAAT_BOB,
+    createdAt: bobRegTs,
+    updatedAt: bobRegTs,
+  });
+  bobRegBatch.set(bobVerifiedDb.collection("notification_events").doc("notif_reg_bob"), {
+    title: "Ahli Baharu Berdaftar",
+    body: "Bob Lukas Toburon telah mengisi maklumat ahli SIB Toburon.",
+    eventType: "MEMBER_REGISTERED",
+    targetId: bobSelfId,
+    topic: "sib_toburon_admin_members",
+    published: false,
+    authorId: JEMAAT_BOB,
+    createdAt: bobRegTs,
+  });
+  await assertSucceeds(bobRegBatch.commit());
+
+  // Bob CANNOT self-register with arbitrary doc ID, CANNOT publish public notification, and CANNOT delete his record
+  await assertFails(
+    bobVerifiedDb.collection("church_members").doc("member_arbitrary_id").set({
+      fullName: "Bob Palsu",
+      gender: "LELAKI",
+      baptismStatus: "BELUM_DIBAPTIS",
+      published: true,
+      authorId: JEMAAT_BOB,
+      createdAt: bobRegTs,
+      updatedAt: bobRegTs,
+    })
+  );
+  await assertFails(
+    bobVerifiedDb.collection("notification_events").doc("notif_reg_bob_pub").set({
+      title: "Broadcast Palsu",
+      body: "Tidak boleh published true.",
+      eventType: "MEMBER_REGISTERED",
+      targetId: bobSelfId,
+      topic: "sib_toburon_admin_members",
+      published: true,
+      authorId: JEMAAT_BOB,
+      createdAt: bobRegTs,
+    })
+  );
+  await assertFails(bobVerifiedDb.collection("church_member_details").doc(bobSelfId).delete());
+
+  // Other Jemaat (Alice) & Guest CANNOT read Bob's private MEMBER_REGISTERED admin notification; Admin CAN
+  await assertFails(aliceVerifiedDb.collection("notification_events").doc("notif_reg_bob").get());
+  await assertFails(guestDb.collection("notification_events").doc("notif_reg_bob").get());
+  await assertSucceeds(adminDb.collection("notification_events").doc("notif_reg_bob").get());
+  await assertSucceeds(adminDb.collection("notification_events").get());
+
   const deleteBatch = adminDb.batch();
   deleteBatch.delete(adminDb.collection("church_members").doc("member_001"));
   deleteBatch.delete(adminDb.collection("church_member_details").doc("member_001"));
+  deleteBatch.delete(adminDb.collection("church_member_details").doc("member_002"));
+  deleteBatch.delete(adminDb.collection("church_members").doc(bobSelfId));
+  deleteBatch.delete(adminDb.collection("church_member_details").doc(bobSelfId));
+  deleteBatch.delete(adminDb.collection("notification_events").doc("notif_reg_bob"));
   await assertSucceeds(deleteBatch.commit());
 });
 
@@ -1221,6 +1414,101 @@ test("News comments support signed-in comments and replies, guest read on publis
       .delete()
   );
 });
+
+// 11. App Version Config (/app_config/version): public get, Admin-only write, no list/delete, strict HTTPS URL validation
+test("App version config allows public get on version doc and Admin-only validated writes", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(3000);
+
+  // Admin CAN create and update /app_config/version
+  await assertSucceeds(
+    adminDb.collection("app_config").doc("version").set({
+      latestVersionCode: 2,
+      latestVersionName: "1.1.0",
+      releaseNotes: "Pendaftaran ahli kendiri di tab Akaun, logo rasmi SIB, dan penambahbaikan galeri.",
+      updateUrl: "https://play.google.com/store/apps/details?id=com.aistudio.buletinsib.kxmrtv",
+      forceUpdate: false,
+      updatedBy: ADMIN_UID,
+      updatedAt: ts,
+    })
+  );
+
+  // Guest and Jemaat CAN get /app_config/version
+  await assertSucceeds(guestDb.collection("app_config").doc("version").get());
+  await assertSucceeds(aliceDb.collection("app_config").doc("version").get());
+
+  // Nobody can list /app_config or read arbitrary config docs
+  await assertFails(guestDb.collection("app_config").get());
+  await assertFails(aliceDb.collection("app_config").get());
+  await assertFails(adminDb.collection("app_config").get());
+  await assertFails(aliceDb.collection("app_config").doc("other_secret").get());
+
+  // Non-admin and Guest CANNOT write or delete /app_config/version
+  await assertFails(
+    aliceDb.collection("app_config").doc("version").set({
+      latestVersionCode: 99,
+      latestVersionName: "9.9.9",
+      releaseNotes: "Fake update",
+      updateUrl: "https://evil.example.com/app.apk",
+      forceUpdate: true,
+      updatedBy: JEMAAT_ALICE,
+      updatedAt: pastDate(1000),
+    })
+  );
+  await assertFails(guestDb.collection("app_config").doc("version").delete());
+  await assertFails(adminDb.collection("app_config").doc("version").delete());
+
+  // Reject non-HTTPS updateUrl, invalid versionCode, and non-version doc IDs even for Admin
+  await assertFails(
+    adminDb.collection("app_config").doc("version").set({
+      latestVersionCode: 3,
+      latestVersionName: "1.2.0",
+      releaseNotes: "Insecure link test",
+      updateUrl: "http://insecure.example.com/app.apk",
+      forceUpdate: false,
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(1000),
+    })
+  );
+  await assertFails(
+    adminDb.collection("app_config").doc("version").set({
+      latestVersionCode: 0,
+      latestVersionName: "0.0.0",
+      releaseNotes: "Invalid code",
+      updateUrl: "",
+      forceUpdate: false,
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(1000),
+    })
+  );
+  await assertFails(
+    adminDb.collection("app_config").doc("other_doc").set({
+      latestVersionCode: 2,
+      latestVersionName: "1.1.0",
+      releaseNotes: "Wrong doc ID",
+      updateUrl: "",
+      forceUpdate: false,
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(1000),
+    })
+  );
+
+  // Admin CAN update /app_config/version with empty updateUrl (announcement-only notice)
+  await assertSucceeds(
+    adminDb.collection("app_config").doc("version").set({
+      latestVersionCode: 3,
+      latestVersionName: "1.2.0",
+      releaseNotes: "Kemas kini baharu tersedia.",
+      updateUrl: "",
+      forceUpdate: true,
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(500),
+    })
+  );
+});
+
 
 
 

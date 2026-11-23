@@ -34,6 +34,8 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -92,6 +95,9 @@ import com.example.ui.components.AdminMemberExportDialog
 import com.example.ui.components.AdminNewsEditorDialog
 import com.example.ui.components.AdminPhotoEditorDialog
 import com.example.ui.components.AdminScheduleEditorDialog
+import com.example.ui.components.AdminAppVersionDialog
+import com.example.ui.components.AppUpdateAvailableDialog
+import com.example.ui.components.PushNotificationOptInDialog
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.LocalAppLanguage
@@ -278,6 +284,7 @@ private fun BuletinMainShell(
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val adminMembers by viewModel.adminMembers.collectAsStateWithLifecycle()
     val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
+    val appVersionConfig by viewModel.appVersionConfig.collectAsStateWithLifecycle()
 
     val newsSearchQuery by viewModel.newsSearchQuery.collectAsStateWithLifecycle()
     val selectedNewsCategory by viewModel.selectedNewsCategory.collectAsStateWithLifecycle()
@@ -286,6 +293,8 @@ private fun BuletinMainShell(
     val selectedGalleryCategory by viewModel.selectedGalleryCategory.collectAsStateWithLifecycle()
     val memberSearchQuery by viewModel.memberSearchQuery.collectAsStateWithLifecycle()
     val selectedMemberDetail by viewModel.selectedMemberDetail.collectAsStateWithLifecycle()
+    val ownMemberDetail by viewModel.ownMemberDetail.collectAsStateWithLifecycle()
+    val unreadNewMemberCount by viewModel.unreadNewMemberCount.collectAsStateWithLifecycle()
     val isLoadingMemberDetail by viewModel.isLoadingMemberDetail.collectAsStateWithLifecycle()
     val activePhotoComments by viewModel.activePhotoComments.collectAsStateWithLifecycle()
     val isPostingComment by viewModel.isPostingComment.collectAsStateWithLifecycle()
@@ -294,20 +303,24 @@ private fun BuletinMainShell(
 
     var currentTab by rememberSaveable { mutableStateOf(BulletinTab.NEWS) }
     var isViewingNewsDetail by remember { mutableStateOf(false) }
+    var isViewingGalleryDetail by remember { mutableStateOf(false) }
     val isGuest = currentUser == null
-    val visibleTabs = remember(isGuest) {
-        if (isGuest) BulletinTab.entries.filter { it != BulletinTab.MEMBERS }
-        else BulletinTab.entries
+    val visibleTabs = remember(isAdmin) {
+        if (isAdmin) BulletinTab.entries
+        else BulletinTab.entries.filter { it != BulletinTab.MEMBERS }
     }
-    LaunchedEffect(isGuest, currentTab) {
-        if (isGuest && currentTab == BulletinTab.MEMBERS) {
+    LaunchedEffect(isAdmin, currentTab) {
+        if (!isAdmin && currentTab == BulletinTab.MEMBERS) {
             currentTab = BulletinTab.NEWS
+        }
+        if (currentTab == BulletinTab.MEMBERS) {
+            viewModel.clearUnreadNewMemberCount()
         }
     }
     var focusedNewsId by remember { mutableStateOf<String?>(null) }
     var focusedScheduleId by remember { mutableStateOf<String?>(null) }
 
-    // Admin Editor Modal States
+    // Admin & Self-Registration Editor Modal States
     var showNewsEditor by remember { mutableStateOf(false) }
     var editingNews by remember { mutableStateOf<NewsArticle?>(null) }
     var showScheduleEditor by remember { mutableStateOf(false) }
@@ -316,10 +329,29 @@ private fun BuletinMainShell(
     var editingPhoto by remember { mutableStateOf<GalleryPhoto?>(null) }
     var showMemberEditor by remember { mutableStateOf(false) }
     var editingMember by remember { mutableStateOf<ChurchMemberDetail?>(null) }
+    var showSelfMemberEditor by remember { mutableStateOf(false) }
     var showMemberExportDialog by remember { mutableStateOf(false) }
     var isExportingFile by remember { mutableStateOf(false) }
     var pendingExportMembers by remember { mutableStateOf<List<ChurchMemberDetail>>(emptyList()) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
+    var showManageVersionDialog by remember { mutableStateOf(false) }
+    var dismissedUpdateVersionCode by rememberSaveable { mutableStateOf(0) }
+    var forceShowUpdateDialog by remember { mutableStateOf(false) }
+    var dismissedPushOptInThisSession by rememberSaveable { mutableStateOf(false) }
+    var shouldPromptPushOptIn by remember {
+        mutableStateOf(BulletinNotificationManager.shouldShowOptInPopup(context))
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                shouldPromptPushOptIn = BulletinNotificationManager.shouldShowOptInPopup(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val excelExportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument(MemberExportFormat.EXCEL.mimeType)
@@ -401,30 +433,47 @@ private fun BuletinMainShell(
     }
 
     // Apply deep-link from tapped push notification
-    LaunchedEffect(pendingDeepLink) {
+    LaunchedEffect(pendingDeepLink, isAdmin) {
         val deepLink = pendingDeepLink ?: return@LaunchedEffect
         val (type, itemId) = deepLink
-        if (type.equals(BulletinNotificationManager.TYPE_SCHEDULE, ignoreCase = true)) {
-            if (itemId.isNotBlank()) focusedScheduleId = itemId
-            currentTab = BulletinTab.SCHEDULES
-        } else {
-            if (itemId.isNotBlank()) focusedNewsId = itemId
-            currentTab = BulletinTab.NEWS
+        when {
+            type.equals(BulletinNotificationManager.TYPE_MEMBER_REGISTERED, ignoreCase = true) -> {
+                if (isAdmin) {
+                    currentTab = BulletinTab.MEMBERS
+                    viewModel.clearUnreadNewMemberCount()
+                    if (itemId.isNotBlank()) viewModel.loadMemberDetail(itemId)
+                }
+            }
+            type.equals(BulletinNotificationManager.TYPE_SCHEDULE, ignoreCase = true) -> {
+                if (itemId.isNotBlank()) focusedScheduleId = itemId
+                currentTab = BulletinTab.SCHEDULES
+            }
+            else -> {
+                if (itemId.isNotBlank()) focusedNewsId = itemId
+                currentTab = BulletinTab.NEWS
+            }
         }
         onConsumeDeepLink()
     }
 
-    // Sync FCM topic subscriptions & register token for this session
-    LaunchedEffect(sessionKey) {
+    // Sync FCM topic subscriptions & register token for this session (including Admin topic)
+    LaunchedEffect(sessionKey, isAdmin) {
+        val masterEnabled = BulletinNotificationManager.isMasterPushEnabled(context)
         val newsEnabled = BulletinNotificationManager.isNewsNotificationsEnabled(context)
         val schedulesEnabled = BulletinNotificationManager.isScheduleNotificationsEnabled(context)
-        BulletinNotificationManager.syncTopicSubscriptions(context, newsEnabled, schedulesEnabled)
+        BulletinNotificationManager.syncTopicSubscriptions(
+            context = context,
+            newsEnabled = newsEnabled,
+            schedulesEnabled = schedulesEnabled,
+            isAdmin = isAdmin,
+            masterEnabled = masterEnabled
+        )
         BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, news, sched ->
             viewModel.syncFcmToken(token, news, sched)
         }
     }
 
-    // Receive live real-time published news/schedule alerts and dispatch Android push notifications + snackbar
+    // Receive live real-time published news/schedule/member-registration alerts and dispatch Android push notifications + snackbar
     LaunchedEffect(viewModel) {
         viewModel.liveAlerts.collect { alert ->
             if (!BulletinNotificationManager.isAlertEnabledForType(context, alert.type)) {
@@ -443,12 +492,22 @@ private fun BuletinMainShell(
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
-                if (alert.type.equals(BulletinNotificationManager.TYPE_SCHEDULE, ignoreCase = true)) {
-                    if (alert.itemId.isNotBlank()) focusedScheduleId = alert.itemId
-                    currentTab = BulletinTab.SCHEDULES
-                } else {
-                    if (alert.itemId.isNotBlank()) focusedNewsId = alert.itemId
-                    currentTab = BulletinTab.NEWS
+                when {
+                    alert.type.equals(BulletinNotificationManager.TYPE_MEMBER_REGISTERED, ignoreCase = true) -> {
+                        if (isAdmin) {
+                            currentTab = BulletinTab.MEMBERS
+                            viewModel.clearUnreadNewMemberCount()
+                            if (alert.itemId.isNotBlank()) viewModel.loadMemberDetail(alert.itemId)
+                        }
+                    }
+                    alert.type.equals(BulletinNotificationManager.TYPE_SCHEDULE, ignoreCase = true) -> {
+                        if (alert.itemId.isNotBlank()) focusedScheduleId = alert.itemId
+                        currentTab = BulletinTab.SCHEDULES
+                    }
+                    else -> {
+                        if (alert.itemId.isNotBlank()) focusedNewsId = alert.itemId
+                        currentTab = BulletinTab.NEWS
+                    }
                 }
             }
         }
@@ -485,10 +544,27 @@ private fun BuletinMainShell(
                                 selected = selected,
                                 onClick = { currentTab = tab },
                                 icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = label
-                                    )
+                                    if (tab == BulletinTab.MEMBERS && unreadNewMemberCount > 0) {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge {
+                                                    Text(
+                                                        text = if (unreadNewMemberCount > 9) "9+" else unreadNewMemberCount.toString()
+                                                    )
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                contentDescription = label
+                                            )
+                                        }
+                                    } else {
+                                        Icon(
+                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                            contentDescription = label
+                                        )
+                                    }
                                 },
                                 label = { Text(label) },
                                 modifier = Modifier.testTag("nav_tab_${tab.route}")
@@ -499,7 +575,8 @@ private fun BuletinMainShell(
             },
             floatingActionButton = {
                 val hideNewsDetailFab = currentTab == BulletinTab.NEWS && isViewingNewsDetail && !isExpandedScreen
-                if (isAdmin && currentTab != BulletinTab.ACCOUNT && !hideNewsDetailFab) {
+                val hideGalleryDetailFab = currentTab == BulletinTab.GALLERY && isViewingGalleryDetail
+                if (isAdmin && currentTab != BulletinTab.ACCOUNT && !hideNewsDetailFab && !hideGalleryDetailFab) {
                     if (currentTab == BulletinTab.MEMBERS) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -564,6 +641,7 @@ private fun BuletinMainShell(
                         header = {
                             Surface(
                                 shape = CircleShape,
+                                color = Color.White,
                                 shadowElevation = 2.dp,
                                 modifier = Modifier
                                     .padding(top = 12.dp, bottom = 8.dp)
@@ -572,8 +650,11 @@ private fun BuletinMainShell(
                                 Image(
                                     painter = painterResource(id = R.drawable.app_icon_buletin),
                                     contentDescription = stringResource(R.string.app_name),
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.clip(CircleShape)
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(2.dp)
+                                        .clip(CircleShape)
                                 )
                             }
                         },
@@ -587,10 +668,27 @@ private fun BuletinMainShell(
                                 selected = selected,
                                 onClick = { currentTab = tab },
                                 icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = label
-                                    )
+                                    if (tab == BulletinTab.MEMBERS && unreadNewMemberCount > 0) {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge {
+                                                    Text(
+                                                        text = if (unreadNewMemberCount > 9) "9+" else unreadNewMemberCount.toString()
+                                                    )
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                                contentDescription = label
+                                            )
+                                        }
+                                    } else {
+                                        Icon(
+                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                            contentDescription = label
+                                        )
+                                    }
                                 },
                                 label = { Text(label) },
                                 modifier = Modifier.testTag("rail_tab_${tab.route}")
@@ -698,6 +796,9 @@ private fun BuletinMainShell(
                                     viewModel.postGalleryComment(photoId, text, parentId, replyToName, onDone)
                                 },
                                 onDeleteComment = viewModel::deleteGalleryComment,
+                                onDetailVisibilityChange = { visible ->
+                                    isViewingGalleryDetail = visible
+                                },
                                 onEditPhoto = { photo ->
                                     editingPhoto = photo
                                     showPhotoEditor = true
@@ -713,11 +814,10 @@ private fun BuletinMainShell(
                         }
 
                         BulletinTab.MEMBERS -> {
-                            if (!isGuest) {
+                            if (isAdmin) {
                                 MembersScreen(
                                     membersState = membersState,
                                     searchQuery = memberSearchQuery,
-                                    isAdmin = isAdmin,
                                     isBusy = isBusy,
                                     selectedMemberDetail = selectedMemberDetail,
                                     isLoadingDetail = isLoadingMemberDetail,
@@ -747,16 +847,19 @@ private fun BuletinMainShell(
                                 email = currentUser?.email,
                                 googleDisplayName = currentUser?.displayName,
                                 userProfile = userProfile,
+                                ownMemberDetail = ownMemberDetail,
                                 bookmarks = bookmarks,
                                 isAdmin = isAdmin,
                                 adminMembers = adminMembers,
                                 registeredUsers = registeredUsers,
+                                appVersionConfig = appVersionConfig,
                                 newsCount = (newsState as? UiState.Success)?.data?.size ?: 0,
                                 schedulesCount = (schedulesState as? UiState.Success)?.data?.size ?: 0,
                                 galleryCount = (galleryState as? UiState.Success)?.data?.size ?: 0,
                                 membersCount = (membersState as? UiState.Success)?.data?.size ?: 0,
                                 isBusy = isBusy,
                                 onSaveProfile = viewModel::saveProfile,
+                                onFillOrEditMemberDetails = { showSelfMemberEditor = true },
                                 onUpdateProfilePhoto = viewModel::updateProfilePhoto,
                                 onProfilePhotoError = viewModel::showSnackbar,
                                 onOpenBookmark = { bm ->
@@ -789,6 +892,8 @@ private fun BuletinMainShell(
                                 },
                                 onOpenAddAdminDialog = { showAddAdminDialog = true },
                                 onRemoveAdminMember = viewModel::removeAdminMember,
+                                onOpenUpdateNotice = { forceShowUpdateDialog = true },
+                                onOpenManageVersionDialog = { showManageVersionDialog = true },
                                 onUidCopied = {
                                     viewModel.showSnackbar(
                                         AppLanguageManager.tr(
@@ -798,16 +903,23 @@ private fun BuletinMainShell(
                                     )
                                 },
                                 onNotificationPrefsUpdated = { newsEnabled, schedulesEnabled ->
+                                    shouldPromptPushOptIn = BulletinNotificationManager.shouldShowOptInPopup(context)
                                     scope.launch {
                                         BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, _, _ ->
                                             viewModel.syncFcmToken(token, newsEnabled, schedulesEnabled)
                                         }
-                                        snackbarHostState.showSnackbar(
+                                        val message = if (!newsEnabled && !schedulesEnabled) {
                                             AppLanguageManager.tr(
-                                                "Tetapan notifikasi FCM dikemas kini.",
-                                                "FCM notification preferences updated."
+                                                "Notifikasi tolak telah dimatikan. Anda boleh hidupkannya semula bila-bila masa.",
+                                                "Push notifications disabled. You can re-enable them anytime here."
                                             )
-                                        )
+                                        } else {
+                                            AppLanguageManager.tr(
+                                                "Notifikasi tolak FCM aktif & disegerakkan.",
+                                                "FCM push notifications active & synced."
+                                            )
+                                        }
+                                        snackbarHostState.showSnackbar(message)
                                     }
                                 },
                                 onGoogleSignInSuccess = onGoogleSignInSuccess,
@@ -858,7 +970,7 @@ private fun BuletinMainShell(
             initial = editingSchedule,
             isBusy = isBusy,
             onDismiss = { showScheduleEditor = false },
-            onSave = { title, desc, cat, date, time, loc, speaker, order, recurring, published ->
+            onSave = { title, desc, cat, date, time, loc, speaker, recurring, published ->
                 viewModel.saveSchedule(
                     existingId = editingSchedule?.id,
                     title = title,
@@ -868,7 +980,6 @@ private fun BuletinMainShell(
                     timeLabel = time,
                     location = loc,
                     speaker = speaker,
-                    sortOrder = order,
                     recurring = recurring,
                     published = published,
                     onComplete = { showScheduleEditor = false }
@@ -905,18 +1016,50 @@ private fun BuletinMainShell(
     if (showMemberEditor && currentUser != null) {
         AdminMemberEditorDialog(
             initial = editingMember,
+            registeredUsers = registeredUsers,
             isBusy = isBusy,
             onDismiss = { showMemberEditor = false },
-            onSave = { fullName, gender, birthDateIso, baptismStatus, denomination, maritalStatus ->
+            onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, memberEmail ->
                 viewModel.saveChurchMember(
                     existingId = editingMember?.id,
                     fullName = fullName,
+                    myKadNumber = myKadNumber,
                     gender = gender,
                     birthDateIso = birthDateIso,
                     baptismStatus = baptismStatus,
                     denomination = denomination,
                     maritalStatus = maritalStatus,
+                    spouseName = spouseName,
+                    sibMembershipNumber = sibMembershipNumber,
+                    passportPhotoBase64 = passportPhotoBase64,
+                    memberEmail = memberEmail,
                     onComplete = { showMemberEditor = false }
+                )
+            }
+        )
+    }
+
+    if (showSelfMemberEditor && currentUser != null) {
+        AdminMemberEditorDialog(
+            initial = ownMemberDetail,
+            isSelfRegistration = true,
+            defaultFullName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUser.displayName,
+            defaultEmail = currentUser.email,
+            isBusy = isBusy,
+            onDismiss = { showSelfMemberEditor = false },
+            onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, _ ->
+                viewModel.saveOwnChurchMember(
+                    fullName = fullName,
+                    myKadNumber = myKadNumber,
+                    gender = gender,
+                    birthDateIso = birthDateIso,
+                    baptismStatus = baptismStatus,
+                    denomination = denomination,
+                    maritalStatus = maritalStatus,
+                    spouseName = spouseName,
+                    sibMembershipNumber = sibMembershipNumber,
+                    passportPhotoBase64 = passportPhotoBase64,
+                    onComplete = { showSelfMemberEditor = false }
                 )
             }
         )
@@ -950,6 +1093,77 @@ private fun BuletinMainShell(
                 viewModel.addAdminMember(targetUid, name, role) {
                     showAddAdminDialog = false
                 }
+            }
+        )
+    }
+
+    if (showManageVersionDialog && isAdmin && currentUser != null) {
+        AdminAppVersionDialog(
+            currentConfig = appVersionConfig,
+            isBusy = isBusy,
+            onDismiss = { showManageVersionDialog = false },
+            onSave = { code, name, notes, url, force ->
+                viewModel.saveAppVersionConfig(
+                    latestVersionCode = code,
+                    latestVersionName = name,
+                    releaseNotes = notes,
+                    updateUrl = url,
+                    forceUpdate = force,
+                    onComplete = { showManageVersionDialog = false }
+                )
+            }
+        )
+    }
+
+    val versionNotice = appVersionConfig
+    val shouldShowUpdatePrompt = versionNotice != null &&
+        versionNotice.isUpdateAvailable(BuildConfig.VERSION_CODE) &&
+        (versionNotice.forceUpdate || forceShowUpdateDialog || dismissedUpdateVersionCode < versionNotice.latestVersionCode)
+
+    if (shouldShowUpdatePrompt && versionNotice != null) {
+        AppUpdateAvailableDialog(
+            config = versionNotice,
+            onDismiss = {
+                forceShowUpdateDialog = false
+                dismissedUpdateVersionCode = versionNotice.latestVersionCode
+            },
+            onOpenUrlError = viewModel::showSnackbar
+        )
+    } else if (shouldPromptPushOptIn && !dismissedPushOptInThisSession) {
+        PushNotificationOptInDialog(
+            isAdmin = isAdmin,
+            onEnabled = { newsEnabled, schedulesEnabled ->
+                shouldPromptPushOptIn = false
+                dismissedPushOptInThisSession = true
+                scope.launch {
+                    BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, _, _ ->
+                        viewModel.syncFcmToken(token, newsEnabled, schedulesEnabled)
+                    }
+                    snackbarHostState.showSnackbar(
+                        AppLanguageManager.tr(
+                            "Notifikasi masa nyata SIB Toburon berjaya diaktifkan!",
+                            "Real-time SIB Toburon push notifications enabled!"
+                        )
+                    )
+                }
+            },
+            onOptOut = {
+                shouldPromptPushOptIn = false
+                dismissedPushOptInThisSession = true
+                scope.launch {
+                    BulletinNotificationManager.fetchAndSyncFcmToken(context) { token, _, _ ->
+                        viewModel.syncFcmToken(token, false, false)
+                    }
+                    snackbarHostState.showSnackbar(
+                        AppLanguageManager.tr(
+                            "Notifikasi dimatikan. Anda boleh mengaktifkannya di tab Akaun.",
+                            "Notifications opted out. You can enable them anytime in the Account tab."
+                        )
+                    )
+                }
+            },
+            onDismissForNow = {
+                dismissedPushOptInThisSession = true
             }
         )
     }

@@ -268,6 +268,22 @@ data class BulletinAlert(
     val authorId: String
 )
 
+@Keep
+@IgnoreExtraProperties
+data class AppVersionConfig(
+    @DocumentId val id: String = "",
+    val latestVersionCode: Int = 1,
+    val latestVersionName: String = "1.0",
+    val releaseNotes: String = "",
+    val updateUrl: String = "",
+    val forceUpdate: Boolean = false,
+    val updatedBy: String = "",
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    fun isUpdateAvailable(currentVersionCode: Int): Boolean =
+        latestVersionCode > currentVersionCode
+}
+
 enum class MemberGender(val code: String, val label: String, val labelEn: String) {
     LELAKI("LELAKI", "Lelaki", "Male"),
     PEREMPUAN("PEREMPUAN", "Perempuan", "Female");
@@ -282,7 +298,7 @@ enum class MemberGender(val code: String, val label: String, val labelEn: String
 }
 
 enum class BaptismStatus(val code: String, val label: String, val labelEn: String) {
-    DIBAPTIS("DIBAPTIS", "Dibaptis", "Baptized"),
+    DIBAPTIS("DIBAPTIS", "Sudah Dibaptis", "Baptized"),
     BELUM_DIBAPTIS("BELUM_DIBAPTIS", "Belum Dibaptis", "Not Yet Baptized");
 
     fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
@@ -316,6 +332,7 @@ data class ChurchMemberPublic(
     val fullName: String = "",
     val gender: String = "",
     val baptismStatus: String = "",
+    val passportPhotoBase64: String? = null,
     val published: Boolean = true,
     val authorId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
@@ -335,11 +352,16 @@ data class ChurchMemberPublic(
 data class ChurchMemberDetail(
     @DocumentId val id: String = "",
     val fullName: String = "",
+    val myKadNumber: String? = null,
     val gender: String = MemberGender.LELAKI.code,
     val birthDate: String = "",
     val baptismStatus: String = BaptismStatus.BELUM_DIBAPTIS.code,
-    val denomination: String = "SIB",
+    val denomination: String = "",
     val maritalStatus: String = "",
+    val spouseName: String? = null,
+    val sibMembershipNumber: String? = null,
+    val passportPhotoBase64: String? = null,
+    val memberEmail: String? = null,
     val authorId: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -350,6 +372,17 @@ data class ChurchMemberDetail(
     fun resolvedMaritalStatusLabel(lang: AppLanguage = AppLanguageManager.current()): String =
         MaritalStatus.entries.firstOrNull { it.code == maritalStatus }?.localizedLabel(lang)
             ?: if (lang == AppLanguage.EN) "Not yet updated" else "Belum dikemas kini"
+
+    fun resolvedSibMembershipLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (lang == AppLanguage.EN) "Not yet assigned" else "Belum ada"
+
+    fun resolvedSpouseFieldLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        when (resolvedGender()) {
+            MemberGender.PEREMPUAN -> if (lang == AppLanguage.EN) "Husband's Name" else "Nama Suami"
+            MemberGender.LELAKI -> if (lang == AppLanguage.EN) "Wife's Name" else "Nama Isteri"
+        }
+
     fun calculatedAge(): Int? = calculateAgeFromIsoDate(birthDate)
 }
 

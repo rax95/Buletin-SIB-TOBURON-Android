@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AdminMember
+import com.example.data.AppVersionConfig
 import com.example.data.BaptismStatus
 import com.example.data.BulletinAlert
 import com.example.data.BulletinRepository
@@ -24,6 +25,7 @@ import com.example.data.ScheduleCategory
 import com.example.data.UiState
 import com.example.data.UserBookmark
 import com.example.data.UserProfile
+import com.example.notifications.BulletinNotificationManager
 import com.example.ui.i18n.AppLanguageManager
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
@@ -65,8 +67,19 @@ class BulletinViewModel(
     private val _liveAlerts = MutableSharedFlow<BulletinAlert>(extraBufferCapacity = 8)
     val liveAlerts: SharedFlow<BulletinAlert> = _liveAlerts.asSharedFlow()
 
+    private val _unreadNewMemberCount = MutableStateFlow(0)
+    val unreadNewMemberCount: StateFlow<Int> = _unreadNewMemberCount.asStateFlow()
+
     private val seenNotificationEventIds = mutableSetOf<String>()
-    private var notificationStreamHydrated = false
+
+    // Live admin privilege stream
+    val isAdmin: StateFlow<Boolean> = repository
+        .observeAdminAccess(currentUserId, userEmail, emailVerified)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = isBootstrappedAdmin
+        )
 
     init {
         if (!isGuest && !currentUserId.isNullOrBlank()) {
@@ -78,33 +91,57 @@ class BulletinViewModel(
             }
         }
         viewModelScope.launch {
-            repository.observeNotificationEvents(currentUserId)
-                .catch { error ->
-                    unwrapOrRethrow("notification_events", error)
-                }
-                .collect { events ->
-                    if (!notificationStreamHydrated) {
-                        seenNotificationEventIds.addAll(events.map { it.id })
-                        notificationStreamHydrated = true
-                    } else {
-                        val newlyPublished = events.filter { it.id.isNotBlank() && seenNotificationEventIds.add(it.id) }
-                        newlyPublished.forEach { event ->
-                            // Skip pinging the publishing admin's own active device
-                            if (currentUserId == null || event.authorId != currentUserId) {
-                                _liveAlerts.tryEmit(
-                                    BulletinAlert(
-                                        eventId = event.id,
-                                        type = event.eventType,
-                                        itemId = event.targetId,
-                                        title = event.title,
-                                        body = event.body,
-                                        authorId = event.authorId
-                                    )
-                                )
-                            }
+            isAdmin.flatMapLatest { admin ->
+                var hydratedForStream = false
+                repository.observeNotificationEvents(currentUserId, admin)
+                    .map { events ->
+                        val result = if (!hydratedForStream) {
+                            seenNotificationEventIds.addAll(events.map { it.id })
+                            hydratedForStream = true
+                            emptyList()
+                        } else {
+                            events.filter { it.id.isNotBlank() && seenNotificationEventIds.add(it.id) }
                         }
+                        admin to result
+                    }
+                    .catch { error ->
+                        unwrapOrRethrow("notification_events", error)
+                    }
+            }.collect { (admin, newlyPublished) ->
+                newlyPublished.forEach { event ->
+                    val isMemberRegistration = event.eventType.equals(
+                        BulletinNotificationManager.TYPE_MEMBER_REGISTERED,
+                        ignoreCase = true
+                    )
+                    if (isMemberRegistration) {
+                        if (admin) {
+                            _unreadNewMemberCount.value = _unreadNewMemberCount.value + 1
+                            _liveAlerts.tryEmit(
+                                BulletinAlert(
+                                    eventId = event.id,
+                                    type = event.eventType,
+                                    itemId = event.targetId,
+                                    title = event.title,
+                                    body = event.body,
+                                    authorId = event.authorId
+                                )
+                            )
+                        }
+                    } else if (currentUserId == null || event.authorId != currentUserId) {
+                        // Skip pinging the publishing admin's own active device for NEWS/SCHEDULE
+                        _liveAlerts.tryEmit(
+                            BulletinAlert(
+                                eventId = event.id,
+                                type = event.eventType,
+                                itemId = event.targetId,
+                                title = event.title,
+                                body = event.body,
+                                authorId = event.authorId
+                            )
+                        )
                     }
                 }
+            }
         }
     }
 
@@ -140,15 +177,6 @@ class BulletinViewModel(
     private val _activeNewsArticleId = MutableStateFlow<String?>(null)
     private val _isPostingNewsComment = MutableStateFlow(false)
     val isPostingNewsComment: StateFlow<Boolean> = _isPostingNewsComment.asStateFlow()
-
-    // Live admin privilege stream
-    val isAdmin: StateFlow<Boolean> = repository
-        .observeAdminAccess(currentUserId, userEmail, emailVerified)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = isBootstrappedAdmin
-        )
 
     // Real-time News stream with two-tier Flow error unwrapping
     val newsState: StateFlow<UiState<List<NewsArticle>>> = isAdmin
@@ -193,6 +221,18 @@ class BulletinViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = UiState.Loading
+        )
+
+    // Real-time App Version Config (/app_config/version) for automatic in-app update notice
+    val appVersionConfig: StateFlow<AppVersionConfig?> = repository.observeAppVersionConfig(currentUserId)
+        .catch { error ->
+            unwrapOrRethrow("appVersionConfig", error)
+            emit(null)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = null
         )
 
     // Real-time Gallery Comments stream for the currently opened gallery post
@@ -243,17 +283,33 @@ class BulletinViewModel(
             initialValue = UiState.Success(emptyList())
         )
 
-    // Real-time Church Members directory stream (public full names only)
-    val membersState: StateFlow<UiState<List<ChurchMemberPublic>>> = repository
-        .observeChurchMembers(currentUserId)
-        .map<List<ChurchMemberPublic>, UiState<List<ChurchMemberPublic>>> { UiState.Success(it) }
-        .catch { error ->
-            emit(toErrorState(AppLanguageManager.tr("Gagal memuat senarai ahli jemaat", "Failed to load congregation members list"), error))
+    // Real-time Church Members directory stream (Admin-only tab)
+    val membersState: StateFlow<UiState<List<ChurchMemberPublic>>> = isAdmin
+        .flatMapLatest { admin ->
+            if (!admin) flowOf<UiState<List<ChurchMemberPublic>>>(UiState.Success(emptyList()))
+            else repository.observeChurchMembers(currentUserId)
+                .map<List<ChurchMemberPublic>, UiState<List<ChurchMemberPublic>>> { UiState.Success(it) }
+                .catch { error ->
+                    emit(toErrorState(AppLanguageManager.tr("Gagal memuat senarai ahli jemaat", "Failed to load congregation members list"), error))
+                }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = UiState.Loading
+        )
+
+    // Signed-in Jemaat's own linked full member record (matched by verified Google email)
+    val ownMemberDetail: StateFlow<ChurchMemberDetail?> = repository
+        .observeOwnChurchMemberDetail(currentUserId, userEmail)
+        .catch { error ->
+            unwrapOrRethrow("own_member_detail", error)
+            emit(null)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = null
         )
 
     // User bookmarks stream
@@ -351,6 +407,10 @@ class BulletinViewModel(
 
     fun setMemberSearchQuery(query: String) {
         _memberSearchQuery.value = query
+    }
+
+    fun clearUnreadNewMemberCount() {
+        _unreadNewMemberCount.value = 0
     }
 
     fun loadMemberDetail(memberId: String) {
@@ -564,14 +624,16 @@ class BulletinViewModel(
         timeLabel: String,
         location: String,
         speaker: String,
-        sortOrder: Long,
         recurring: Boolean,
         published: Boolean,
         onComplete: () -> Unit = {}
     ) {
-        val previouslyDraft = existingId != null &&
-            (schedulesState.value as? UiState.Success)?.data
-                ?.firstOrNull { it.id == existingId }?.published == false
+        val existingSchedule = existingId?.let { id ->
+            (schedulesState.value as? UiState.Success)?.data?.firstOrNull { it.id == id }
+        }
+        val previouslyDraft = existingSchedule?.published == false
+        val resolvedSortOrder = existingSchedule?.sortOrder?.coerceIn(0L, 9_999_999_999_999L)
+            ?: System.currentTimeMillis().coerceIn(0L, 9_999_999_999_999L)
         val willNotify = published && (existingId == null || previouslyDraft)
         val message = when {
             willNotify -> AppLanguageManager.tr(
@@ -594,12 +656,12 @@ class BulletinViewModel(
             if (existingId == null) {
                 repository.createSchedule(
                     title, description, category, dateLabel, timeLabel,
-                    location, speaker, sortOrder, recurring, published
+                    location, speaker, resolvedSortOrder, recurring, published
                 )
             } else {
                 repository.updateSchedule(
                     existingId, title, description, category, dateLabel, timeLabel,
-                    location, speaker, sortOrder, recurring, published,
+                    location, speaker, resolvedSortOrder, recurring, published,
                     notifyOnPublish = previouslyDraft && published
                 )
             }
@@ -887,13 +949,28 @@ class BulletinViewModel(
     fun saveChurchMember(
         existingId: String?,
         fullName: String,
+        myKadNumber: String?,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
         denomination: String,
         maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String? = null,
+        memberEmail: String? = null,
         onComplete: () -> Unit = {}
     ) {
+        val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
+        val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+            spouseName?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+        val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanEmail = memberEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         runMutation(
             successMessage = if (existingId == null) {
                 AppLanguageManager.tr("Ahli jemaat berjaya didaftarkan.", "Congregation member registered successfully.")
@@ -904,11 +981,16 @@ class BulletinViewModel(
                 if (existingId != null && _selectedMemberDetail.value?.id == existingId) {
                     _selectedMemberDetail.value = _selectedMemberDetail.value?.copy(
                         fullName = fullName.trim(),
+                        myKadNumber = cleanMyKad,
                         gender = gender.code,
                         birthDate = birthDateIso.trim(),
                         baptismStatus = baptismStatus.code,
-                        denomination = denomination.trim(),
-                        maritalStatus = maritalStatus.code
+                        denomination = cleanDenom,
+                        maritalStatus = maritalStatus.code,
+                        spouseName = cleanSpouse,
+                        sibMembershipNumber = cleanSibNo,
+                        passportPhotoBase64 = cleanPhoto,
+                        memberEmail = cleanEmail
                     )
                 }
                 onComplete()
@@ -916,11 +998,113 @@ class BulletinViewModel(
         ) {
             if (existingId == null) {
                 repository.createChurchMember(
-                    fullName, gender, birthDateIso, baptismStatus, denomination, maritalStatus
+                    fullName = fullName,
+                    myKadNumber = cleanMyKad,
+                    gender = gender,
+                    birthDateIso = birthDateIso,
+                    baptismStatus = baptismStatus,
+                    denomination = cleanDenom,
+                    maritalStatus = maritalStatus,
+                    spouseName = cleanSpouse,
+                    sibMembershipNumber = cleanSibNo,
+                    passportPhotoBase64 = cleanPhoto,
+                    memberEmail = cleanEmail
                 )
             } else {
                 repository.updateChurchMember(
-                    existingId, fullName, gender, birthDateIso, baptismStatus, denomination, maritalStatus
+                    memberId = existingId,
+                    fullName = fullName,
+                    myKadNumber = cleanMyKad,
+                    gender = gender,
+                    birthDateIso = birthDateIso,
+                    baptismStatus = baptismStatus,
+                    denomination = cleanDenom,
+                    maritalStatus = maritalStatus,
+                    spouseName = cleanSpouse,
+                    sibMembershipNumber = cleanSibNo,
+                    passportPhotoBase64 = cleanPhoto,
+                    memberEmail = cleanEmail
+                )
+            }
+        }
+    }
+
+    fun saveOwnChurchMember(
+        fullName: String,
+        myKadNumber: String?,
+        gender: MemberGender,
+        birthDateIso: String,
+        baptismStatus: BaptismStatus,
+        denomination: String,
+        maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String? = null,
+        onComplete: () -> Unit = {}
+    ) {
+        val verifiedEmail = userEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        if (isGuest || verifiedEmail == null) {
+            _snackbarMessage.tryEmit(
+                AppLanguageManager.tr(
+                    "Sila log masuk dengan akaun Google untuk mengisi maklumat ahli.",
+                    "Please sign in with Google to fill in your member details."
+                )
+            )
+            return
+        }
+        val existingOwnId = ownMemberDetail.value?.id
+        val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
+        val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+            spouseName?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+        val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
+
+        runMutation(
+            successMessage = if (existingOwnId == null) {
+                AppLanguageManager.tr(
+                    "Maklumat ahli berjaya didaftarkan! Kad Ahli dikemas kini & Admin telah dimaklumkan.",
+                    "Member details registered! Your Member Card is updated & Admin has been notified."
+                )
+            } else {
+                AppLanguageManager.tr(
+                    "Maklumat Kad Ahli anda berjaya dikemas kini.",
+                    "Your Member Card details have been updated."
+                )
+            },
+            onComplete = onComplete
+        ) {
+            if (existingOwnId == null) {
+                repository.registerOwnChurchMember(
+                    fullName = fullName,
+                    myKadNumber = cleanMyKad,
+                    gender = gender,
+                    birthDateIso = birthDateIso,
+                    baptismStatus = baptismStatus,
+                    denomination = cleanDenom,
+                    maritalStatus = maritalStatus,
+                    spouseName = cleanSpouse,
+                    sibMembershipNumber = cleanSibNo,
+                    passportPhotoBase64 = cleanPhoto,
+                    verifiedMemberEmail = verifiedEmail
+                )
+            } else {
+                repository.updateChurchMember(
+                    memberId = existingOwnId,
+                    fullName = fullName,
+                    myKadNumber = cleanMyKad,
+                    gender = gender,
+                    birthDateIso = birthDateIso,
+                    baptismStatus = baptismStatus,
+                    denomination = cleanDenom,
+                    maritalStatus = maritalStatus,
+                    spouseName = cleanSpouse,
+                    sibMembershipNumber = cleanSibNo,
+                    passportPhotoBase64 = cleanPhoto,
+                    memberEmail = verifiedEmail
                 )
             }
         }
@@ -940,6 +1124,32 @@ class BulletinViewModel(
             }
         ) {
             repository.deleteChurchMember(memberId)
+        }
+    }
+
+    fun saveAppVersionConfig(
+        latestVersionCode: Int,
+        latestVersionName: String,
+        releaseNotes: String,
+        updateUrl: String,
+        forceUpdate: Boolean,
+        onComplete: () -> Unit = {}
+    ) {
+        if (!isAdmin.value) return
+        runMutation(
+            successMessage = AppLanguageManager.tr(
+                "Tetapan versi aplikasi v$latestVersionName (Kod $latestVersionCode) berjaya dikemas kini.",
+                "App version config v$latestVersionName (Build $latestVersionCode) updated."
+            ),
+            onComplete = onComplete
+        ) {
+            repository.saveAppVersionConfig(
+                latestVersionCode = latestVersionCode,
+                latestVersionName = latestVersionName,
+                releaseNotes = releaseNotes,
+                updateUrl = updateUrl,
+                forceUpdate = forceUpdate
+            )
         }
     }
 

@@ -159,16 +159,16 @@ fun AuthScreen(
                 shape = CircleShape,
                 tonalElevation = 6.dp,
                 shadowElevation = 10.dp,
-                color = Color(0xFF165B50),
-                modifier = Modifier.size(84.dp)
+                color = Color.White,
+                modifier = Modifier.size(88.dp)
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.app_icon_buletin),
                     contentDescription = stringResource(R.string.app_name),
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp)
+                        .padding(4.dp)
                         .clip(CircleShape)
                 )
             }

@@ -95,13 +95,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import com.example.data.AdminMember
+import com.example.data.AppVersionConfig
+import com.example.data.ChurchMemberDetail
 import com.example.data.FellowshipGroup
 import com.example.data.ImageUtils
 import com.example.data.UserBookmark
 import com.example.data.UserProfile
 import com.example.ui.auth.onGoogleSignInClicked
+import com.example.ui.components.AppVersionFooterCard
 import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NotificationSettingsCard
+import com.example.ui.components.OwnMemberIdCard
 import com.example.ui.components.formatIndonesianTimestamp
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.CompactLanguageTogglePill
@@ -117,16 +121,19 @@ fun ProfileAdminScreen(
     email: String?,
     googleDisplayName: String?,
     userProfile: UserProfile?,
+    ownMemberDetail: ChurchMemberDetail?,
     bookmarks: List<UserBookmark>,
     isAdmin: Boolean,
     adminMembers: List<AdminMember>,
     registeredUsers: List<UserProfile>,
+    appVersionConfig: AppVersionConfig?,
     newsCount: Int,
     schedulesCount: Int,
     galleryCount: Int,
     membersCount: Int,
     isBusy: Boolean,
     onSaveProfile: (String, FellowshipGroup, () -> Unit) -> Unit,
+    onFillOrEditMemberDetails: () -> Unit,
     onUpdateProfilePhoto: (String?, () -> Unit) -> Unit,
     onProfilePhotoError: (String) -> Unit,
     onOpenBookmark: (UserBookmark) -> Unit,
@@ -137,6 +144,8 @@ fun ProfileAdminScreen(
     onAddMemberClick: () -> Unit,
     onOpenAddAdminDialog: () -> Unit,
     onRemoveAdminMember: (String) -> Unit,
+    onOpenUpdateNotice: () -> Unit,
+    onOpenManageVersionDialog: () -> Unit,
     onUidCopied: () -> Unit,
     onNotificationPrefsUpdated: (newsEnabled: Boolean, schedulesEnabled: Boolean) -> Unit,
     onGoogleSignInSuccess: () -> Unit,
@@ -146,9 +155,11 @@ fun ProfileAdminScreen(
 ) {
     if (isGuest || uid.isNullOrBlank()) {
         GuestAccountView(
+            appVersionConfig = appVersionConfig,
             newsCount = newsCount,
             schedulesCount = schedulesCount,
             galleryCount = galleryCount,
+            onOpenUpdateNotice = onOpenUpdateNotice,
             onNotificationPrefsUpdated = onNotificationPrefsUpdated,
             onGoogleSignInSuccess = onGoogleSignInSuccess,
             onExitGuestMode = onExitGuestMode,
@@ -450,6 +461,17 @@ fun ProfileAdminScreen(
                 }
             }
 
+            // 1b. Kad Ahli (Member ID Card — immediately below User Profile, synced with Admin Members tab)
+            item(key = "member_id_card") {
+                OwnMemberIdCard(
+                    ownMemberDetail = ownMemberDetail,
+                    userProfile = userProfile,
+                    currentUserDisplayName = googleDisplayName,
+                    currentUserEmail = email,
+                    onFillOrEditMemberDetails = onFillOrEditMemberDetails
+                )
+            }
+
             // 2. Admin Real-Time Console (Visible to Admins)
             if (isAdmin) {
                 item(key = "admin_console") {
@@ -729,7 +751,17 @@ fun ProfileAdminScreen(
                 }
             }
 
-            // 5. Sign Out
+            // 5. App Version & Update Status
+            item(key = "app_version_section") {
+                AppVersionFooterCard(
+                    versionConfig = appVersionConfig,
+                    isAdmin = isAdmin,
+                    onOpenUpdateNotice = onOpenUpdateNotice,
+                    onManageVersionClick = onOpenManageVersionDialog
+                )
+            }
+
+            // 6. Sign Out
             item(key = "sign_out_section") {
                 OutlinedButton(
                     onClick = onSignOutClick,
@@ -963,9 +995,11 @@ private fun MemberProfileDialog(
 
 @Composable
 private fun GuestAccountView(
+    appVersionConfig: AppVersionConfig?,
     newsCount: Int,
     schedulesCount: Int,
     galleryCount: Int,
+    onOpenUpdateNotice: () -> Unit,
     onNotificationPrefsUpdated: (newsEnabled: Boolean, schedulesEnabled: Boolean) -> Unit,
     onGoogleSignInSuccess: () -> Unit,
     onExitGuestMode: () -> Unit,
@@ -1154,6 +1188,15 @@ private fun GuestAccountView(
                 NotificationSettingsCard(
                     isAdmin = false,
                     onPreferencesUpdated = onNotificationPrefsUpdated
+                )
+            }
+
+            item(key = "guest_app_version_section") {
+                AppVersionFooterCard(
+                    versionConfig = appVersionConfig,
+                    isAdmin = false,
+                    onOpenUpdateNotice = onOpenUpdateNotice,
+                    onManageVersionClick = {}
                 )
                 Spacer(modifier = Modifier.height(72.dp))
             }
