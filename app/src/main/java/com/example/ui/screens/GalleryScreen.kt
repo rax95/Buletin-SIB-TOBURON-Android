@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -68,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -76,9 +78,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.data.CoverPreset
 import com.example.data.GalleryCategory
@@ -589,11 +593,16 @@ private fun InteractivePhotoDetailPane(
                     .fillMaxWidth()
             ) {
                 val photoStageHeight = (maxHeight * 0.56f).coerceIn(180.dp, 460.dp)
+                var isCurrentPhotoZoomed by remember(photo.id) { mutableStateOf(false) }
+
+                LaunchedEffect(pagerState.currentPage) {
+                    isCurrentPhotoZoomed = false
+                }
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(scrollState)
+                        .verticalScroll(scrollState, enabled = !isCurrentPhotoZoomed)
                         .testTag("lightbox_scrollable_content")
                 ) {
                     // Swipeable Photo Pager Stage for this single upload's images
@@ -605,6 +614,7 @@ private fun InteractivePhotoDetailPane(
                     ) {
                         HorizontalPager(
                             state = pagerState,
+                            userScrollEnabled = !isCurrentPhotoZoomed,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .testTag("lightbox_album_pager")
@@ -612,6 +622,19 @@ private fun InteractivePhotoDetailPane(
                             val slide = slides[page]
                             var scale by remember(photo.id, page) { mutableFloatStateOf(1f) }
                             var offset by remember(photo.id, page) { mutableStateOf(Offset.Zero) }
+                            var containerSize by remember(photo.id, page) { mutableStateOf(IntSize.Zero) }
+
+                            fun clampOffset(raw: Offset, targetScale: Float, size: IntSize): Offset {
+                                if (targetScale <= 1.01f || size.width <= 0 || size.height <= 0) {
+                                    return Offset.Zero
+                                }
+                                val maxX = (size.width * (targetScale - 1f)) / 2f
+                                val maxY = (size.height * (targetScale - 1f)) / 2f
+                                return Offset(
+                                    x = raw.x.coerceIn(-maxX, maxX),
+                                    y = raw.y.coerceIn(-maxY, maxY)
+                                )
+                            }
 
                             LaunchedEffect(pagerState.currentPage) {
                                 if (pagerState.currentPage != page) {
@@ -620,43 +643,84 @@ private fun InteractivePhotoDetailPane(
                                 }
                             }
 
+                            LaunchedEffect(scale, pagerState.currentPage) {
+                                if (pagerState.currentPage == page) {
+                                    isCurrentPhotoZoomed = scale > 1.02f
+                                }
+                            }
+
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .clip(RoundedCornerShape(0.dp))
+                                    .clipToBounds()
+                                    .onSizeChanged { newSize ->
+                                        containerSize = newSize
+                                        offset = clampOffset(offset, scale, newSize)
+                                    }
                                     .pointerInput(photo.id, page) {
                                         detectTapGestures(
-                                            onDoubleTap = {
+                                            onDoubleTap = { tapOffset ->
                                                 if (scale > 1.1f) {
                                                     scale = 1f
                                                     offset = Offset.Zero
                                                 } else {
-                                                    scale = 2.4f
+                                                    val targetScale = 2.5f
+                                                    val center = Offset(
+                                                        x = containerSize.width / 2f,
+                                                        y = containerSize.height / 2f
+                                                    )
+                                                    val focalOffset = (center - tapOffset) * (targetScale - 1f)
+                                                    scale = targetScale
+                                                    offset = clampOffset(focalOffset, targetScale, containerSize)
                                                 }
                                             }
                                         )
                                     }
                                     .pointerInput(photo.id, page) {
+                                        val touchSlop = viewConfiguration.touchSlop
                                         awaitEachGesture {
                                             awaitFirstDown(requireUnconsumed = false)
+                                            var pastTouchSlop = false
+                                            var totalPan = Offset.Zero
                                             do {
                                                 val event = awaitPointerEvent()
                                                 val pressedCount = event.changes.count { it.pressed }
                                                 if (pressedCount >= 2 || scale > 1.02f) {
                                                     val zoomChange = event.calculateZoom()
                                                     val panChange = event.calculatePan()
-                                                    if (zoomChange != 1f || scale > 1.02f) {
-                                                        val newScale = (scale * zoomChange).coerceIn(1f, 3.5f)
-                                                        scale = newScale
-                                                        offset = if (newScale > 1.02f) {
-                                                            Offset(
-                                                                x = (offset.x + panChange.x).coerceIn(-420f, 420f),
-                                                                y = (offset.y + panChange.y).coerceIn(-420f, 420f)
-                                                            )
+                                                    val centroid = event.calculateCentroid(useCurrent = true)
+                                                    if (!pastTouchSlop) {
+                                                        totalPan += panChange
+                                                        if (
+                                                            pressedCount >= 2 ||
+                                                            kotlin.math.abs(zoomChange - 1f) > 0.01f ||
+                                                            totalPan.getDistance() > touchSlop
+                                                        ) {
+                                                            pastTouchSlop = true
+                                                        }
+                                                    }
+                                                    if (pastTouchSlop && (zoomChange != 1f || panChange != Offset.Zero)) {
+                                                        val oldScale = scale
+                                                        val newScale = (oldScale * zoomChange).coerceIn(1f, 4f)
+                                                        val ratio = if (oldScale > 0f) newScale / oldScale else 1f
+                                                        val center = Offset(
+                                                            x = containerSize.width / 2f,
+                                                            y = containerSize.height / 2f
+                                                        )
+                                                        val updatedOffset = if (newScale > 1.02f) {
+                                                            val focalAnchor = if (centroid != Offset.Unspecified) {
+                                                                (centroid - center) * (1f - ratio)
+                                                            } else {
+                                                                Offset.Zero
+                                                            }
+                                                            val candidate = (offset * ratio) + focalAnchor + panChange
+                                                            clampOffset(candidate, newScale, containerSize)
                                                         } else {
                                                             Offset.Zero
                                                         }
+                                                        scale = if (newScale <= 1.02f) 1f else newScale
+                                                        offset = updatedOffset
                                                         event.changes.forEach { change ->
                                                             if (change.positionChanged()) change.consume()
                                                         }
@@ -684,8 +748,8 @@ private fun InteractivePhotoDetailPane(
                             }
                         }
 
-                        // Subtle Prev/Next arrow controls for multi-photo uploads
-                        if (slides.size > 1) {
+                        // Subtle Prev/Next arrow controls for multi-photo uploads (hidden while zoomed in)
+                        if (slides.size > 1 && !isCurrentPhotoZoomed) {
                             if (pagerState.currentPage > 0) {
                                 Surface(
                                     shape = CircleShape,
