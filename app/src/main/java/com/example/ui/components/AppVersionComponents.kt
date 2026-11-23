@@ -58,9 +58,7 @@ import com.example.ui.i18n.tr
 @Composable
 fun AppVersionFooterCard(
     versionConfig: AppVersionConfig?,
-    isAdmin: Boolean,
     onOpenUpdateNotice: () -> Unit,
-    onManageVersionClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentName = BuildConfig.VERSION_NAME
@@ -178,47 +176,22 @@ fun AppVersionFooterCard(
                 )
             }
 
-            if (hasUpdate || isAdmin) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+            if (hasUpdate) {
+                Button(
+                    onClick = onOpenUpdateNotice,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("open_update_notice_button")
                 ) {
-                    if (hasUpdate) {
-                        Button(
-                            onClick = onOpenUpdateNotice,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("open_update_notice_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.SystemUpdate,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(tr("Lihat Kemas Kini", "View Update"))
-                        }
-                    }
-                    if (isAdmin) {
-                        OutlinedButton(
-                            onClick = onManageVersionClick,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("admin_manage_version_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Tune,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(tr("Urus Versi", "Manage Version"))
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.SystemUpdate,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Lihat Kemas Kini", "View Update"))
                 }
             }
         }

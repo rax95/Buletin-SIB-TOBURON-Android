@@ -145,7 +145,6 @@ fun ProfileAdminScreen(
     onOpenAddAdminDialog: () -> Unit,
     onRemoveAdminMember: (String) -> Unit,
     onOpenUpdateNotice: () -> Unit,
-    onOpenManageVersionDialog: () -> Unit,
     onUidCopied: () -> Unit,
     onNotificationPrefsUpdated: (newsEnabled: Boolean, schedulesEnabled: Boolean) -> Unit,
     onGoogleSignInSuccess: () -> Unit,
@@ -755,9 +754,7 @@ fun ProfileAdminScreen(
             item(key = "app_version_section") {
                 AppVersionFooterCard(
                     versionConfig = appVersionConfig,
-                    isAdmin = isAdmin,
-                    onOpenUpdateNotice = onOpenUpdateNotice,
-                    onManageVersionClick = onOpenManageVersionDialog
+                    onOpenUpdateNotice = onOpenUpdateNotice
                 )
             }
 
@@ -1194,9 +1191,7 @@ private fun GuestAccountView(
             item(key = "guest_app_version_section") {
                 AppVersionFooterCard(
                     versionConfig = appVersionConfig,
-                    isAdmin = false,
-                    onOpenUpdateNotice = onOpenUpdateNotice,
-                    onManageVersionClick = {}
+                    onOpenUpdateNotice = onOpenUpdateNotice
                 )
                 Spacer(modifier = Modifier.height(72.dp))
             }

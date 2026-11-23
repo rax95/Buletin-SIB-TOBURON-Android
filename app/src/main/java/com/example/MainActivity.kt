@@ -14,9 +14,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -95,7 +99,6 @@ import com.example.ui.components.AdminMemberExportDialog
 import com.example.ui.components.AdminNewsEditorDialog
 import com.example.ui.components.AdminPhotoEditorDialog
 import com.example.ui.components.AdminScheduleEditorDialog
-import com.example.ui.components.AdminAppVersionDialog
 import com.example.ui.components.AppUpdateAvailableDialog
 import com.example.ui.components.PushNotificationOptInDialog
 import com.example.ui.i18n.AppLanguage
@@ -334,7 +337,6 @@ private fun BuletinMainShell(
     var isExportingFile by remember { mutableStateOf(false) }
     var pendingExportMembers by remember { mutableStateOf<List<ChurchMemberDetail>>(emptyList()) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
-    var showManageVersionDialog by remember { mutableStateOf(false) }
     var dismissedUpdateVersionCode by rememberSaveable { mutableStateOf(0) }
     var forceShowUpdateDialog by remember { mutableStateOf(false) }
     var dismissedPushOptInThisSession by rememberSaveable { mutableStateOf(false) }
@@ -532,7 +534,7 @@ private fun BuletinMainShell(
         val isExpandedScreen = maxWidth >= 840.dp
 
         Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing,
+            contentWindowInsets = WindowInsets.safeDrawing.exclude(WindowInsets.ime),
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             bottomBar = {
                 if (!useNavRail) {
@@ -634,6 +636,7 @@ private fun BuletinMainShell(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding)
             ) {
                 if (useNavRail) {
                     NavigationRail(
@@ -697,7 +700,12 @@ private fun BuletinMainShell(
                     }
                 }
 
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .imePadding()
+                ) {
                     when (currentTab) {
                         BulletinTab.NEWS -> {
                             NewsScreen(
@@ -893,7 +901,6 @@ private fun BuletinMainShell(
                                 onOpenAddAdminDialog = { showAddAdminDialog = true },
                                 onRemoveAdminMember = viewModel::removeAdminMember,
                                 onOpenUpdateNotice = { forceShowUpdateDialog = true },
-                                onOpenManageVersionDialog = { showManageVersionDialog = true },
                                 onUidCopied = {
                                     viewModel.showSnackbar(
                                         AppLanguageManager.tr(
@@ -1093,24 +1100,6 @@ private fun BuletinMainShell(
                 viewModel.addAdminMember(targetUid, name, role) {
                     showAddAdminDialog = false
                 }
-            }
-        )
-    }
-
-    if (showManageVersionDialog && isAdmin && currentUser != null) {
-        AdminAppVersionDialog(
-            currentConfig = appVersionConfig,
-            isBusy = isBusy,
-            onDismiss = { showManageVersionDialog = false },
-            onSave = { code, name, notes, url, force ->
-                viewModel.saveAppVersionConfig(
-                    latestVersionCode = code,
-                    latestVersionName = name,
-                    releaseNotes = notes,
-                    updateUrl = url,
-                    forceUpdate = force,
-                    onComplete = { showManageVersionDialog = false }
-                )
             }
         )
     }

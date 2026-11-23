@@ -588,7 +588,7 @@ private fun InteractivePhotoDetailPane(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                val photoStageHeight = (maxHeight * 0.56f).coerceIn(240.dp, 460.dp)
+                val photoStageHeight = (maxHeight * 0.56f).coerceIn(180.dp, 460.dp)
 
                 Column(
                     modifier = Modifier
