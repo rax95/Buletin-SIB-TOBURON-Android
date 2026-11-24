@@ -1028,7 +1028,6 @@ private fun BuletinMainShell(
     if (showMemberEditor && currentUser != null) {
         AdminMemberEditorDialog(
             initial = editingMember,
-            registeredUsers = registeredUsers,
             isBusy = isBusy,
             onDismiss = { showMemberEditor = false },
             onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, memberEmail ->

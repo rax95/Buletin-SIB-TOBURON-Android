@@ -176,9 +176,9 @@ fun OwnMemberIdCard(
                     },
                     passportPhotoBase64 = effectivePhoto,
                     statusLabel = if (ownMemberDetail != null) {
-                        tr("Terpaut dengan Rekod Gereja", "Synced with Church Record")
+                        tr("Terpaut Automatik • Aktif", "Auto-Linked • Active")
                     } else {
-                        tr("Menunggu Pautan Admin", "Awaiting Admin Link")
+                        tr("Belum Dilengkapkan", "Incomplete Profile")
                     },
                     isHighlightedStatus = ownMemberDetail != null,
                     badgeIcon = Icons.Filled.Badge,
@@ -244,8 +244,8 @@ fun OwnMemberIdCard(
                                 )
                                 Text(
                                     text = tr(
-                                        "Isi maklumat ahli anda sekarang untuk melengkapkan Kad Ahli dan mendaftar secara automatik ke senarai ahli SIB Toburon.",
-                                        "Fill in your member details now to complete your Member Card and register automatically in the SIB Toburon members list."
+                                        "Isi maklumat ahli anda sekarang. Kad Ahli dan akaun Google anda akan dipautkan serta ditambah secara automatik ke senarai ahli Admin.",
+                                        "Fill in your member details now. Your Member Card and Google account will be automatically linked and added to the Admin members list."
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -478,11 +478,11 @@ fun AdminMemberIdCardDialog(
                             )
                         }
 
-                        // Linked Google Account Email (shows Kad Ahli sync link)
+                        // Auto-linked Google Account Email (syncs automatically when member signs in with Google)
                         if (!detail.memberEmail.isNullOrBlank()) {
                             IdCardFieldTile(
                                 icon = Icons.Filled.Email,
-                                label = tr("PAUTAN AKAUN KAD AHLI", "LINKED MEMBER CARD EMAIL"),
+                                label = tr("AKAUN GOOGLE TERPAUT AUTOMATIK", "AUTO-LINKED GOOGLE ACCOUNT"),
                                 value = detail.memberEmail,
                                 modifier = Modifier.fillMaxWidth()
                             )

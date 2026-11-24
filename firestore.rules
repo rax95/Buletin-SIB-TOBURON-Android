@@ -626,12 +626,14 @@ service cloud.firestore {
     // 11. Maklumat Lengkap Ahli Jemaat (/church_member_details/{memberId}) - Admin & pemilik akaun emel terverifikasi sahaja (PII dilindungi)
     match /church_member_details/{memberId} {
       allow get: if isSignedIn() && isValidId(memberId) && (
-        isAdmin() || isOwnMemberDetail(existing())
+        isAdmin() ||
+        memberId == 'member_' + request.auth.uid ||
+        (resource != null && isOwnMemberDetail(existing()))
       );
 
       allow list: if isSignedIn() && (
         resource.data.authorId == request.auth.uid ||
-        isBootstrappedAdmin() ||
+        isAdmin() ||
         isOwnMemberDetail(resource.data)
       );
 

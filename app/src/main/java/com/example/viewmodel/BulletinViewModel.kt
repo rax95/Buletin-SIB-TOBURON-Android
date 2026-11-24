@@ -1130,13 +1130,13 @@ class BulletinViewModel(
         runMutation(
             successMessage = if (existingOwnId == null) {
                 AppLanguageManager.tr(
-                    "Maklumat ahli berjaya didaftarkan! Kad Ahli dikemas kini & Admin telah dimaklumkan.",
-                    "Member details registered! Your Member Card is updated & Admin has been notified."
+                    "Kad Ahli dilengkapkan & ditambah secara automatik ke senarai ahli Admin.",
+                    "Member Card completed & automatically added to the Admin members list."
                 )
             } else {
                 AppLanguageManager.tr(
-                    "Maklumat Kad Ahli anda berjaya dikemas kini.",
-                    "Your Member Card details have been updated."
+                    "Maklumat Kad Ahli dikemas kini & disegerakkan secara automatik ke senarai ahli Admin.",
+                    "Member Card updated & automatically synced to the Admin members list."
                 )
             },
             onComplete = onComplete

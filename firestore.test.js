@@ -1509,6 +1509,182 @@ test("App version config allows public get on version doc and Admin-only validat
   );
 });
 
+// 12. Automatic Member Card Google Account Linking (User-first auto-add & Admin-first email auto-link)
+test("User self-registration auto-adds to Admin members list and Admin-first registration auto-links when matching Google user signs in", async () => {
+  const adminDb = adminContext().firestore();
+  const delegatedAdminDb = testEnv.authenticatedContext(DELEGATED_ADMIN_UID, {
+    email: "sekretaris@sibtoburon.org",
+    email_verified: true,
+  }).firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE, {
+    email: "Alice.Member@gmail.com",
+    email_verified: true,
+  }).firestore();
+  const bobDb = testEnv.authenticatedContext(JEMAAT_BOB, {
+    email: "bob.other@gmail.com",
+    email_verified: true,
+  }).firestore();
+  const ts = pastDate(5000);
+
+  // Register delegated admin
+  await assertSucceeds(
+    adminDb.collection("admins").doc(DELEGATED_ADMIN_UID).set({
+      displayName: "Sekretaris Gereja",
+      roleTitle: "Setiausaha",
+      addedBy: ADMIN_UID,
+      createdAt: ts,
+    })
+  );
+
+  // Scenario A: User checks own non-existent member_$uid doc without permission error, then self-registers
+  const aliceDocId = `member_${JEMAAT_ALICE}`;
+  await assertSucceeds(
+    aliceDb.collection("church_member_details").doc(aliceDocId).get()
+  );
+
+  const selfBatch = aliceDb.batch();
+  selfBatch.set(aliceDb.collection("church_members").doc(aliceDocId), {
+    fullName: "Alice Toburon",
+    gender: "PEREMPUAN",
+    baptismStatus: "DIBAPTIS",
+    published: true,
+    authorId: JEMAAT_ALICE,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  selfBatch.set(aliceDb.collection("church_member_details").doc(aliceDocId), {
+    fullName: "Alice Toburon",
+    myKadNumber: "950101-12-5678",
+    gender: "PEREMPUAN",
+    birthDate: "1995-01-01",
+    baptismStatus: "DIBAPTIS",
+    denomination: "SIB",
+    maritalStatus: "BUJANG",
+    memberEmail: "alice.member@gmail.com",
+    authorId: JEMAAT_ALICE,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  selfBatch.set(aliceDb.collection("notification_events").doc("evt_alice_01"), {
+    title: "Ahli Baharu Berdaftar",
+    body: "Alice Toburon telah mengisi maklumat ahli SIB Toburon.",
+    eventType: "MEMBER_REGISTERED",
+    targetId: aliceDocId,
+    topic: "sib_toburon_admin_members",
+    published: false,
+    authorId: JEMAAT_ALICE,
+    createdAt: ts,
+  });
+  await assertSucceeds(selfBatch.commit());
+
+  // Admin & Delegated Admin immediately see Alice in church_members and church_member_details
+  await assertSucceeds(
+    delegatedAdminDb.collection("church_members").where("published", "==", true).get()
+  );
+  await assertSucceeds(
+    delegatedAdminDb.collection("church_member_details").where("memberEmail", "==", "alice.member@gmail.com").get()
+  );
+
+  // Alice can update her own Member Card details and it syncs to both collections
+  const selfUpdateBatch = aliceDb.batch();
+  selfUpdateBatch.update(aliceDb.collection("church_members").doc(aliceDocId), {
+    fullName: "Alice Toburon Updated",
+    gender: "PEREMPUAN",
+    baptismStatus: "DIBAPTIS",
+    passportPhotoBase64: null,
+    updatedAt: pastDate(1000),
+  });
+  selfUpdateBatch.update(aliceDb.collection("church_member_details").doc(aliceDocId), {
+    fullName: "Alice Toburon Updated",
+    myKadNumber: "950101-12-5678",
+    gender: "PEREMPUAN",
+    birthDate: "1995-01-01",
+    baptismStatus: "DIBAPTIS",
+    denomination: "SIB",
+    maritalStatus: "BUJANG",
+    spouseName: null,
+    sibMembershipNumber: "SIB-0099",
+    passportPhotoBase64: null,
+    memberEmail: "alice.member@gmail.com",
+    updatedAt: pastDate(1000),
+  });
+  await assertSucceeds(selfUpdateBatch.commit());
+
+  // Scenario B: Admin registers Bob FIRST with his Google email before Bob ever signs up
+  const adminCreatedId = "admin_pre_bob_01";
+  const adminBatch = adminDb.batch();
+  adminBatch.set(adminDb.collection("church_members").doc(adminCreatedId), {
+    fullName: "Bob Pre-Registered",
+    gender: "LELAKI",
+    baptismStatus: "BELUM_DIBAPTIS",
+    published: true,
+    authorId: ADMIN_UID,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  adminBatch.set(adminDb.collection("church_member_details").doc(adminCreatedId), {
+    fullName: "Bob Pre-Registered",
+    gender: "LELAKI",
+    birthDate: "1990-05-12",
+    baptismStatus: "BELUM_DIBAPTIS",
+    denomination: "",
+    maritalStatus: "BUJANG",
+    memberEmail: "bob.other@gmail.com",
+    authorId: ADMIN_UID,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  await assertSucceeds(adminBatch.commit());
+
+  // Bob signs in with Google (matching email) -> auto-links via where("memberEmail", "==", email)
+  const bobQuerySnap = await assertSucceeds(
+    bobDb.collection("church_member_details").where("memberEmail", "==", "bob.other@gmail.com").get()
+  );
+  if (bobQuerySnap.size !== 1 || bobQuerySnap.docs[0].id !== adminCreatedId) {
+    throw new Error("Expected Bob to auto-link to admin-registered member record");
+  }
+
+  // Bob can update his auto-linked admin-registered Member Card directly
+  const bobUpdateBatch = bobDb.batch();
+  bobUpdateBatch.update(bobDb.collection("church_members").doc(adminCreatedId), {
+    fullName: "Bob Updated Himself",
+    gender: "LELAKI",
+    baptismStatus: "DIBAPTIS",
+    passportPhotoBase64: null,
+    updatedAt: pastDate(500),
+  });
+  bobUpdateBatch.update(bobDb.collection("church_member_details").doc(adminCreatedId), {
+    fullName: "Bob Updated Himself",
+    myKadNumber: "900512-12-1111",
+    gender: "LELAKI",
+    birthDate: "1990-05-12",
+    baptismStatus: "DIBAPTIS",
+    denomination: "SIB",
+    maritalStatus: "BUJANG",
+    spouseName: null,
+    sibMembershipNumber: null,
+    passportPhotoBase64: null,
+    memberEmail: "bob.other@gmail.com",
+    updatedAt: pastDate(500),
+  });
+  await assertSucceeds(bobUpdateBatch.commit());
+
+  // Cross-user isolation: Alice CANNOT query or read Bob's private member details, and Bob CANNOT edit Alice's
+  await assertFails(
+    aliceDb.collection("church_member_details").where("memberEmail", "==", "bob.other@gmail.com").get()
+  );
+  await assertFails(
+    aliceDb.collection("church_member_details").doc(adminCreatedId).get()
+  );
+  await assertFails(
+    bobDb.collection("church_member_details").doc(aliceDocId).update({
+      fullName: "Hacked",
+      updatedAt: pastDate(100),
+    })
+  );
+});
+
+
 
 
 

@@ -88,7 +88,6 @@ import com.example.data.ChurchMemberDetail
 import com.example.data.ImageUtils
 import com.example.data.MaritalStatus
 import com.example.data.MemberGender
-import com.example.data.UserProfile
 import com.example.data.calculateAgeFromIsoDate
 import com.example.data.epochMillisToIsoDate
 import com.example.data.formatBirthDateReadable
@@ -112,7 +111,6 @@ private val COMMON_DENOMINATIONS = listOf(
 @Composable
 fun AdminMemberEditorDialog(
     initial: ChurchMemberDetail?,
-    registeredUsers: List<UserProfile> = emptyList(),
     isSelfRegistration: Boolean = false,
     defaultFullName: String? = null,
     defaultEmail: String? = null,
@@ -174,10 +172,6 @@ fun AdminMemberEditorDialog(
 
     val decodedPassportBitmap = remember(passportPhotoBase64) {
         ImageUtils.decodeBase64ToImageBitmap(passportPhotoBase64)
-    }
-
-    val linkableUsers = remember(registeredUsers) {
-        registeredUsers.filter { it.email.isNotBlank() }
     }
 
     fun handleSelectedPhotoUri(uri: Uri?, onCleanup: (() -> Unit)? = null) {
@@ -300,13 +294,13 @@ fun AdminMemberEditorDialog(
                         Text(
                             text = if (isSelfRegistration) {
                                 tr(
-                                    "Maklumat ini akan memaparkan Kad Ahli anda dan memaklumkan Admin secara automatik.",
-                                    "These details populate your Member Card and notify Admin automatically."
+                                    "Maklumat ini akan melengkapkan Kad Ahli anda serta ditambah & dikemas kini secara automatik ke senarai ahli Admin.",
+                                    "These details complete your Member Card and are automatically added & updated in the Admin members list."
                                 )
                             } else {
                                 tr(
-                                    "Maklumat ini terpaut secara langsung dengan Kad Ahli jemaat di tab Akaun.",
-                                    "These details sync directly with the member's ID Card in the Account tab."
+                                    "Jika emel Google diisi, Kad Ahli pengguna akan terpaut secara automatik apabila mereka log masuk dengan akaun Google tersebut.",
+                                    "If a Google email is provided, the user's Member Card links automatically when they sign in with that Google account."
                                 )
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -938,12 +932,12 @@ fun AdminMemberEditorDialog(
                     if (!isSelfRegistration) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
-                        // Pautan Emel Akaun Google Ahli (untuk sync Kad Ahli di tab Akaun)
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 8. Emel Google Ahli (Pilihan • Pautan Automatik apabila ahli log masuk Google)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = tr(
-                                    "Pautan Akaun Google Ahli (Untuk Kad Ahli)",
-                                    "Link Member Google Account (For Member Card)"
+                                    "8. Emel Google Ahli (Pilihan • Pautan Automatik)",
+                                    "8. Member Google Email (Optional • Auto-Link)"
                                 ),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary
@@ -961,10 +955,17 @@ fun AdminMemberEditorDialog(
                                 },
                                 supportingText = {
                                     Text(
-                                        tr(
-                                            "Memautkan rekod ini supaya dipaparkan terus dalam Kad Ahli pengguna di tab Akaun.",
-                                            "Links this record so it syncs directly to the user's Member Card in the Account tab."
-                                        )
+                                        if (initial == null) {
+                                            tr(
+                                                "Jika Admin mendaftarkan ahli terlebih dahulu, masukkan emel Google mereka. Apabila mereka log masuk Google dengan emel ini, Kad Ahli akan terpaut secara automatik.",
+                                                "If you register a member first, enter their Google email here. When they sign in with Google using this email, their Member Card links automatically."
+                                            )
+                                        } else {
+                                            tr(
+                                                "Kad Ahli terpaut secara automatik dengan akaun Google yang sepadan dengan emel ini.",
+                                                "The Member Card links automatically to the Google account matching this email."
+                                            )
+                                        }
                                     )
                                 },
                                 singleLine = true,
@@ -972,44 +973,6 @@ fun AdminMemberEditorDialog(
                                     .fillMaxWidth()
                                     .testTag("member_email_input")
                             )
-
-                            if (linkableUsers.isNotEmpty()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        text = tr(
-                                            "Pilih pantas daripada pengguna berdaftar:",
-                                            "Quick-select from registered users:"
-                                        ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        linkableUsers.take(8).forEach { user ->
-                                            val isSelected = memberEmail.trim().equals(user.email.trim(), ignoreCase = true)
-                                            FilterChip(
-                                                selected = isSelected,
-                                                onClick = {
-                                                    memberEmail = user.email.trim().lowercase()
-                                                    if (fullName.isBlank() && user.displayName.isNotBlank()) {
-                                                        fullName = user.displayName
-                                                    }
-                                                },
-                                                label = {
-                                                    Text(
-                                                        text = user.displayName.ifBlank { user.email },
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
 

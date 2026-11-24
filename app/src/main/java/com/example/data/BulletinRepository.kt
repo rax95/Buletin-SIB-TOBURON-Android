@@ -1479,13 +1479,20 @@ class BulletinRepository(
         emitAll(
             db.collection("church_member_details")
                 .whereEqualTo("memberEmail", cleanEmail)
-                .limit(1)
+                .limit(5)
                 .snapshots()
                 .map { snapshot ->
-                    snapshot.documents.firstOrNull()?.toObject(
-                        ChurchMemberDetail::class.java,
-                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                    )
+                    snapshot.documents
+                        .mapNotNull { doc ->
+                            doc.toObject(
+                                ChurchMemberDetail::class.java,
+                                DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                            )
+                        }
+                        .maxWithOrNull(
+                            compareBy<ChurchMemberDetail> { (it.updatedAt ?: Timestamp(0, 0)).seconds }
+                                .thenBy { (it.updatedAt ?: Timestamp(0, 0)).nanoseconds }
+                        )
                 }
                 .catch { error ->
                     // Gracefully emit null if account email isn't verified or not linked yet
@@ -1609,6 +1616,37 @@ class BulletinRepository(
                 AppLanguageManager.tr("Alamat emel terlalu panjang (maks 160 aksara).", "Email address is too long (max 160 characters).")
             }
 
+            // If Admin entered an email that already matches an existing member record (e.g. user self-registered first),
+            // update that existing record instead of creating a duplicate entry in the Admin Members list.
+            if (cleanEmail != null) {
+                val existingMatchId = runCatching {
+                    db.collection("church_member_details")
+                        .whereEqualTo("memberEmail", cleanEmail)
+                        .limit(1)
+                        .get()
+                        .await()
+                        .documents
+                        .firstOrNull()
+                        ?.id
+                }.getOrNull()
+                if (!existingMatchId.isNullOrBlank()) {
+                    return updateChurchMember(
+                        memberId = existingMatchId,
+                        fullName = cleanName,
+                        myKadNumber = cleanMyKad,
+                        gender = gender,
+                        birthDateIso = cleanBirth,
+                        baptismStatus = baptismStatus,
+                        denomination = cleanDenom,
+                        maritalStatus = maritalStatus,
+                        spouseName = cleanSpouse,
+                        sibMembershipNumber = cleanSibNo,
+                        passportPhotoBase64 = cleanPhoto,
+                        memberEmail = cleanEmail
+                    )
+                }
+            }
+
             val publicRef = db.collection("church_members").document()
             val detailRef = db.collection("church_member_details").document(publicRef.id)
             docPath = publicRef.path
@@ -1727,10 +1765,26 @@ class BulletinRepository(
             val notifRef = db.collection("notification_events").document()
             docPath = publicRef.path
 
-            val alreadyExists = runCatching { detailRef.get().await().exists() }.getOrDefault(false)
-            if (alreadyExists) {
+            // First check if an Admin already pre-registered this member using their matching Google email,
+            // or if this user's own member_$uid document already exists. If so, update it automatically to avoid duplicates.
+            val existingByEmailId = runCatching {
+                db.collection("church_member_details")
+                    .whereEqualTo("memberEmail", cleanEmail)
+                    .limit(1)
+                    .get()
+                    .await()
+                    .documents
+                    .firstOrNull()
+                    ?.id
+            }.getOrNull()
+            val targetExistingId = existingByEmailId ?: if (runCatching { detailRef.get().await().exists() }.getOrDefault(false)) {
+                memberId
+            } else {
+                null
+            }
+            if (targetExistingId != null) {
                 return updateChurchMember(
-                    memberId = memberId,
+                    memberId = targetExistingId,
                     fullName = cleanName,
                     myKadNumber = cleanMyKad,
                     gender = gender,
