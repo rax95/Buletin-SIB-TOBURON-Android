@@ -1727,6 +1727,24 @@ class BulletinRepository(
             val notifRef = db.collection("notification_events").document()
             docPath = publicRef.path
 
+            val alreadyExists = runCatching { detailRef.get().await().exists() }.getOrDefault(false)
+            if (alreadyExists) {
+                return updateChurchMember(
+                    memberId = memberId,
+                    fullName = cleanName,
+                    myKadNumber = cleanMyKad,
+                    gender = gender,
+                    birthDateIso = cleanBirth,
+                    baptismStatus = baptismStatus,
+                    denomination = cleanDenom,
+                    maritalStatus = maritalStatus,
+                    spouseName = cleanSpouse,
+                    sibMembershipNumber = cleanSibNo,
+                    passportPhotoBase64 = cleanPhoto,
+                    memberEmail = cleanEmail
+                )
+            }
+
             val publicPayload = buildMap<String, Any?> {
                 put("fullName", cleanName)
                 put("gender", gender.code)

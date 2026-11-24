@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -85,6 +87,8 @@ import com.example.ui.theme.HarvestGold
 import com.example.ui.theme.HarvestGoldLight
 import com.example.ui.theme.SanctuaryPine
 import com.example.ui.theme.SanctuaryPineDeep
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Kad Ahli (Member ID Card) displayed at the top of the Account tab directly below the user profile.
@@ -905,8 +909,10 @@ private fun MemberIdCardFooterStrip(
     footerLabel: String = tr("AHLI BERDAFTAR • SIB TOBURON", "REGISTERED MEMBER • SIB TOBURON")
 ) {
     var showEnlargedQr by remember { mutableStateOf(false) }
-    val qrBitmap = remember(qrPayload) {
-        MemberQrUtils.generateQrCodeBitmap(content = qrPayload, sizePx = 512)
+    val qrBitmap by produceState<ImageBitmap?>(initialValue = null, qrPayload) {
+        value = withContext(Dispatchers.Default) {
+            MemberQrUtils.generateQrCodeBitmap(content = qrPayload, sizePx = 384)
+        }
     }
 
     Surface(
@@ -988,9 +994,10 @@ private fun MemberIdCardFooterStrip(
                             .fillMaxSize()
                             .padding(4.dp)
                     ) {
-                        if (qrBitmap != null) {
+                        val bitmap = qrBitmap
+                        if (bitmap != null) {
                             Image(
-                                bitmap = qrBitmap,
+                                bitmap = bitmap,
                                 contentDescription = tr("Kod QR Kad Ahli $memberName", "Member Card QR Code for $memberName"),
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize()
@@ -1075,9 +1082,10 @@ private fun MemberIdCardFooterStrip(
                                 .fillMaxSize()
                                 .padding(14.dp)
                         ) {
-                            if (qrBitmap != null) {
+                            val enlargedBitmap = qrBitmap
+                            if (enlargedBitmap != null) {
                                 Image(
-                                    bitmap = qrBitmap,
+                                    bitmap = enlargedBitmap,
                                     contentDescription = tr("Kod QR besar $memberName", "Enlarged QR Code for $memberName"),
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier.fillMaxSize()
