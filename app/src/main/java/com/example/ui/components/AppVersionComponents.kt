@@ -452,7 +452,7 @@ fun AdminAppVersionDialog(
                         value = versionName,
                         onValueChange = { versionName = it.take(32); validationError = null },
                         label = { Text(tr("Nama Versi *", "Version Name *")) },
-                        placeholder = { Text("1.2.0") },
+                        placeholder = { Text("1.2.1") },
                         singleLine = true,
                         modifier = Modifier
                             .weight(1.2f)
