@@ -457,7 +457,7 @@
 
     const FIRESTORE_DATABASE_ID = "ai-studio-android-buletins-c79f5777-052f-4011-8215-1d032fc8e6a8";
     const app = initializeApp(firebaseConfig);
-    const db = initializeFirestore(app, {}, FIRESTORE_DATABASE_ID);
+    const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, FIRESTORE_DATABASE_ID);
 
     let lang = "ms";
     let regToken = new URLSearchParams(window.location.search).get("reg")?.trim() || "";
@@ -804,11 +804,12 @@
         $("successCard").classList.remove("hidden");
       } catch (err) {
         console.error(err);
+        const code = err?.code ? `[${err.code}] ` : "";
         const msg = String(err?.message || err);
-        if (msg.includes("PERMISSION_DENIED") || msg.includes("Missing or insufficient permissions")) {
-          showFormError(t.errToken);
+        if (msg.includes("PERMISSION_DENIED") || msg.includes("Missing or insufficient permissions") || err?.code === "permission-denied") {
+          showFormError(`${t.errToken} (${code}${msg})`);
         } else {
-          showFormError(msg);
+          showFormError(`${code}${msg}`);
         }
       } finally {
         submitBtn.disabled = false;

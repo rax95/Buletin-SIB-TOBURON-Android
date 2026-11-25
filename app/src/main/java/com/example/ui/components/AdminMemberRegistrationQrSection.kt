@@ -58,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -66,6 +67,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
@@ -80,6 +82,204 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+
+@Composable
+fun AdminQuickRegistrationQrTile(
+    config: MemberRegistrationConfig?,
+    onEnsureConfig: () -> Unit,
+    tileSize: Dp,
+    modifier: Modifier = Modifier
+) {
+    var requestedAutoInit by remember { mutableStateOf(false) }
+    var showEnlargedQr by remember { mutableStateOf(false) }
+
+    LaunchedEffect(config?.portalUrl, config?.accessToken) {
+        if ((config == null || config.isUnconfiguredGitHubPagesUrl()) && !requestedAutoInit) {
+            requestedAutoInit = true
+            onEnsureConfig()
+        }
+    }
+
+    val fullUrl = remember(config?.portalUrl, config?.accessToken) {
+        if (config != null && config.accessToken.isNotBlank()) {
+            config.buildFullRegistrationUrl()
+        } else {
+            ""
+        }
+    }
+    val isEnabled = config?.enabled == true
+
+    val qrBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = fullUrl) {
+        value = if (fullUrl.isBlank()) {
+            null
+        } else {
+            withContext(Dispatchers.Default) {
+                MemberQrUtils.generateQrCodeBitmap(content = fullUrl, sizePx = 640)
+            }
+        }
+    }
+
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = modifier
+            .size(tileSize)
+            .testTag("admin_member_reg_quick_qr_card")
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable {
+                    if (qrBitmap != null) {
+                        showEnlargedQr = true
+                    } else {
+                        onEnsureConfig()
+                    }
+                }
+                .padding(8.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color.White,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isEnabled) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    }
+                ),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(5.dp)
+                ) {
+                    val bmp = qrBitmap
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = tr(
+                                "Kod QR pendaftaran ahli - ketik untuk besarkan",
+                                "Member registration QR code - tap to enlarge"
+                            ),
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (isEnabled) 1f else 0.4f)
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showEnlargedQr && qrBitmap != null) {
+        MemberRegistrationEnlargedQrDialog(
+            qrBitmap = qrBitmap!!,
+            isEnabled = isEnabled,
+            onDismiss = { showEnlargedQr = false }
+        )
+    }
+}
+
+@Composable
+fun MemberRegistrationEnlargedQrDialog(
+    qrBitmap: ImageBitmap,
+    isEnabled: Boolean = true,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("admin_reg_enlarged_qr_dialog")
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = tr("QR Pendaftaran Ahli", "Member Registration QR"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("admin_reg_enlarged_qr_close_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = tr("Tutup", "Close")
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.size(280.dp)
+                ) {
+                    Image(
+                        bitmap = qrBitmap,
+                        contentDescription = tr("Kod QR penuh pendaftaran ahli", "Full-size member registration QR code"),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(14.dp)
+                            .alpha(if (isEnabled) 1f else 0.45f)
+                    )
+                }
+
+                if (!isEnabled) {
+                    Text(
+                        text = tr(
+                            "Pendaftaran web sedang dijeda oleh Admin.",
+                            "Web registration is currently paused by Admin."
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Text(
+                    text = tr(
+                        "Imbas dengan kamera iPhone / telefon anda untuk membuka borang pendaftaran ahli SIB Toburon.",
+                        "Scan with your iPhone / phone camera to open the SIB Toburon member registration form."
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun AdminMemberRegistrationQrView(
@@ -100,8 +300,8 @@ fun AdminMemberRegistrationQrView(
     var showEditPortalDialog by remember { mutableStateOf(false) }
     var isSharingQr by remember { mutableStateOf(false) }
 
-    LaunchedEffect(config) {
-        if (config == null && !requestedAutoInit) {
+    LaunchedEffect(config?.portalUrl, config?.accessToken) {
+        if ((config == null || config.isUnconfiguredGitHubPagesUrl()) && !requestedAutoInit) {
             requestedAutoInit = true
             onEnsureConfig()
         }
@@ -602,67 +802,11 @@ fun AdminMemberRegistrationQrView(
     }
 
     if (showEnlargedQr && qrBitmap != null) {
-        Dialog(onDismissRequest = { showEnlargedQr = false }) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = tr("QR Pendaftaran Ahli", "Member Registration QR"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(
-                            onClick = { showEnlargedQr = false },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = tr("Tutup", "Close")
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.size(280.dp)
-                    ) {
-                        Image(
-                            bitmap = qrBitmap!!,
-                            contentDescription = tr("Kod QR penuh pendaftaran ahli", "Full-size member registration QR code"),
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(14.dp)
-                        )
-                    }
-
-                    Text(
-                        text = tr(
-                            "Imbas dengan kamera iPhone / telefon anda untuk membuka borang pendaftaran ahli SIB Toburon.",
-                            "Scan with your iPhone / phone camera to open the SIB Toburon member registration form."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
+        MemberRegistrationEnlargedQrDialog(
+            qrBitmap = qrBitmap!!,
+            isEnabled = isEnabled,
+            onDismiss = { showEnlargedQr = false }
+        )
     }
 
     if (showRegenerateConfirm) {
@@ -745,11 +889,11 @@ fun AdminMemberRegistrationQrView(
             confirmButton = {
                 Button(
                     onClick = {
-                        val cleaned = portalInput.trim().trimEnd('/')
-                        if (!cleaned.startsWith("https://") || cleaned.length <= 10) {
+                        val cleaned = MemberRegistrationConfig.normalizePortalUrl(portalInput)
+                        if (!cleaned.startsWith("https://") || cleaned.length <= 10 || '.' !in cleaned) {
                             urlError = AppLanguageManager.tr(
-                                "URL mestilah bermula dengan https:// (contoh: https://nama.github.io/repo)",
-                                "URL must start with https:// (e.g. https://name.github.io/repo)"
+                                "URL mestilah pautan HTTPS yang sah (contoh: https://nama.github.io/repo)",
+                                "URL must be a valid HTTPS link (e.g. https://name.github.io/repo)"
                             )
                             return@Button
                         }

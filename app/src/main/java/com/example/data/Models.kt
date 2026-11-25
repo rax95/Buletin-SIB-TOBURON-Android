@@ -385,11 +385,12 @@ data class MemberRegistrationConfig(
         return clean.isBlank() ||
             clean.contains("your-username.github.io") ||
             clean.contains("username.github.io") ||
+            clean.contains("://github.com/") ||
             clean == LEGACY_FIREBASE_HOSTING_URL
     }
 
     fun buildFullRegistrationUrl(): String {
-        val base = portalUrl.trim().ifBlank { DEFAULT_PORTAL_URL }.trimEnd('/')
+        val base = normalizePortalUrl(portalUrl).ifBlank { DEFAULT_PORTAL_URL }
         val token = accessToken.trim()
         if (token.isBlank()) return "$base/"
         return if ('?' in base) {
@@ -400,8 +401,36 @@ data class MemberRegistrationConfig(
     }
 
     companion object {
-        const val DEFAULT_PORTAL_URL = "https://your-username.github.io/sib-toburon"
+        const val DEFAULT_PORTAL_URL = "https://rax95.github.io/Buletin-SIB-TOBURON-Android"
         private const val LEGACY_FIREBASE_HOSTING_URL = "https://gen-lang-client-0216024023.web.app"
+
+        fun normalizePortalUrl(raw: String): String {
+            var value = raw.trim()
+            if (value.isBlank()) return ""
+            if (value.startsWith("http://", ignoreCase = true)) {
+                value = "https://" + value.substring(7)
+            } else if (!value.startsWith("https://", ignoreCase = true)) {
+                value = "https://$value"
+            }
+            // Strip any accidentally pasted ?reg=... query or #hash fragment
+            value = value.substringBefore('#').substringBefore('?').trimEnd('/')
+
+            // Auto-convert pasted github.com/<owner>/<repo>(/blob/...) links to GitHub Pages URL
+            val ghMatch = Regex(
+                pattern = "^https://(?:www\\.)?github\\.com/([^/]+)/([^/]+)(?:/.*)?$",
+                option = RegexOption.IGNORE_CASE
+            ).matchEntire(value)
+            if (ghMatch != null) {
+                val owner = ghMatch.groupValues[1]
+                val repo = ghMatch.groupValues[2].removeSuffix(".git")
+                value = "https://$owner.github.io/$repo"
+            }
+
+            if (value.endsWith("/index.html", ignoreCase = true)) {
+                value = value.dropLast("/index.html".length).trimEnd('/')
+            }
+            return value
+        }
     }
 }
 

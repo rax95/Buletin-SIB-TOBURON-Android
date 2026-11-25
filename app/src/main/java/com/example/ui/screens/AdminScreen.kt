@@ -68,6 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -101,6 +102,7 @@ import com.example.ui.components.AdminManageEventsView
 import com.example.ui.components.AdminMemberIdCardDialog
 import com.example.ui.components.AdminMemberRegistrationQrView
 import com.example.ui.components.AdminNavigationColumnCard
+import com.example.ui.components.AdminQuickRegistrationQrTile
 import com.example.ui.components.AdminStatPill
 import com.example.ui.components.AdminSubPageHeader
 import com.example.ui.components.AdminVersionManagerView
@@ -342,25 +344,52 @@ fun AdminScreen(
                             badgeTestTag = "admin_version_manager_badge"
                         )
 
-                        // 6. Member Registration QR & Web Link (directly below Version Manager)
-                        AdminNavigationColumnCard(
-                            icon = Icons.Filled.QrCode2,
-                            iconBgColor = MaterialTheme.colorScheme.primaryContainer,
-                            iconTintColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            title = tr("QR & Pautan Pendaftaran Ahli", "Member Registration QR & Link"),
-                            subtitle = tr(
-                                "Imbas QR atau buka borang web untuk iPhone iOS & tanpa aplikasi",
-                                "Scan QR or open web registration form for iPhone iOS & non-app users"
-                            ),
-                            badgeText = when {
-                                memberRegistrationConfig == null -> tr("Sediakan", "Setup")
-                                memberRegistrationConfig.enabled -> tr("Aktif", "Active")
-                                else -> tr("Dijeda", "Paused")
-                            },
-                            onClick = { activeSection = AdminSection.MEMBER_REGISTRATION_QR },
-                            cardTestTag = "admin_member_reg_qr_card",
-                            badgeTestTag = "admin_member_reg_qr_badge"
-                        )
+                        // 6. Member Registration QR & Web Link (directly below Version Manager) + quick-scan QR tile on right
+                        val density = LocalDensity.current
+                        var regCardHeightPx by remember { mutableIntStateOf(0) }
+                        val regQrTileSize = if (regCardHeightPx > 0) {
+                            with(density) { regCardHeightPx.toDp() }.coerceAtLeast(76.dp)
+                        } else {
+                            88.dp
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            AdminNavigationColumnCard(
+                                icon = Icons.Filled.QrCode2,
+                                iconBgColor = MaterialTheme.colorScheme.primaryContainer,
+                                iconTintColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                title = tr("QR & Pautan Pendaftaran Ahli", "Member Registration QR & Link"),
+                                subtitle = tr(
+                                    "Imbas QR atau buka borang web untuk iPhone iOS & tanpa aplikasi",
+                                    "Scan QR or open web registration form for iPhone iOS & non-app users"
+                                ),
+                                badgeText = when {
+                                    memberRegistrationConfig == null -> tr("Sediakan", "Setup")
+                                    memberRegistrationConfig.enabled -> tr("Aktif", "Active")
+                                    else -> tr("Dijeda", "Paused")
+                                },
+                                onClick = { activeSection = AdminSection.MEMBER_REGISTRATION_QR },
+                                cardTestTag = "admin_member_reg_qr_card",
+                                badgeTestTag = "admin_member_reg_qr_badge",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .onSizeChanged { size ->
+                                        if (size.height > 0 && size.height != regCardHeightPx) {
+                                            regCardHeightPx = size.height
+                                        }
+                                    }
+                            )
+
+                            AdminQuickRegistrationQrTile(
+                                config = memberRegistrationConfig,
+                                onEnsureConfig = onEnsureMemberRegistrationConfig,
+                                tileSize = regQrTileSize
+                            )
+                        }
 
                         Spacer(Modifier.height(12.dp))
                     }

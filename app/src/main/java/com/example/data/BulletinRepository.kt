@@ -2085,7 +2085,7 @@ class BulletinRepository(
         val docPath = "app_config/member_registration"
         return try {
             val uid = requireUserId()
-            val cleanUrl = portalUrl.trim().trimEnd('/')
+            val cleanUrl = MemberRegistrationConfig.normalizePortalUrl(portalUrl)
             val cleanToken = accessToken.trim()
 
             require(cleanUrl.length in 10..500 && cleanUrl.startsWith("https://")) {
@@ -2133,10 +2133,12 @@ class BulletinRepository(
                     DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
                 )
             } else null
-            if (existing != null && existing.accessToken.isNotBlank() && existing.portalUrl.startsWith("https://")) {
+            if (existing != null && existing.accessToken.isNotBlank() && !existing.isUnconfiguredGitHubPagesUrl()) {
                 Result.success(existing)
             } else {
-                val portal = existing?.portalUrl?.takeIf { it.startsWith("https://") }
+                val portal = existing?.portalUrl
+                    ?.let { MemberRegistrationConfig.normalizePortalUrl(it) }
+                    ?.takeIf { it.startsWith("https://") && !MemberRegistrationConfig(portalUrl = it).isUnconfiguredGitHubPagesUrl() }
                     ?: MemberRegistrationConfig.DEFAULT_PORTAL_URL
                 val token = existing?.accessToken?.takeIf { it.matches(Regex("^[a-zA-Z0-9_\\-]{16,64}$")) }
                     ?: MemberQrUtils.generateRegistrationAccessToken()
