@@ -74,12 +74,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.data.ChurchSchedule
 import com.example.data.CoverPreset
+import com.example.data.DynamicCategoryItem
 import com.example.data.GalleryCategory
 import com.example.data.GalleryPhoto
 import com.example.data.ImageUtils
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
 import com.example.data.ScheduleCategory
+import com.example.data.resolveNewsCategoryLabel
+import com.example.data.resolveScheduleCategoryLabel
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.LocalAppLanguage
@@ -95,6 +98,7 @@ import java.util.TimeZone
 @Composable
 fun AdminNewsEditorDialog(
     initial: NewsArticle?,
+    categories: List<DynamicCategoryItem> = NewsCategory.defaultCategoryItems(),
     defaultAuthorName: String,
     isBusy: Boolean,
     onDismiss: () -> Unit,
@@ -102,7 +106,7 @@ fun AdminNewsEditorDialog(
         title: String,
         summary: String,
         content: String,
-        category: NewsCategory,
+        categoryCode: String,
         authorName: String,
         coverPreset: CoverPreset,
         imageUrl: String?,
@@ -115,10 +119,32 @@ fun AdminNewsEditorDialog(
     val lang = LocalAppLanguage.current
     val scope = rememberCoroutineScope()
 
+    val selectableCategories = remember(categories, initial?.category, lang) {
+        val base = categories.ifEmpty { NewsCategory.defaultCategoryItems() }
+        val existingCode = initial?.category?.trim().orEmpty()
+        if (existingCode.isNotBlank() && base.none { it.resolvedCode().equals(existingCode, ignoreCase = true) }) {
+            base + DynamicCategoryItem(
+                id = existingCode,
+                code = existingCode,
+                labelMs = resolveNewsCategoryLabel(existingCode, base, AppLanguage.MS),
+                labelEn = resolveNewsCategoryLabel(existingCode, base, AppLanguage.EN),
+                sortOrder = base.size
+            )
+        } else {
+            base
+        }
+    }
+
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var summary by remember { mutableStateOf(initial?.summary ?: "") }
     var content by remember { mutableStateOf(initial?.content ?: "") }
-    var category by remember { mutableStateOf(initial?.resolvedCategory() ?: NewsCategory.WARTA) }
+    var categoryCode by remember(initial?.id) {
+        mutableStateOf(
+            initial?.category?.takeIf { it.isNotBlank() }
+                ?: selectableCategories.firstOrNull()?.resolvedCode()
+                ?: NewsCategory.WARTA.code
+        )
+    }
     var authorName by remember { mutableStateOf(initial?.authorName?.ifBlank { defaultAuthorName } ?: defaultAuthorName) }
     var coverPreset by remember { mutableStateOf(initial?.resolvedCoverPreset() ?: CoverPreset.SANCTUARY) }
     var imageUrl by remember { mutableStateOf(initial?.imageUrl ?: "") }
@@ -225,10 +251,11 @@ fun AdminNewsEditorDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    NewsCategory.entries.forEach { item ->
+                    selectableCategories.forEach { item ->
+                        val itemCode = item.resolvedCode()
                         FilterChip(
-                            selected = category == item,
-                            onClick = { category = item },
+                            selected = categoryCode.equals(itemCode, ignoreCase = true),
+                            onClick = { categoryCode = itemCode },
                             label = { Text(item.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
@@ -362,7 +389,7 @@ fun AdminNewsEditorDialog(
                             "Article content must be at least 10 characters."
                         )
                         else -> onSave(
-                            t, s, c, category, authorName, coverPreset,
+                            t, s, c, categoryCode, authorName, coverPreset,
                             imageUrl.trim().takeIf { it.isNotBlank() },
                             imageBase64, pinned, published
                         )
@@ -421,12 +448,13 @@ private fun parseInitialTimeRange(raw: String?): List<Int> {
 @Composable
 fun AdminScheduleEditorDialog(
     initial: ChurchSchedule?,
+    categories: List<DynamicCategoryItem> = ScheduleCategory.defaultCategoryItems(),
     isBusy: Boolean,
     onDismiss: () -> Unit,
     onSave: (
         title: String,
         description: String,
-        category: ScheduleCategory,
+        categoryCode: String,
         dateLabel: String,
         timeLabel: String,
         location: String,
@@ -436,6 +464,21 @@ fun AdminScheduleEditorDialog(
     ) -> Unit
 ) {
     val lang = LocalAppLanguage.current
+    val selectableCategories = remember(categories, initial?.category) {
+        val base = categories.ifEmpty { ScheduleCategory.defaultCategoryItems() }
+        val existingCode = initial?.category?.trim().orEmpty()
+        if (existingCode.isNotBlank() && base.none { it.resolvedCode().equals(existingCode, ignoreCase = true) }) {
+            base + DynamicCategoryItem(
+                id = existingCode,
+                code = existingCode,
+                labelMs = resolveScheduleCategoryLabel(existingCode, base, AppLanguage.MS),
+                labelEn = resolveScheduleCategoryLabel(existingCode, base, AppLanguage.EN),
+                sortOrder = base.size
+            )
+        } else {
+            base
+        }
+    }
     val defaultUtcToday = remember {
         val local = Calendar.getInstance()
         Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
@@ -447,7 +490,13 @@ fun AdminScheduleEditorDialog(
 
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var description by remember { mutableStateOf(initial?.description ?: "") }
-    var category by remember { mutableStateOf(initial?.resolvedCategory() ?: ScheduleCategory.IBADAH) }
+    var categoryCode by remember(initial?.id) {
+        mutableStateOf(
+            initial?.category?.takeIf { it.isNotBlank() }
+                ?: selectableCategories.firstOrNull()?.resolvedCode()
+                ?: ScheduleCategory.IBADAH.code
+        )
+    }
     var selectedDateMillis by remember { mutableStateOf(defaultUtcToday) }
     var dateLabel by remember {
         mutableStateOf(
@@ -702,10 +751,11 @@ fun AdminScheduleEditorDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    ScheduleCategory.entries.forEach { item ->
+                    selectableCategories.forEach { item ->
+                        val itemCode = item.resolvedCode()
                         FilterChip(
-                            selected = category == item,
-                            onClick = { category = item },
+                            selected = categoryCode.equals(itemCode, ignoreCase = true),
+                            onClick = { categoryCode = itemCode },
                             label = { Text(item.localizedLabel(lang), style = MaterialTheme.typography.labelSmall) }
                         )
                     }
@@ -768,7 +818,7 @@ fun AdminScheduleEditorDialog(
                             "Keterangan kegiatan wajib diisi.",
                             "Event details are required."
                         )
-                        else -> onSave(t, d, category, dt, tm, loc, speaker.trim(), recurring, published)
+                        else -> onSave(t, d, categoryCode, dt, tm, loc, speaker.trim(), recurring, published)
                     }
                 },
                 modifier = Modifier.testTag("save_schedule_button")

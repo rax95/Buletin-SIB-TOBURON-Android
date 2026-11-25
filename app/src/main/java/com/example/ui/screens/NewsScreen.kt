@@ -74,10 +74,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.ChurchSchedule
+import com.example.data.DynamicCategoryItem
 import com.example.data.NewsArticle
-import com.example.data.NewsCategory
 import com.example.data.NewsComment
 import com.example.data.UiState
+import com.example.data.resolveNewsCategoryLabel
+import com.example.data.resolveScheduleCategoryLabel
 import com.example.ui.components.BulletinCoverImage
 import com.example.ui.components.CategoryFilterRow
 import com.example.ui.components.CommentReplyTarget
@@ -96,8 +98,10 @@ import kotlinx.coroutines.launch
 fun NewsScreen(
     newsState: UiState<List<NewsArticle>>,
     featuredSchedules: List<ChurchSchedule>,
+    newsCategories: List<DynamicCategoryItem>,
+    scheduleCategories: List<DynamicCategoryItem>,
     searchQuery: String,
-    selectedCategory: NewsCategory?,
+    selectedCategory: String?,
     bookmarkedIds: Set<String>,
     commentsState: UiState<List<NewsComment>>,
     isPostingComment: Boolean,
@@ -108,7 +112,7 @@ fun NewsScreen(
     focusedNewsId: String?,
     onConsumeFocusedNews: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onSelectCategory: (NewsCategory?) -> Unit,
+    onSelectCategory: (String?) -> Unit,
     onToggleBookmark: (NewsArticle) -> Unit,
     onObserveComments: (String?) -> Unit,
     onPostComment: (newsId: String, text: String, parentCommentId: String?, replyToAuthorName: String?, onComplete: () -> Unit) -> Unit,
@@ -134,7 +138,8 @@ fun NewsScreen(
 
     val filteredArticles = remember(allArticles, searchQuery, selectedCategory) {
         allArticles.filter { article ->
-            val matchesCat = selectedCategory == null || article.resolvedCategory() == selectedCategory
+            val matchesCat = selectedCategory == null ||
+                article.category.equals(selectedCategory, ignoreCase = true)
             val q = searchQuery.trim()
             val matchesQuery = q.isEmpty() ||
                 article.title.contains(q, ignoreCase = true) ||
@@ -169,6 +174,7 @@ fun NewsScreen(
         BackHandler { selectedArticleId = null }
         NewsDetailPane(
             article = activeArticle,
+            newsCategories = newsCategories,
             isBookmarked = bookmarkedIds.contains(activeArticle.id),
             commentsState = commentsState,
             isPostingComment = isPostingComment,
@@ -200,6 +206,8 @@ fun NewsScreen(
             NewsListPane(
                 newsState = newsState,
                 featuredSchedules = featuredSchedules,
+                newsCategories = newsCategories,
+                scheduleCategories = scheduleCategories,
                 filteredArticles = filteredArticles,
                 searchQuery = searchQuery,
                 selectedCategory = selectedCategory,
@@ -226,6 +234,7 @@ fun NewsScreen(
                 if (activeArticle != null) {
                     NewsDetailPane(
                         article = activeArticle,
+                        newsCategories = newsCategories,
                         isBookmarked = bookmarkedIds.contains(activeArticle.id),
                         commentsState = commentsState,
                         isPostingComment = isPostingComment,
@@ -265,6 +274,8 @@ fun NewsScreen(
         NewsListPane(
             newsState = newsState,
             featuredSchedules = featuredSchedules,
+            newsCategories = newsCategories,
+            scheduleCategories = scheduleCategories,
             filteredArticles = filteredArticles,
             searchQuery = searchQuery,
             selectedCategory = selectedCategory,
@@ -287,14 +298,16 @@ fun NewsScreen(
 private fun NewsListPane(
     newsState: UiState<List<NewsArticle>>,
     featuredSchedules: List<ChurchSchedule>,
+    newsCategories: List<DynamicCategoryItem>,
+    scheduleCategories: List<DynamicCategoryItem>,
     filteredArticles: List<NewsArticle>,
     searchQuery: String,
-    selectedCategory: NewsCategory?,
+    selectedCategory: String?,
     selectedArticleId: String?,
     bookmarkedIds: Set<String>,
     isAdmin: Boolean,
     onSearchQueryChange: (String) -> Unit,
-    onSelectCategory: (NewsCategory?) -> Unit,
+    onSelectCategory: (String?) -> Unit,
     onArticleClick: (NewsArticle) -> Unit,
     onToggleBookmark: (NewsArticle) -> Unit,
     onOpenFeaturedSchedule: (ChurchSchedule) -> Unit,
@@ -316,6 +329,7 @@ private fun NewsListPane(
             items(featuredSchedules, key = { "featured_schedule_${it.id}" }) { schedule ->
                 FeaturedImportantScheduleCard(
                     schedule = schedule,
+                    scheduleCategories = scheduleCategories,
                     isAdmin = isAdmin,
                     onClick = { onOpenFeaturedSchedule(schedule) },
                     onRemove = { onRemoveFeaturedSchedule(schedule) },
@@ -336,11 +350,17 @@ private fun NewsListPane(
 
         item(key = "category_chips") {
             val lang = LocalAppLanguage.current
+            val selectedItem = remember(newsCategories, selectedCategory) {
+                selectedCategory?.let { code ->
+                    newsCategories.firstOrNull { it.resolvedCode().equals(code, ignoreCase = true) }
+                }
+            }
             CategoryFilterRow(
-                items = NewsCategory.entries,
-                selected = selectedCategory,
+                items = newsCategories,
+                selected = selectedItem,
                 labelProvider = { it.localizedLabel(lang) },
-                onSelect = onSelectCategory
+                keyProvider = { it.resolvedCode() },
+                onSelect = { item -> onSelectCategory(item?.resolvedCode()) }
             )
         }
 
@@ -392,6 +412,7 @@ private fun NewsListPane(
                     items(filteredArticles, key = { it.id }) { article ->
                         NewsArticleCard(
                             article = article,
+                            newsCategories = newsCategories,
                             isSelected = article.id == selectedArticleId,
                             isBookmarked = bookmarkedIds.contains(article.id),
                             onClick = { onArticleClick(article) },
@@ -408,6 +429,7 @@ private fun NewsListPane(
 @Composable
 private fun FeaturedImportantScheduleCard(
     schedule: ChurchSchedule,
+    scheduleCategories: List<DynamicCategoryItem>,
     isAdmin: Boolean,
     onClick: () -> Unit,
     onRemove: () -> Unit,
@@ -449,7 +471,7 @@ private fun FeaturedImportantScheduleCard(
                         color = MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
-                            text = schedule.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                            text = resolveScheduleCategoryLabel(schedule.category, scheduleCategories, LocalAppLanguage.current),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -662,6 +684,7 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
 @Composable
 private fun NewsArticleCard(
     article: NewsArticle,
+    newsCategories: List<DynamicCategoryItem>,
     isSelected: Boolean,
     isBookmarked: Boolean,
     onClick: () -> Unit,
@@ -716,7 +739,7 @@ private fun NewsArticleCard(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
                     ) {
                         Text(
-                            text = article.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                            text = resolveNewsCategoryLabel(article.category, newsCategories, LocalAppLanguage.current),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -834,6 +857,7 @@ private fun NewsArticleCard(
 @Composable
 private fun NewsDetailPane(
     article: NewsArticle,
+    newsCategories: List<DynamicCategoryItem>,
     isBookmarked: Boolean,
     commentsState: UiState<List<NewsComment>>,
     isPostingComment: Boolean,
@@ -953,7 +977,7 @@ private fun NewsDetailPane(
                         color = MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
-                            text = article.resolvedCategory().localizedLabel(lang),
+                            text = resolveNewsCategoryLabel(article.category, newsCategories, lang),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)

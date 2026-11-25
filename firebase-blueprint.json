@@ -19,8 +19,7 @@
         },
         "category": {
           "type": "string",
-          "enum": ["WARTA", "PENGUMUMAN", "RENUNGAN", "PELAYANAN", "PEMUDA"],
-          "description": "Kategori berita"
+          "description": "Kod kategori berita dinamik (1-40 karakter)"
         },
         "authorId": {
           "type": "string",
@@ -128,8 +127,7 @@
         },
         "category": {
           "type": "string",
-          "enum": ["IBADAH", "DOA", "PEMUDA", "SEKOLAH_MINGGU", "PERSEKUTUAN", "RAPAT"],
-          "description": "Kategori kegiatan"
+          "description": "Kod kategori kegiatan dinamik (1-40 karakter)"
         },
         "dateLabel": {
           "type": "string",
@@ -645,6 +643,39 @@
         "updatedBy",
         "updatedAt"
       ]
+    },
+    "DynamicCategoryItem": {
+      "title": "DynamicCategoryItem",
+      "description": "Kategori berita atau jadual kegiatan gereja yang boleh ditambah, diedit dan dipadam oleh Admin.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Kod unik kategori (1-40 aksara alfanumerik/garis bawah)"
+        },
+        "labelMs": {
+          "type": "string",
+          "description": "Label kategori dalam Bahasa Melayu (1-60 aksara)"
+        },
+        "labelEn": {
+          "type": "string",
+          "description": "Label kategori dalam Bahasa Inggeris (1-60 aksara)"
+        },
+        "sortOrder": {
+          "type": "integer",
+          "description": "Susunan paparan kategori"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID admin yang mengemas kini kategori"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu kemas kini kategori terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["code", "labelMs", "labelEn", "sortOrder", "updatedBy", "updatedAt"]
     }
   },
   "firestore": {
@@ -703,6 +734,14 @@
     "/app_config/{configId}": {
       "schema": { "$ref": "#/entities/AppVersionConfig" },
       "description": "Konfigurasi versi terkini aplikasi (/app_config/version) untuk notis kemas kini automatik"
+    },
+    "/news_categories/{catId}": {
+      "schema": { "$ref": "#/entities/DynamicCategoryItem" },
+      "description": "Senarai kategori berita gereja yang diuruskan secara dinamik oleh Admin"
+    },
+    "/schedule_categories/{catId}": {
+      "schema": { "$ref": "#/entities/DynamicCategoryItem" },
+      "description": "Senarai kategori jadual kegiatan yang diuruskan secara dinamik oleh Admin"
     }
   }
 }

@@ -157,7 +157,8 @@ fun <T> CategoryFilterRow(
     labelProvider: (T) -> String,
     onSelect: (T?) -> Unit,
     modifier: Modifier = Modifier,
-    allLabel: String = tr("Semua", "All")
+    allLabel: String = tr("Semua", "All"),
+    keyProvider: (T) -> Any = labelProvider
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -175,7 +176,7 @@ fun <T> CategoryFilterRow(
                 )
             )
         }
-        items(items, key = { labelProvider(it) }) { category ->
+        items(items, key = { keyProvider(it) }) { category ->
             FilterChip(
                 selected = selected == category,
                 onClick = { onSelect(if (selected == category) null else category) },
@@ -289,6 +290,35 @@ fun ErrorStateCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun AdminStatPill(
+    label: String,
+    count: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp)
+        ) {
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

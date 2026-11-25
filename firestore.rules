@@ -54,7 +54,7 @@ service cloud.firestore {
       return data.title is string && data.title.size() >= 3 && data.title.size() <= 160 &&
         data.summary is string && data.summary.size() >= 5 && data.summary.size() <= 320 &&
         data.content is string && data.content.size() >= 10 && data.content.size() <= 5000 &&
-        data.category in ['WARTA', 'PENGUMUMAN', 'RENUNGAN', 'PELAYANAN', 'PEMUDA'] &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 40 && data.category.matches('^[a-zA-Z0-9_\\-]+$') &&
         isValidId(data.authorId) &&
         data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
         data.coverPreset in ['SANCTUARY', 'WORSHIP', 'FELLOWSHIP', 'CUSTOM'] &&
@@ -96,7 +96,7 @@ service cloud.firestore {
     function isValidChurchSchedule(data) {
       return data.title is string && data.title.size() >= 3 && data.title.size() <= 140 &&
         data.description is string && data.description.size() >= 1 && data.description.size() <= 1500 &&
-        data.category in ['IBADAH', 'DOA', 'PEMUDA', 'SEKOLAH_MINGGU', 'PERSEKUTUAN', 'RAPAT'] &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 40 && data.category.matches('^[a-zA-Z0-9_\\-]+$') &&
         data.dateLabel is string && data.dateLabel.size() >= 3 && data.dateLabel.size() <= 60 &&
         data.timeLabel is string && data.timeLabel.size() >= 3 && data.timeLabel.size() <= 40 &&
         data.location is string && data.location.size() >= 2 && data.location.size() <= 120 &&
@@ -264,6 +264,24 @@ service cloud.firestore {
         data.updateUrl.size() <= 500 &&
         (data.updateUrl == '' || data.updateUrl.matches('^https://.*')) &&
         data.forceUpdate is bool &&
+        isValidId(data.updatedBy) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidDynamicCategory(data) {
+      return data.code is string &&
+        data.code.size() >= 1 &&
+        data.code.size() <= 40 &&
+        data.code.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.labelMs is string &&
+        data.labelMs.size() >= 1 &&
+        data.labelMs.size() <= 60 &&
+        data.labelEn is string &&
+        data.labelEn.size() >= 1 &&
+        data.labelEn.size() <= 60 &&
+        data.sortOrder is int &&
+        data.sortOrder >= 0 &&
+        data.sortOrder <= 100000 &&
         isValidId(data.updatedBy) &&
         isValidTimestamp(data.updatedAt);
     }
@@ -691,6 +709,68 @@ service cloud.firestore {
         ]);
 
       allow delete: if false;
+    }
+
+    // 13. Kategori Berita Dinamik (/news_categories/{catId}) - Bacaan umum; Admin sahaja boleh urus
+    match /news_categories/{catId} {
+      allow get, list: if true;
+
+      allow create: if isSignedIn() &&
+        isAdmin() &&
+        isValidId(catId) &&
+        isValidDynamicCategory(incoming()) &&
+        incoming().code == catId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'code', 'labelMs', 'labelEn', 'sortOrder', 'updatedBy', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'code', 'labelMs', 'labelEn', 'sortOrder', 'updatedBy', 'updatedAt'
+        ]);
+
+      allow update: if isSignedIn() &&
+        isAdmin() &&
+        isValidId(catId) &&
+        isValidDynamicCategory(incoming()) &&
+        incoming().code == existing().code &&
+        incoming().code == catId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'labelMs', 'labelEn', 'sortOrder', 'updatedBy', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isAdmin() && isValidId(catId);
+    }
+
+    // 14. Kategori Jadual Dinamik (/schedule_categories/{catId}) - Bacaan umum; Admin sahaja boleh urus
+    match /schedule_categories/{catId} {
+      allow get, list: if true;
+
+      allow create: if isSignedIn() &&
+        isAdmin() &&
+        isValidId(catId) &&
+        isValidDynamicCategory(incoming()) &&
+        incoming().code == catId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'code', 'labelMs', 'labelEn', 'sortOrder', 'updatedBy', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'code', 'labelMs', 'labelEn', 'sortOrder', 'updatedBy', 'updatedAt'
+        ]);
+
+      allow update: if isSignedIn() &&
+        isAdmin() &&
+        isValidId(catId) &&
+        isValidDynamicCategory(incoming()) &&
+        incoming().code == existing().code &&
+        incoming().code == catId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'labelMs', 'labelEn', 'sortOrder', 'updatedBy', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isAdmin() && isValidId(catId);
     }
   }
 }

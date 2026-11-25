@@ -12,6 +12,7 @@ import com.example.data.ChurchMemberDetail
 import com.example.data.ChurchMemberPublic
 import com.example.data.ChurchSchedule
 import com.example.data.CoverPreset
+import com.example.data.DynamicCategoryItem
 import com.example.data.FellowshipGroup
 import com.example.data.GalleryCategory
 import com.example.data.GalleryComment
@@ -150,14 +151,14 @@ class BulletinViewModel(
     private val _newsSearchQuery = MutableStateFlow("")
     val newsSearchQuery: StateFlow<String> = _newsSearchQuery.asStateFlow()
 
-    private val _selectedNewsCategory = MutableStateFlow<NewsCategory?>(null)
-    val selectedNewsCategory: StateFlow<NewsCategory?> = _selectedNewsCategory.asStateFlow()
+    private val _selectedNewsCategory = MutableStateFlow<String?>(null)
+    val selectedNewsCategory: StateFlow<String?> = _selectedNewsCategory.asStateFlow()
 
     private val _scheduleSearchQuery = MutableStateFlow("")
     val scheduleSearchQuery: StateFlow<String> = _scheduleSearchQuery.asStateFlow()
 
-    private val _selectedScheduleCategory = MutableStateFlow<ScheduleCategory?>(null)
-    val selectedScheduleCategory: StateFlow<ScheduleCategory?> = _selectedScheduleCategory.asStateFlow()
+    private val _selectedScheduleCategory = MutableStateFlow<String?>(null)
+    val selectedScheduleCategory: StateFlow<String?> = _selectedScheduleCategory.asStateFlow()
 
     private val _selectedGalleryCategory = MutableStateFlow<GalleryCategory?>(null)
     val selectedGalleryCategory: StateFlow<GalleryCategory?> = _selectedGalleryCategory.asStateFlow()
@@ -234,6 +235,31 @@ class BulletinViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = null
+        )
+
+    // Dynamic News & Schedule Categories (real-time synced from Firestore with enum defaults)
+    val newsCategories: StateFlow<List<DynamicCategoryItem>> = repository
+        .observeNewsCategories(currentUserId)
+        .catch { error ->
+            unwrapOrRethrow("newsCategories", error)
+            emit(NewsCategory.defaultCategoryItems())
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = NewsCategory.defaultCategoryItems()
+        )
+
+    val scheduleCategories: StateFlow<List<DynamicCategoryItem>> = repository
+        .observeScheduleCategories(currentUserId)
+        .catch { error ->
+            unwrapOrRethrow("scheduleCategories", error)
+            emit(ScheduleCategory.defaultCategoryItems())
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = ScheduleCategory.defaultCategoryItems()
         )
 
     // Real-time Gallery Comments stream for the currently opened gallery post
@@ -390,16 +416,16 @@ class BulletinViewModel(
         _newsSearchQuery.value = query
     }
 
-    fun selectNewsCategory(category: NewsCategory?) {
-        _selectedNewsCategory.value = category
+    fun selectNewsCategory(categoryCode: String?) {
+        _selectedNewsCategory.value = categoryCode
     }
 
     fun setScheduleSearchQuery(query: String) {
         _scheduleSearchQuery.value = query
     }
 
-    fun selectScheduleCategory(category: ScheduleCategory?) {
-        _selectedScheduleCategory.value = category
+    fun selectScheduleCategory(categoryCode: String?) {
+        _selectedScheduleCategory.value = categoryCode
     }
 
     fun selectGalleryCategory(category: GalleryCategory?) {
@@ -555,7 +581,7 @@ class BulletinViewModel(
         title: String,
         summary: String,
         content: String,
-        category: NewsCategory,
+        categoryCode: String,
         authorName: String,
         coverPreset: CoverPreset,
         imageUrl: String?,
@@ -588,12 +614,12 @@ class BulletinViewModel(
         ) {
             if (existingId == null) {
                 repository.createNews(
-                    title, summary, content, category, authorName,
+                    title, summary, content, categoryCode, authorName,
                     coverPreset, imageUrl, imageBase64, pinned, published
                 )
             } else {
                 repository.updateNews(
-                    existingId, title, summary, content, category, authorName,
+                    existingId, title, summary, content, categoryCode, authorName,
                     coverPreset, imageUrl, imageBase64, pinned, published,
                     notifyOnPublish = previouslyDraft && published
                 )
@@ -683,7 +709,7 @@ class BulletinViewModel(
         existingId: String?,
         title: String,
         description: String,
-        category: ScheduleCategory,
+        categoryCode: String,
         dateLabel: String,
         timeLabel: String,
         location: String,
@@ -719,12 +745,12 @@ class BulletinViewModel(
         ) {
             if (existingId == null) {
                 repository.createSchedule(
-                    title, description, category, dateLabel, timeLabel,
+                    title, description, categoryCode, dateLabel, timeLabel,
                     location, speaker, resolvedSortOrder, recurring, published
                 )
             } else {
                 repository.updateSchedule(
-                    existingId, title, description, category, dateLabel, timeLabel,
+                    existingId, title, description, categoryCode, dateLabel, timeLabel,
                     location, speaker, resolvedSortOrder, recurring, published,
                     notifyOnPublish = previouslyDraft && published
                 )
@@ -1213,6 +1239,86 @@ class BulletinViewModel(
                 releaseNotes = releaseNotes,
                 updateUrl = updateUrl,
                 forceUpdate = forceUpdate
+            )
+        }
+    }
+
+    fun saveNewsCategory(
+        existingCode: String?,
+        labelMs: String,
+        labelEn: String,
+        onComplete: () -> Unit = {}
+    ) {
+        if (!isAdmin.value) return
+        val message = if (existingCode.isNullOrBlank()) {
+            AppLanguageManager.tr("Kategori berita baharu ditambah.", "News category added.")
+        } else {
+            AppLanguageManager.tr("Kategori berita dikemas kini.", "News category updated.")
+        }
+        runMutation(successMessage = message, onComplete = onComplete) {
+            repository.saveCategoryItem(
+                collection = BulletinRepository.COLLECTION_NEWS_CATEGORIES,
+                defaults = NewsCategory.defaultCategoryItems(),
+                existingCode = existingCode,
+                labelMs = labelMs,
+                labelEn = labelEn
+            )
+        }
+    }
+
+    fun deleteNewsCategory(code: String, onComplete: () -> Unit = {}) {
+        if (!isAdmin.value) return
+        if (_selectedNewsCategory.value.equals(code, ignoreCase = true)) {
+            _selectedNewsCategory.value = null
+        }
+        runMutation(
+            successMessage = AppLanguageManager.tr("Kategori berita dipadam.", "News category deleted."),
+            onComplete = onComplete
+        ) {
+            repository.deleteCategoryItem(
+                collection = BulletinRepository.COLLECTION_NEWS_CATEGORIES,
+                defaults = NewsCategory.defaultCategoryItems(),
+                code = code
+            )
+        }
+    }
+
+    fun saveScheduleCategory(
+        existingCode: String?,
+        labelMs: String,
+        labelEn: String,
+        onComplete: () -> Unit = {}
+    ) {
+        if (!isAdmin.value) return
+        val message = if (existingCode.isNullOrBlank()) {
+            AppLanguageManager.tr("Kategori jadual baharu ditambah.", "Schedule category added.")
+        } else {
+            AppLanguageManager.tr("Kategori jadual dikemas kini.", "Schedule category updated.")
+        }
+        runMutation(successMessage = message, onComplete = onComplete) {
+            repository.saveCategoryItem(
+                collection = BulletinRepository.COLLECTION_SCHEDULE_CATEGORIES,
+                defaults = ScheduleCategory.defaultCategoryItems(),
+                existingCode = existingCode,
+                labelMs = labelMs,
+                labelEn = labelEn
+            )
+        }
+    }
+
+    fun deleteScheduleCategory(code: String, onComplete: () -> Unit = {}) {
+        if (!isAdmin.value) return
+        if (_selectedScheduleCategory.value.equals(code, ignoreCase = true)) {
+            _selectedScheduleCategory.value = null
+        }
+        runMutation(
+            successMessage = AppLanguageManager.tr("Kategori jadual dipadam.", "Schedule category deleted."),
+            onComplete = onComplete
+        ) {
+            repository.deleteCategoryItem(
+                collection = BulletinRepository.COLLECTION_SCHEDULE_CATEGORIES,
+                defaults = ScheduleCategory.defaultCategoryItems(),
+                code = code
             )
         }
     }

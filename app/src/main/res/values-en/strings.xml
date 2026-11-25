@@ -11,7 +11,7 @@
     <string name="nav_news">News</string>
     <string name="nav_schedules">Schedule</string>
     <string name="nav_gallery">Gallery</string>
-    <string name="nav_members">Members</string>
+    <string name="nav_members">Admin</string>
     <string name="nav_account">Account</string>
 
     <!-- Auth -->

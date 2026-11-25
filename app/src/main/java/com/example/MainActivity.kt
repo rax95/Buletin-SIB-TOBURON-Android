@@ -30,14 +30,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -74,10 +73,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -110,8 +111,8 @@ import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
+import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.GalleryScreen
-import com.example.ui.screens.MembersScreen
 import com.example.ui.screens.NewsScreen
 import com.example.ui.screens.ProfileAdminScreen
 import com.example.ui.screens.SchedulesScreen
@@ -135,7 +136,7 @@ private enum class BulletinTab(
     NEWS("news", "Berita", "News", Icons.Filled.Newspaper, Icons.Outlined.Newspaper),
     SCHEDULES("schedules", "Jadual", "Schedule", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     GALLERY("gallery", "Galeri", "Gallery", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
-    MEMBERS("members", "Ahli", "Members", Icons.Filled.Groups, Icons.Outlined.Groups),
+    ADMIN("admin", "Admin", "Admin", Icons.Filled.AdminPanelSettings, Icons.Outlined.AdminPanelSettings),
     ACCOUNT("account", "Akaun", "Account", Icons.Filled.Person, Icons.Outlined.Person);
 
     fun label(lang: AppLanguage): String = if (lang == AppLanguage.EN) labelEn else labelMs
@@ -274,6 +275,7 @@ private fun BuletinMainShell(
     onSignedOut: () -> Unit
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
 
@@ -309,6 +311,8 @@ private fun BuletinMainShell(
     val adminMembers by viewModel.adminMembers.collectAsStateWithLifecycle()
     val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
     val appVersionConfig by viewModel.appVersionConfig.collectAsStateWithLifecycle()
+    val newsCategories by viewModel.newsCategories.collectAsStateWithLifecycle()
+    val scheduleCategories by viewModel.scheduleCategories.collectAsStateWithLifecycle()
 
     val newsSearchQuery by viewModel.newsSearchQuery.collectAsStateWithLifecycle()
     val selectedNewsCategory by viewModel.selectedNewsCategory.collectAsStateWithLifecycle()
@@ -331,13 +335,13 @@ private fun BuletinMainShell(
     val isGuest = currentUser == null
     val visibleTabs = remember(isAdmin) {
         if (isAdmin) BulletinTab.entries
-        else BulletinTab.entries.filter { it != BulletinTab.MEMBERS }
+        else BulletinTab.entries.filter { it != BulletinTab.ADMIN }
     }
     LaunchedEffect(isAdmin, currentTab) {
-        if (!isAdmin && currentTab == BulletinTab.MEMBERS) {
+        if (!isAdmin && currentTab == BulletinTab.ADMIN) {
             currentTab = BulletinTab.NEWS
         }
-        if (currentTab == BulletinTab.MEMBERS) {
+        if (currentTab == BulletinTab.ADMIN) {
             viewModel.clearUnreadNewMemberCount()
         }
     }
@@ -475,7 +479,7 @@ private fun BuletinMainShell(
             }
             type.equals(BulletinNotificationManager.TYPE_MEMBER_REGISTERED, ignoreCase = true) -> {
                 if (isAdmin) {
-                    currentTab = BulletinTab.MEMBERS
+                    currentTab = BulletinTab.ADMIN
                     viewModel.clearUnreadNewMemberCount()
                     if (itemId.isNotBlank()) viewModel.loadMemberDetail(itemId)
                 }
@@ -531,7 +535,7 @@ private fun BuletinMainShell(
                 when {
                     alert.type.equals(BulletinNotificationManager.TYPE_MEMBER_REGISTERED, ignoreCase = true) -> {
                         if (isAdmin) {
-                            currentTab = BulletinTab.MEMBERS
+                            currentTab = BulletinTab.ADMIN
                             viewModel.clearUnreadNewMemberCount()
                             if (alert.itemId.isNotBlank()) viewModel.loadMemberDetail(alert.itemId)
                         }
@@ -580,7 +584,7 @@ private fun BuletinMainShell(
                                 selected = selected,
                                 onClick = { currentTab = tab },
                                 icon = {
-                                    if (tab == BulletinTab.MEMBERS && unreadNewMemberCount > 0) {
+                                    if (tab == BulletinTab.ADMIN && unreadNewMemberCount > 0) {
                                         BadgedBox(
                                             badge = {
                                                 Badge {
@@ -612,57 +616,30 @@ private fun BuletinMainShell(
             floatingActionButton = {
                 val hideNewsDetailFab = currentTab == BulletinTab.NEWS && isViewingNewsDetail && !isExpandedScreen
                 val hideGalleryDetailFab = currentTab == BulletinTab.GALLERY && isViewingGalleryDetail
-                if (isAdmin && currentTab != BulletinTab.ACCOUNT && !hideNewsDetailFab && !hideGalleryDetailFab) {
-                    if (currentTab == BulletinTab.MEMBERS) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ExtendedFloatingActionButton(
-                                onClick = { showMemberExportDialog = true },
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                icon = { Icon(Icons.Filled.Download, contentDescription = null) },
-                                text = { Text(tr("Eksport", "Export")) },
-                                modifier = Modifier.testTag("admin_export_members_button")
-                            )
-                            ExtendedFloatingActionButton(
-                                onClick = {
-                                    editingMember = null
-                                    showMemberEditor = true
-                                },
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary,
-                                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                                text = { Text(tr("Tambah Ahli", "Add Member")) },
-                                modifier = Modifier.testTag("admin_fab_members")
-                            )
+                if (isAdmin && currentTab != BulletinTab.ACCOUNT && currentTab != BulletinTab.ADMIN && !hideNewsDetailFab && !hideGalleryDetailFab) {
+                    val (fabLabel, onFabClick) = when (currentTab) {
+                        BulletinTab.NEWS -> Pair(tr("Tulis Berita", "Write News")) {
+                            editingNews = null
+                            showNewsEditor = true
                         }
-                    } else {
-                        val (fabLabel, onFabClick) = when (currentTab) {
-                            BulletinTab.NEWS -> Pair(tr("Tulis Berita", "Write News")) {
-                                editingNews = null
-                                showNewsEditor = true
-                            }
-                            BulletinTab.SCHEDULES -> Pair(tr("Tambah Jadual", "Add Schedule")) {
-                                editingSchedule = null
-                                showScheduleEditor = true
-                            }
-                            BulletinTab.GALLERY -> Pair(tr("Muat Naik Foto", "Upload Photo")) {
-                                editingPhoto = null
-                                showPhotoEditor = true
-                            }
-                            BulletinTab.MEMBERS, BulletinTab.ACCOUNT -> Pair("", {})
+                        BulletinTab.SCHEDULES -> Pair(tr("Tambah Jadual", "Add Schedule")) {
+                            editingSchedule = null
+                            showScheduleEditor = true
                         }
-                        ExtendedFloatingActionButton(
-                            onClick = onFabClick,
-                            containerColor = MaterialTheme.colorScheme.secondary,
-                            contentColor = MaterialTheme.colorScheme.onSecondary,
-                            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                            text = { Text(fabLabel) },
-                            modifier = Modifier.testTag("admin_fab_${currentTab.route}")
-                        )
+                        BulletinTab.GALLERY -> Pair(tr("Muat Naik Foto", "Upload Photo")) {
+                            editingPhoto = null
+                            showPhotoEditor = true
+                        }
+                        BulletinTab.ADMIN, BulletinTab.ACCOUNT -> Pair("", {})
                     }
+                    ExtendedFloatingActionButton(
+                        onClick = onFabClick,
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary,
+                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        text = { Text(fabLabel) },
+                        modifier = Modifier.testTag("admin_fab_${currentTab.route}")
+                    )
                 }
             }
         ) { innerPadding ->
@@ -705,7 +682,7 @@ private fun BuletinMainShell(
                                 selected = selected,
                                 onClick = { currentTab = tab },
                                 icon = {
-                                    if (tab == BulletinTab.MEMBERS && unreadNewMemberCount > 0) {
+                                    if (tab == BulletinTab.ADMIN && unreadNewMemberCount > 0) {
                                         BadgedBox(
                                             badge = {
                                                 Badge {
@@ -745,6 +722,8 @@ private fun BuletinMainShell(
                             NewsScreen(
                                 newsState = newsState,
                                 featuredSchedules = featuredSchedules,
+                                newsCategories = newsCategories,
+                                scheduleCategories = scheduleCategories,
                                 searchQuery = newsSearchQuery,
                                 selectedCategory = selectedNewsCategory,
                                 bookmarkedIds = bookmarkedNewsIds,
@@ -791,6 +770,7 @@ private fun BuletinMainShell(
                         BulletinTab.SCHEDULES -> {
                             SchedulesScreen(
                                 schedulesState = schedulesState,
+                                categories = scheduleCategories,
                                 searchQuery = scheduleSearchQuery,
                                 selectedCategory = selectedScheduleCategory,
                                 bookmarkedIds = bookmarkedScheduleIds,
@@ -855,14 +835,24 @@ private fun BuletinMainShell(
                             )
                         }
 
-                        BulletinTab.MEMBERS -> {
+                        BulletinTab.ADMIN -> {
                             if (isAdmin) {
-                                MembersScreen(
+                                AdminScreen(
+                                    newsCount = (newsState as? UiState.Success)?.data?.size ?: 0,
+                                    schedulesCount = (schedulesState as? UiState.Success)?.data?.size ?: 0,
+                                    galleryCount = (galleryState as? UiState.Success)?.data?.size ?: 0,
+                                    membersCount = (membersState as? UiState.Success)?.data?.size ?: 0,
                                     membersState = membersState,
                                     searchQuery = memberSearchQuery,
                                     isBusy = isBusy,
                                     selectedMemberDetail = selectedMemberDetail,
                                     isLoadingDetail = isLoadingMemberDetail,
+                                    adminMembers = adminMembers,
+                                    registeredUsers = registeredUsers,
+                                    currentAdminUid = currentUser?.uid.orEmpty(),
+                                    appVersionConfig = appVersionConfig,
+                                    newsCategories = newsCategories,
+                                    scheduleCategories = scheduleCategories,
                                     onSearchQueryChange = viewModel::setMemberSearchQuery,
                                     onMemberClick = viewModel::loadMemberDetail,
                                     onDismissMemberDetail = viewModel::clearSelectedMemberDetail,
@@ -880,6 +870,41 @@ private fun BuletinMainShell(
                                     },
                                     onScanMemberQrClick = {
                                         showMemberQrScanner = true
+                                    },
+                                    onExportMembersClick = {
+                                        showMemberExportDialog = true
+                                    },
+                                    onAddNewsClick = {
+                                        editingNews = null
+                                        showNewsEditor = true
+                                    },
+                                    onAddScheduleClick = {
+                                        editingSchedule = null
+                                        showScheduleEditor = true
+                                    },
+                                    onAddPhotoClick = {
+                                        editingPhoto = null
+                                        showPhotoEditor = true
+                                    },
+                                    onSaveNewsCategory = viewModel::saveNewsCategory,
+                                    onDeleteNewsCategory = viewModel::deleteNewsCategory,
+                                    onSaveScheduleCategory = viewModel::saveScheduleCategory,
+                                    onDeleteScheduleCategory = viewModel::deleteScheduleCategory,
+                                    onOpenAddAdminDialog = {
+                                        showAddAdminDialog = true
+                                    },
+                                    onRemoveAdminMember = viewModel::removeAdminMember,
+                                    onCopyUid = { targetUid ->
+                                        clipboard.setText(AnnotatedString(targetUid))
+                                        viewModel.showSnackbar(
+                                            AppLanguageManager.tr(
+                                                "UID pengguna disalin ke papan klip.",
+                                                "User UID copied to clipboard."
+                                            )
+                                        )
+                                    },
+                                    onManageAppVersionClick = {
+                                        showVersionManagerDialog = true
                                     }
                                 )
                             }
@@ -895,13 +920,10 @@ private fun BuletinMainShell(
                                 ownMemberDetail = ownMemberDetail,
                                 bookmarks = bookmarks,
                                 isAdmin = isAdmin,
-                                adminMembers = adminMembers,
-                                registeredUsers = registeredUsers,
                                 appVersionConfig = appVersionConfig,
                                 newsCount = (newsState as? UiState.Success)?.data?.size ?: 0,
                                 schedulesCount = (schedulesState as? UiState.Success)?.data?.size ?: 0,
                                 galleryCount = (galleryState as? UiState.Success)?.data?.size ?: 0,
-                                membersCount = (membersState as? UiState.Success)?.data?.size ?: 0,
                                 isBusy = isBusy,
                                 onSaveProfile = viewModel::saveProfile,
                                 onFillOrEditMemberDetails = { showSelfMemberEditor = true },
@@ -919,25 +941,6 @@ private fun BuletinMainShell(
                                 onRemoveBookmark = { bm ->
                                     viewModel.toggleBookmark(bm.itemId, bm.itemType, bm.title)
                                 },
-                                onAddNewsClick = {
-                                    editingNews = null
-                                    showNewsEditor = true
-                                },
-                                onAddScheduleClick = {
-                                    editingSchedule = null
-                                    showScheduleEditor = true
-                                },
-                                onAddPhotoClick = {
-                                    editingPhoto = null
-                                    showPhotoEditor = true
-                                },
-                                onAddMemberClick = {
-                                    editingMember = null
-                                    showMemberEditor = true
-                                },
-                                onOpenAddAdminDialog = { showAddAdminDialog = true },
-                                onRemoveAdminMember = viewModel::removeAdminMember,
-                                onManageAppVersionClick = { showVersionManagerDialog = true },
                                 onOpenUpdateNotice = { forceShowUpdateDialog = true },
                                 onUidCopied = {
                                     viewModel.showSnackbar(
@@ -1039,16 +1042,17 @@ private fun BuletinMainShell(
     if (showNewsEditor && currentUser != null) {
         AdminNewsEditorDialog(
             initial = editingNews,
+            categories = newsCategories,
             defaultAuthorName = userProfile?.displayName ?: currentUser.displayName ?: tr("Sekretariat SIB Toburon", "SIB Toburon Secretariat"),
             isBusy = isBusy,
             onDismiss = { showNewsEditor = false },
-            onSave = { title, summary, content, category, author, preset, url, b64, pinned, published ->
+            onSave = { title, summary, content, categoryCode, author, preset, url, b64, pinned, published ->
                 viewModel.saveNews(
                     existingId = editingNews?.id,
                     title = title,
                     summary = summary,
                     content = content,
-                    category = category,
+                    categoryCode = categoryCode,
                     authorName = author,
                     coverPreset = preset,
                     imageUrl = url,
@@ -1064,14 +1068,15 @@ private fun BuletinMainShell(
     if (showScheduleEditor && currentUser != null) {
         AdminScheduleEditorDialog(
             initial = editingSchedule,
+            categories = scheduleCategories,
             isBusy = isBusy,
             onDismiss = { showScheduleEditor = false },
-            onSave = { title, desc, cat, date, time, loc, speaker, recurring, published ->
+            onSave = { title, desc, catCode, date, time, loc, speaker, recurring, published ->
                 viewModel.saveSchedule(
                     existingId = editingSchedule?.id,
                     title = title,
                     description = desc,
-                    category = cat,
+                    categoryCode = catCode,
                     dateLabel = date,
                     timeLabel = time,
                     location = loc,

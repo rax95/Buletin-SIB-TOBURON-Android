@@ -5,11 +5,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -39,23 +34,13 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Newspaper
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SupervisorAccount
-import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
@@ -75,12 +60,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,8 +80,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
-import com.example.BuildConfig
-import com.example.data.AdminMember
 import com.example.data.AppVersionConfig
 import com.example.data.ChurchMemberDetail
 import com.example.data.FellowshipGroup
@@ -106,11 +87,11 @@ import com.example.data.ImageUtils
 import com.example.data.UserBookmark
 import com.example.data.UserProfile
 import com.example.ui.auth.onGoogleSignInClicked
+import com.example.ui.components.AdminStatPill
 import com.example.ui.components.AppVersionFooterCard
 import com.example.ui.components.NotificationSettingsCard
 import com.example.ui.components.OwnMemberIdCard
 import com.example.ui.components.PhotoSourceChooserDialog
-import com.example.ui.components.formatIndonesianTimestamp
 import com.example.ui.components.rememberCameraCaptureLauncher
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.CompactLanguageTogglePill
@@ -129,13 +110,10 @@ fun ProfileAdminScreen(
     ownMemberDetail: ChurchMemberDetail?,
     bookmarks: List<UserBookmark>,
     isAdmin: Boolean,
-    adminMembers: List<AdminMember>,
-    registeredUsers: List<UserProfile>,
     appVersionConfig: AppVersionConfig?,
     newsCount: Int,
     schedulesCount: Int,
     galleryCount: Int,
-    membersCount: Int,
     isBusy: Boolean,
     onSaveProfile: (String, FellowshipGroup, () -> Unit) -> Unit,
     onFillOrEditMemberDetails: () -> Unit,
@@ -143,13 +121,6 @@ fun ProfileAdminScreen(
     onProfilePhotoError: (String) -> Unit,
     onOpenBookmark: (UserBookmark) -> Unit,
     onRemoveBookmark: (UserBookmark) -> Unit,
-    onAddNewsClick: () -> Unit,
-    onAddScheduleClick: () -> Unit,
-    onAddPhotoClick: () -> Unit,
-    onAddMemberClick: () -> Unit,
-    onOpenAddAdminDialog: () -> Unit,
-    onRemoveAdminMember: (String) -> Unit,
-    onManageAppVersionClick: () -> Unit,
     onOpenUpdateNotice: () -> Unit,
     onUidCopied: () -> Unit,
     onNotificationPrefsUpdated: (newsEnabled: Boolean, schedulesEnabled: Boolean) -> Unit,
@@ -492,296 +463,7 @@ fun ProfileAdminScreen(
                 )
             }
 
-            // 2. Admin Real-Time Console (Visible to Admins)
-            if (isAdmin) {
-                item(key = "admin_console") {
-                    Card(
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("admin_panel_card")
-                    ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(20.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.AdminPanelSettings,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = tr("Panel Admin SIB Toburon", "SIB Toburon Admin Panel"),
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = tr(
-                                            "Setiap kemas kini dipaparkan secara automatik pada peranti semua jemaat.",
-                                            "Every update appears automatically on all church members' devices."
-                                        ),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                AdminStatPill(tr("Berita", "News"), newsCount, Modifier.weight(1f))
-                                AdminStatPill(tr("Jadual", "Schedule"), schedulesCount, Modifier.weight(1f))
-                                AdminStatPill(tr("Galeri", "Gallery"), galleryCount, Modifier.weight(1f))
-                                AdminStatPill(tr("Ahli", "Members"), membersCount, Modifier.weight(1f))
-                            }
-
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Button(
-                                    onClick = onAddNewsClick,
-                                    modifier = Modifier.testTag("admin_add_news_button")
-                                ) {
-                                    Icon(Icons.Filled.Newspaper, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(tr("Tulis Berita", "Write News"))
-                                }
-                                Button(
-                                    onClick = onAddScheduleClick,
-                                    modifier = Modifier.testTag("admin_add_schedule_button")
-                                ) {
-                                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(tr("Tambah Jadual", "Add Schedule"))
-                                }
-                                Button(
-                                    onClick = onAddPhotoClick,
-                                    modifier = Modifier.testTag("admin_add_photo_button")
-                                ) {
-                                    Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(tr("Muat Naik Foto", "Upload Photo"))
-                                }
-                                Button(
-                                    onClick = onAddMemberClick,
-                                    modifier = Modifier.testTag("admin_add_member_button")
-                                ) {
-                                    Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(tr("Tambah Ahli", "Add Member"))
-                                }
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                            // App Version & Direct Update Link Manager
-                            val publishedVersionName = appVersionConfig?.latestVersionName?.ifBlank { BuildConfig.VERSION_NAME }
-                                ?: BuildConfig.VERSION_NAME
-                            val publishedVersionCode = appVersionConfig?.latestVersionCode ?: BuildConfig.VERSION_CODE
-                            val configuredUrl = appVersionConfig?.updateUrl.orEmpty()
-                            Surface(
-                                shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(14.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.SystemUpdate,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = tr("Pengurus Versi Aplikasi", "App Version Manager"),
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                text = tr(
-                                                    "Versi terbitan: v$publishedVersionName (Kod $publishedVersionCode)",
-                                                    "Published version: v$publishedVersionName (Build $publishedVersionCode)"
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (appVersionConfig?.forceUpdate == true) {
-                                            Surface(
-                                                shape = RoundedCornerShape(50),
-                                                color = MaterialTheme.colorScheme.errorContainer
-                                            ) {
-                                                Text(
-                                                    text = tr("Wajib", "Required"),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Link,
-                                            contentDescription = null,
-                                            tint = if (configuredUrl.startsWith("https://")) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = if (configuredUrl.startsWith("https://")) {
-                                                configuredUrl
-                                            } else {
-                                                tr(
-                                                    "Belum ada pautan muat turun terus ditetapkan",
-                                                    "No direct update download link set yet"
-                                                )
-                                            },
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (configuredUrl.startsWith("https://")) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-
-                                    FilledTonalButton(
-                                        onClick = onManageAppVersionClick,
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("admin_manage_version_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Tune,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            tr(
-                                                "Urus Versi & Pautan Kemas Kini",
-                                                "Manage Version & Direct Update Link"
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = tr(
-                                        "Pentadbir Tambahan (${adminMembers.size})",
-                                        "Additional Admins (${adminMembers.size})"
-                                    ),
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                OutlinedButton(onClick = onOpenAddAdminDialog) {
-                                    Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(tr("Tambah", "Add"))
-                                }
-                            }
-
-                            if (adminMembers.isEmpty()) {
-                                Text(
-                                    text = tr(
-                                        "Belum ada pentadbir tambahan. Anda boleh menambah setiausaha atau pasukan multimedia gereja menggunakan UID mereka.",
-                                        "No additional admins yet. You can add church secretaries or media team members using their UID."
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    adminMembers.forEach { member ->
-                                        Surface(
-                                            shape = MaterialTheme.shapes.small,
-                                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(member.displayName, style = MaterialTheme.typography.titleSmall)
-                                                    Text(
-                                                        text = "${member.roleTitle} • ${member.id}",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                                IconButton(
-                                                    onClick = { onRemoveAdminMember(member.id) },
-                                                    modifier = Modifier.size(48.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Filled.Delete,
-                                                        contentDescription = tr("Batalkan akses admin", "Revoke admin access"),
-                                                        tint = MaterialTheme.colorScheme.error
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                item(key = "admin_registered_users") {
-                    AdminGoogleUsersCard(
-                        registeredUsers = registeredUsers,
-                        currentAdminUid = uid,
-                        onCopyUid = { targetUid ->
-                            clipboard.setText(AnnotatedString(targetUid))
-                            onUidCopied()
-                        }
-                    )
-                }
-            }
-
-            // 2b. Real-Time Push Notification Preferences (FCM)
+            // 2. Real-Time Push Notification Preferences (FCM)
             item(key = "notification_settings") {
                 NotificationSettingsCard(
                     isAdmin = isAdmin,
@@ -1371,374 +1053,6 @@ private fun GuestAccountView(
                 )
                 Spacer(modifier = Modifier.height(72.dp))
             }
-        }
-    }
-}
-
-@Composable
-private fun AdminGoogleUsersCard(
-    registeredUsers: List<UserProfile>,
-    currentAdminUid: String,
-    onCopyUid: (String) -> Unit
-) {
-    val lang = LocalAppLanguage.current
-    var isExpanded by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    var showAllUsers by remember { mutableStateOf(false) }
-
-    val filteredUsers = remember(registeredUsers, searchQuery, lang) {
-        val q = searchQuery.trim()
-        if (q.isBlank()) {
-            registeredUsers
-        } else {
-            registeredUsers.filter { user ->
-                user.displayName.contains(q, ignoreCase = true) ||
-                    user.email.contains(q, ignoreCase = true) ||
-                    user.resolvedGroup().localizedLabel(lang).contains(q, ignoreCase = true)
-            }
-        }
-    }
-
-    val displayedUsers = remember(filteredUsers, showAllUsers) {
-        if (showAllUsers) filteredUsers else filteredUsers.take(8)
-    }
-
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("admin_google_users_card")
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
-                    .padding(20.dp)
-                    .testTag("admin_google_users_header")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.SupervisorAccount,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = tr("Pengguna Log Masuk Google", "Google Signed-In Users"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (isExpanded) {
-                                tr("Ketik untuk menyembunyikan senarai", "Tap to hide list")
-                            } else {
-                                tr("Ketik untuk melihat senarai pengguna", "Tap to view user list")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.testTag("admin_google_users_count")
-                    ) {
-                        Text(
-                            text = tr("${registeredUsers.size} Pengguna", "${registeredUsers.size} Users"),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                        contentDescription = if (isExpanded) {
-                            tr("Tutup senarai pengguna", "Collapse user list")
-                        } else {
-                            tr("Buka senarai pengguna", "Expand user list")
-                        },
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, bottom = 20.dp)
-                ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            if (registeredUsers.size > 5) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(tr("Cari nama atau emel pengguna...", "Search user name or email...")) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = null
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { searchQuery = "" },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = tr("Padam carian", "Clear search")
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("admin_google_users_search")
-                )
-            }
-
-            if (registeredUsers.isEmpty()) {
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = tr(
-                            "Belum ada pengguna akaun Google direkodkan. Setiap jemaat yang log masuk menggunakan Google akan dipaparkan secara automatik di sini.",
-                            "No Google account users recorded yet. Every member who signs in with Google will appear here automatically."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(14.dp)
-                    )
-                }
-            } else if (filteredUsers.isEmpty()) {
-                Text(
-                    text = tr(
-                        "Tiada pengguna sepadan dengan carian \"$searchQuery\".",
-                        "No users match \"$searchQuery\"."
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    displayedUsers.forEachIndexed { index, user ->
-                        val resolvedName = user.displayName.trim().ifBlank { "Jemaat SIB Toburon" }
-                        val initials = resolvedName
-                            .split(" ")
-                            .filter { it.isNotBlank() }
-                            .take(2)
-                            .joinToString("") { it.first().uppercaseChar().toString() }
-                            .ifBlank { "JG" }
-                        val isSelf = user.id == currentAdminUid
-                        val lastSeen = user.lastLoginAt ?: user.updatedAt ?: user.createdAt
-
-                        Surface(
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("admin_google_user_item_$index")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp)
-                            ) {
-                                val userAvatarBitmap = remember(user.photoBase64) {
-                                    ImageUtils.decodeBase64ToImageBitmap(user.photoBase64)
-                                }
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isSelf) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.tertiaryContainer,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (userAvatarBitmap != null) {
-                                            Image(
-                                                bitmap = userAvatarBitmap,
-                                                contentDescription = resolvedName,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        } else {
-                                            Text(
-                                                text = initials,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isSelf) MaterialTheme.colorScheme.onPrimary
-                                                else MaterialTheme.colorScheme.onTertiaryContainer
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = resolvedName,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f, fill = false)
-                                        )
-                                        if (isSelf) {
-                                            Surface(
-                                                shape = RoundedCornerShape(50),
-                                                color = MaterialTheme.colorScheme.secondaryContainer
-                                            ) {
-                                                Text(
-                                                    text = tr("Anda", "You"),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                    if (user.email.isNotBlank()) {
-                                        Text(
-                                            text = user.email,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    val metaLine = buildString {
-                                        append(user.resolvedGroup().localizedLabel(lang))
-                                        if (lastSeen != null) {
-                                            append(" • ")
-                                            append(formatIndonesianTimestamp(lastSeen, lang))
-                                        }
-                                    }
-                                    Text(
-                                        text = metaLine,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { onCopyUid(user.id) },
-                                    modifier = Modifier.size(48.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ContentCopy,
-                                        contentDescription = tr("Salin UID $resolvedName", "Copy UID for $resolvedName"),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (filteredUsers.size > 8) {
-                    OutlinedButton(
-                        onClick = { showAllUsers = !showAllUsers },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("admin_google_users_toggle_button")
-                    ) {
-                        Icon(
-                            imageVector = if (showAllUsers) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = if (showAllUsers) {
-                                tr("Papar Ringkas", "Show Less")
-                            } else {
-                                tr("Lihat Semua (${filteredUsers.size})", "View All (${filteredUsers.size})")
-                            }
-                        )
-                    }
-                }
-                }
-            }
-        }
-    }
-}
-}
-
-@Composable
-private fun AdminStatPill(
-    label: String,
-    count: Int,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        modifier = modifier
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp)
-        ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

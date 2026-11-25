@@ -1684,6 +1684,122 @@ test("User self-registration auto-adds to Admin members list and Admin-first reg
   );
 });
 
+// 13. Dynamic News & Schedule Categories (/news_categories/{catId}, /schedule_categories/{catId})
+test("Dynamic news and schedule categories allow public read, admin-only CRUD, and custom category codes in news/schedules", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(3000);
+
+  // Admin CAN create categories in both collections
+  await assertSucceeds(
+    adminDb.collection("news_categories").doc("MISI_GLOBAL").set({
+      code: "MISI_GLOBAL",
+      labelMs: "Misi Global",
+      labelEn: "Global Mission",
+      sortOrder: 5,
+      updatedBy: ADMIN_UID,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("schedule_categories").doc("LATIHAN_MUZIK").set({
+      code: "LATIHAN_MUZIK",
+      labelMs: "Latihan Muzik",
+      labelEn: "Music Practice",
+      sortOrder: 6,
+      updatedBy: ADMIN_UID,
+      updatedAt: ts,
+    })
+  );
+
+  // Guest and Jemaat CAN read & list both category collections
+  await assertSucceeds(guestDb.collection("news_categories").get());
+  await assertSucceeds(guestDb.collection("news_categories").doc("MISI_GLOBAL").get());
+  await assertSucceeds(aliceDb.collection("schedule_categories").get());
+  await assertSucceeds(aliceDb.collection("schedule_categories").doc("LATIHAN_MUZIK").get());
+
+  // Non-admin & Guest CANNOT create, update, or delete categories
+  await assertFails(
+    aliceDb.collection("news_categories").doc("FAKE_CAT").set({
+      code: "FAKE_CAT",
+      labelMs: "Palsu",
+      labelEn: "Fake",
+      sortOrder: 0,
+      updatedBy: JEMAAT_ALICE,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(
+    guestDb.collection("schedule_categories").doc("LATIHAN_MUZIK").delete()
+  );
+  await assertFails(
+    aliceDb.collection("news_categories").doc("MISI_GLOBAL").update({
+      labelMs: "Ubah",
+      labelEn: "Edit",
+      updatedBy: JEMAAT_ALICE,
+      updatedAt: pastDate(1000),
+    })
+  );
+
+  // Admin CAN update labels & delete categories, but CANNOT mutate immutable `code`
+  await assertSucceeds(
+    adminDb.collection("news_categories").doc("MISI_GLOBAL").update({
+      labelMs: "Misi & Penginjilan",
+      labelEn: "Mission & Evangelism",
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(1000),
+    })
+  );
+  await assertFails(
+    adminDb.collection("news_categories").doc("MISI_GLOBAL").update({
+      code: "CHANGED_CODE",
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(500),
+    })
+  );
+
+  // Custom dynamic category codes are accepted in /news and /schedules
+  await assertSucceeds(
+    adminDb.collection("news").doc("news_custom_cat").set({
+      title: "Laporan Misi 2026",
+      summary: "Perkembangan pelayanan misi SIB Toburon.",
+      content: "Laporan penuh pelayanan misi luar dan tempatan untuk makluman jemaat.",
+      category: "MISI_GLOBAL",
+      authorId: ADMIN_UID,
+      authorName: "Admin",
+      coverPreset: "SANCTUARY",
+      pinned: false,
+      published: true,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    adminDb.collection("schedules").doc("sched_custom_cat").set({
+      title: "Latihan Pujian & Muzik",
+      description: "Persiapan pasukan pujian untuk ibadah Ahad.",
+      category: "LATIHAN_MUZIK",
+      dateLabel: "Setiap Sabtu",
+      timeLabel: "19:00 - 21:00",
+      location: "Dewan Utama",
+      speaker: "Pasukan Muzik",
+      sortOrder: 200,
+      recurring: true,
+      published: true,
+      authorId: ADMIN_UID,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Admin CAN delete a category
+  await assertSucceeds(
+    adminDb.collection("schedule_categories").doc("LATIHAN_MUZIK").delete()
+  );
+});
+
+
 
 
 

@@ -68,8 +68,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.ChurchSchedule
-import com.example.data.ScheduleCategory
+import com.example.data.DynamicCategoryItem
 import com.example.data.UiState
+import com.example.data.resolveScheduleCategoryLabel
 import com.example.ui.components.CategoryFilterRow
 import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
@@ -80,12 +81,14 @@ import com.example.ui.i18n.tr
 import com.example.ui.theme.HarvestGold
 import com.example.ui.theme.SanctuaryPine
 import com.example.ui.theme.SanctuaryPineDeep
+import kotlin.math.abs
 
 @Composable
 fun SchedulesScreen(
     schedulesState: UiState<List<ChurchSchedule>>,
+    categories: List<DynamicCategoryItem>,
     searchQuery: String,
-    selectedCategory: ScheduleCategory?,
+    selectedCategory: String?,
     bookmarkedIds: Set<String>,
     isAdmin: Boolean,
     isBusy: Boolean,
@@ -93,7 +96,7 @@ fun SchedulesScreen(
     focusedScheduleId: String?,
     onConsumeFocusedSchedule: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onSelectCategory: (ScheduleCategory?) -> Unit,
+    onSelectCategory: (String?) -> Unit,
     onToggleBookmark: (ChurchSchedule) -> Unit,
     onToggleFeaturedInNews: (ChurchSchedule) -> Unit,
     onEditSchedule: (ChurchSchedule) -> Unit,
@@ -114,7 +117,8 @@ fun SchedulesScreen(
 
     val filteredSchedules = remember(allSchedules, searchQuery, selectedCategory) {
         allSchedules.filter { item ->
-            val matchesCat = selectedCategory == null || item.resolvedCategory() == selectedCategory
+            val matchesCat = selectedCategory == null ||
+                item.category.equals(selectedCategory, ignoreCase = true)
             val q = searchQuery.trim()
             val matchesQuery = q.isEmpty() ||
                 item.title.contains(q, ignoreCase = true) ||
@@ -134,6 +138,7 @@ fun SchedulesScreen(
         BackHandler { selectedScheduleId = null }
         ScheduleDetailPane(
             schedule = activeSchedule,
+            categories = categories,
             isBookmarked = bookmarkedIds.contains(activeSchedule.id),
             isAdmin = isAdmin,
             isBusy = isBusy,
@@ -155,6 +160,7 @@ fun SchedulesScreen(
         Row(modifier = modifier.fillMaxSize()) {
             ScheduleListPane(
                 schedulesState = schedulesState,
+                categories = categories,
                 filteredSchedules = filteredSchedules,
                 searchQuery = searchQuery,
                 selectedCategory = selectedCategory,
@@ -179,6 +185,7 @@ fun SchedulesScreen(
                 if (activeSchedule != null) {
                     ScheduleDetailPane(
                         schedule = activeSchedule,
+                        categories = categories,
                         isBookmarked = bookmarkedIds.contains(activeSchedule.id),
                         isAdmin = isAdmin,
                         isBusy = isBusy,
@@ -209,6 +216,7 @@ fun SchedulesScreen(
     } else {
         ScheduleListPane(
             schedulesState = schedulesState,
+            categories = categories,
             filteredSchedules = filteredSchedules,
             searchQuery = searchQuery,
             selectedCategory = selectedCategory,
@@ -228,14 +236,15 @@ fun SchedulesScreen(
 @Composable
 private fun ScheduleListPane(
     schedulesState: UiState<List<ChurchSchedule>>,
+    categories: List<DynamicCategoryItem>,
     filteredSchedules: List<ChurchSchedule>,
     searchQuery: String,
-    selectedCategory: ScheduleCategory?,
+    selectedCategory: String?,
     selectedScheduleId: String?,
     bookmarkedIds: Set<String>,
     isAdmin: Boolean,
     onSearchQueryChange: (String) -> Unit,
-    onSelectCategory: (ScheduleCategory?) -> Unit,
+    onSelectCategory: (String?) -> Unit,
     onScheduleClick: (ChurchSchedule) -> Unit,
     onToggleBookmark: (ChurchSchedule) -> Unit,
     onAddSchedule: () -> Unit,
@@ -265,11 +274,17 @@ private fun ScheduleListPane(
 
         item(key = "schedule_chips") {
             val lang = LocalAppLanguage.current
+            val selectedItem = remember(categories, selectedCategory) {
+                selectedCategory?.let { code ->
+                    categories.firstOrNull { it.resolvedCode().equals(code, ignoreCase = true) }
+                }
+            }
             CategoryFilterRow(
-                items = ScheduleCategory.entries,
-                selected = selectedCategory,
+                items = categories,
+                selected = selectedItem,
                 labelProvider = { it.localizedLabel(lang) },
-                onSelect = onSelectCategory
+                keyProvider = { it.resolvedCode() },
+                onSelect = { item -> onSelectCategory(item?.resolvedCode()) }
             )
         }
 
@@ -321,6 +336,7 @@ private fun ScheduleListPane(
                     items(filteredSchedules, key = { it.id }) { schedule ->
                         ScheduleTimelineCard(
                             schedule = schedule,
+                            categories = categories,
                             isSelected = schedule.id == selectedScheduleId,
                             isBookmarked = bookmarkedIds.contains(schedule.id),
                             onClick = { onScheduleClick(schedule) },
@@ -406,19 +422,29 @@ private fun ScheduleSpotlightBanner(
 @Composable
 private fun ScheduleTimelineCard(
     schedule: ChurchSchedule,
+    categories: List<DynamicCategoryItem>,
     isSelected: Boolean,
     isBookmarked: Boolean,
     onClick: () -> Unit,
     onToggleBookmark: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val accentColor = when (schedule.resolvedCategory()) {
-        ScheduleCategory.IBADAH -> SanctuaryPine
-        ScheduleCategory.DOA -> HarvestGold
-        ScheduleCategory.PEMUDA -> MaterialTheme.colorScheme.tertiary
-        ScheduleCategory.SEKOLAH_MINGGU -> Color(0xFF2B7A9E)
-        ScheduleCategory.PERSEKUTUAN -> Color(0xFF5B7A3D)
-        ScheduleCategory.RAPAT -> MaterialTheme.colorScheme.secondary
+    val accentPalette = listOf(
+        SanctuaryPine,
+        HarvestGold,
+        MaterialTheme.colorScheme.tertiary,
+        Color(0xFF2B7A9E),
+        Color(0xFF5B7A3D),
+        MaterialTheme.colorScheme.secondary
+    )
+    val accentColor = when (schedule.category.uppercase()) {
+        "IBADAH" -> SanctuaryPine
+        "DOA" -> HarvestGold
+        "PEMUDA" -> MaterialTheme.colorScheme.tertiary
+        "SEKOLAH_MINGGU" -> Color(0xFF2B7A9E)
+        "PERSEKUTUAN" -> Color(0xFF5B7A3D)
+        "RAPAT" -> MaterialTheme.colorScheme.secondary
+        else -> accentPalette[abs(schedule.category.hashCode()) % accentPalette.size]
     }
 
     Card(
@@ -467,7 +493,7 @@ private fun ScheduleTimelineCard(
                             color = accentColor.copy(alpha = 0.14f)
                         ) {
                             Text(
-                                text = schedule.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                                text = resolveScheduleCategoryLabel(schedule.category, categories, LocalAppLanguage.current),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accentColor,
                                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
@@ -590,6 +616,7 @@ private fun ScheduleMetaLine(icon: ImageVector, text: String) {
 @Composable
 private fun ScheduleDetailPane(
     schedule: ChurchSchedule,
+    categories: List<DynamicCategoryItem>,
     isBookmarked: Boolean,
     isAdmin: Boolean,
     isBusy: Boolean,
@@ -654,7 +681,7 @@ private fun ScheduleDetailPane(
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
             Text(
-                text = schedule.resolvedCategory().localizedLabel(LocalAppLanguage.current),
+                text = resolveScheduleCategoryLabel(schedule.category, categories, LocalAppLanguage.current),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)

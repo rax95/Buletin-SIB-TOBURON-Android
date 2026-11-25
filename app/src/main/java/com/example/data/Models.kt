@@ -18,6 +18,70 @@ sealed interface UiState<out T> {
     data class Error(val message: String) : UiState<Nothing>
 }
 
+@Keep
+@IgnoreExtraProperties
+data class DynamicCategoryItem(
+    @DocumentId val id: String = "",
+    val code: String = "",
+    val labelMs: String = "",
+    val labelEn: String = "",
+    val sortOrder: Int = 0,
+    val updatedBy: String = "",
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    fun resolvedCode(): String = code.ifBlank { id }
+
+    fun localizedLabel(lang: AppLanguage = AppLanguageManager.current()): String =
+        if (lang == AppLanguage.EN) {
+            labelEn.ifBlank { labelMs }
+        } else {
+            labelMs.ifBlank { labelEn }
+        }
+}
+
+fun generateUniqueCategoryCode(rawLabel: String, existingCodes: Set<String>): String {
+    val sanitized = rawLabel
+        .trim()
+        .uppercase(Locale.US)
+        .replace(Regex("[^A-Z0-9]+"), "_")
+        .trim('_')
+        .take(34)
+        .ifBlank { "KATEGORI" }
+    val normalizedExisting = existingCodes.map { it.uppercase(Locale.US) }.toSet()
+    if (sanitized !in normalizedExisting) return sanitized
+    var counter = 2
+    while (counter <= 999) {
+        val candidate = "${sanitized.take(32)}_$counter"
+        if (candidate !in normalizedExisting) return candidate
+        counter++
+    }
+    return "KAT_${System.currentTimeMillis().toString().takeLast(6)}"
+}
+
+fun resolveNewsCategoryLabel(
+    code: String,
+    categories: List<DynamicCategoryItem>,
+    lang: AppLanguage = AppLanguageManager.current()
+): String {
+    val dynamicMatch = categories.firstOrNull { it.resolvedCode().equals(code, ignoreCase = true) }
+    if (dynamicMatch != null) return dynamicMatch.localizedLabel(lang)
+    val enumMatch = NewsCategory.entries.firstOrNull { it.code.equals(code, ignoreCase = true) }
+    if (enumMatch != null) return enumMatch.localizedLabel(lang)
+    return code.replace('_', ' ').trim().ifBlank { NewsCategory.WARTA.localizedLabel(lang) }
+}
+
+fun resolveScheduleCategoryLabel(
+    code: String,
+    categories: List<DynamicCategoryItem>,
+    lang: AppLanguage = AppLanguageManager.current()
+): String {
+    val dynamicMatch = categories.firstOrNull { it.resolvedCode().equals(code, ignoreCase = true) }
+    if (dynamicMatch != null) return dynamicMatch.localizedLabel(lang)
+    val enumMatch = ScheduleCategory.entries.firstOrNull { it.code.equals(code, ignoreCase = true) }
+    if (enumMatch != null) return enumMatch.localizedLabel(lang)
+    return code.replace('_', ' ').trim().ifBlank { ScheduleCategory.IBADAH.localizedLabel(lang) }
+}
+
 enum class NewsCategory(val code: String, val label: String, val labelEn: String) {
     WARTA("WARTA", "Warta Jemaat", "Church Bulletin"),
     PENGUMUMAN("PENGUMUMAN", "Pengumuman", "Announcements"),
@@ -31,6 +95,17 @@ enum class NewsCategory(val code: String, val label: String, val labelEn: String
     companion object {
         fun fromCode(raw: String?): NewsCategory =
             entries.firstOrNull { it.code == raw } ?: WARTA
+
+        fun defaultCategoryItems(): List<DynamicCategoryItem> =
+            entries.mapIndexed { index, item ->
+                DynamicCategoryItem(
+                    id = item.code,
+                    code = item.code,
+                    labelMs = item.label,
+                    labelEn = item.labelEn,
+                    sortOrder = index
+                )
+            }
     }
 }
 
@@ -48,6 +123,17 @@ enum class ScheduleCategory(val code: String, val label: String, val labelEn: St
     companion object {
         fun fromCode(raw: String?): ScheduleCategory =
             entries.firstOrNull { it.code == raw } ?: IBADAH
+
+        fun defaultCategoryItems(): List<DynamicCategoryItem> =
+            entries.mapIndexed { index, item ->
+                DynamicCategoryItem(
+                    id = item.code,
+                    code = item.code,
+                    labelMs = item.label,
+                    labelEn = item.labelEn,
+                    sortOrder = index
+                )
+            }
     }
 }
 

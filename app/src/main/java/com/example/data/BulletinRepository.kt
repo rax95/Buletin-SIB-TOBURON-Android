@@ -384,7 +384,7 @@ class BulletinRepository(
         title: String,
         summary: String,
         content: String,
-        category: NewsCategory,
+        categoryCode: String,
         authorName: String,
         coverPreset: CoverPreset,
         imageUrl: String?,
@@ -398,10 +398,14 @@ class BulletinRepository(
             val cleanTitle = title.trim()
             val cleanSummary = summary.trim()
             val cleanContent = content.trim()
+            val cleanCategory = categoryCode.trim()
             val cleanAuthor = authorName.trim().ifBlank { "Admin SIB Toburon" }.take(80)
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
 
+            require(cleanCategory.matches(Regex("^[a-zA-Z0-9_\\-]{1,40}$"))) {
+                AppLanguageManager.tr("Kategori berita tidak sah.", "Invalid news category.")
+            }
             require(cleanTitle.length in 3..160) {
                 AppLanguageManager.tr("Tajuk berita mestilah antara 3 hingga 160 aksara.", "News title must be 3 to 160 characters.")
             }
@@ -424,7 +428,7 @@ class BulletinRepository(
                 "title" to cleanTitle,
                 "summary" to cleanSummary,
                 "content" to cleanContent,
-                "category" to category.code,
+                "category" to cleanCategory,
                 "authorId" to uid,
                 "authorName" to cleanAuthor,
                 "coverPreset" to coverPreset.code,
@@ -469,7 +473,7 @@ class BulletinRepository(
         title: String,
         summary: String,
         content: String,
-        category: NewsCategory,
+        categoryCode: String,
         authorName: String,
         coverPreset: CoverPreset,
         imageUrl: String?,
@@ -485,10 +489,14 @@ class BulletinRepository(
             val cleanTitle = title.trim()
             val cleanSummary = summary.trim()
             val cleanContent = content.trim()
+            val cleanCategory = categoryCode.trim()
             val cleanAuthor = authorName.trim().ifBlank { "Admin SIB Toburon" }.take(80)
             val cleanUrl = imageUrl?.trim()?.takeIf { it.isNotBlank() }
             val cleanBase64 = imageBase64?.takeIf { it.isNotBlank() }
 
+            require(cleanCategory.matches(Regex("^[a-zA-Z0-9_\\-]{1,40}$"))) {
+                AppLanguageManager.tr("Kategori berita tidak sah.", "Invalid news category.")
+            }
             require(cleanTitle.length in 3..160) {
                 AppLanguageManager.tr("Tajuk berita mestilah antara 3 hingga 160 aksara.", "News title must be 3 to 160 characters.")
             }
@@ -509,7 +517,7 @@ class BulletinRepository(
                 "title" to cleanTitle,
                 "summary" to cleanSummary,
                 "content" to cleanContent,
-                "category" to category.code,
+                "category" to cleanCategory,
                 "authorName" to cleanAuthor,
                 "coverPreset" to coverPreset.code,
                 "imageUrl" to cleanUrl,
@@ -664,7 +672,7 @@ class BulletinRepository(
     suspend fun createSchedule(
         title: String,
         description: String,
-        category: ScheduleCategory,
+        categoryCode: String,
         dateLabel: String,
         timeLabel: String,
         location: String,
@@ -678,11 +686,15 @@ class BulletinRepository(
             val uid = requireUserId()
             val cleanTitle = title.trim()
             val cleanDesc = description.trim()
+            val cleanCategory = categoryCode.trim()
             val cleanDate = dateLabel.trim()
             val cleanTime = timeLabel.trim()
             val cleanLocation = location.trim()
             val cleanSpeaker = speaker.trim()
 
+            require(cleanCategory.matches(Regex("^[a-zA-Z0-9_\\-]{1,40}$"))) {
+                AppLanguageManager.tr("Kategori jadual tidak sah.", "Invalid schedule category.")
+            }
             require(cleanTitle.length in 3..140) {
                 AppLanguageManager.tr("Nama kegiatan mestilah 3-140 aksara.", "Activity name must be 3-140 characters.")
             }
@@ -710,7 +722,7 @@ class BulletinRepository(
             val payload = mapOf(
                 "title" to cleanTitle,
                 "description" to cleanDesc,
-                "category" to category.code,
+                "category" to cleanCategory,
                 "dateLabel" to cleanDate,
                 "timeLabel" to cleanTime,
                 "location" to cleanLocation,
@@ -754,7 +766,7 @@ class BulletinRepository(
         scheduleId: String,
         title: String,
         description: String,
-        category: ScheduleCategory,
+        categoryCode: String,
         dateLabel: String,
         timeLabel: String,
         location: String,
@@ -770,11 +782,15 @@ class BulletinRepository(
             require(scheduleId.isNotBlank()) { AppLanguageManager.tr("ID jadual tidak sah.", "Invalid schedule ID.") }
             val cleanTitle = title.trim()
             val cleanDesc = description.trim()
+            val cleanCategory = categoryCode.trim()
             val cleanDate = dateLabel.trim()
             val cleanTime = timeLabel.trim()
             val cleanLocation = location.trim()
             val cleanSpeaker = speaker.trim()
 
+            require(cleanCategory.matches(Regex("^[a-zA-Z0-9_\\-]{1,40}$"))) {
+                AppLanguageManager.tr("Kategori jadual tidak sah.", "Invalid schedule category.")
+            }
             require(cleanTitle.length in 3..140) {
                 AppLanguageManager.tr("Nama kegiatan mestilah 3-140 aksara.", "Activity name must be 3-140 characters.")
             }
@@ -800,7 +816,7 @@ class BulletinRepository(
             val updates = mapOf(
                 "title" to cleanTitle,
                 "description" to cleanDesc,
-                "category" to category.code,
+                "category" to cleanCategory,
                 "dateLabel" to cleanDate,
                 "timeLabel" to cleanTime,
                 "location" to cleanLocation,
@@ -2036,6 +2052,219 @@ class BulletinRepository(
         }
     }
 
+    // --- DYNAMIC NEWS & SCHEDULE CATEGORIES ---
+
+    fun observeNewsCategories(uid: String?): Flow<List<DynamicCategoryItem>> =
+        observeDynamicCategories(
+            uid = uid,
+            collection = COLLECTION_NEWS_CATEGORIES,
+            defaults = NewsCategory.defaultCategoryItems()
+        )
+
+    fun observeScheduleCategories(uid: String?): Flow<List<DynamicCategoryItem>> =
+        observeDynamicCategories(
+            uid = uid,
+            collection = COLLECTION_SCHEDULE_CATEGORIES,
+            defaults = ScheduleCategory.defaultCategoryItems()
+        )
+
+    private fun observeDynamicCategories(
+        uid: String?,
+        collection: String,
+        defaults: List<DynamicCategoryItem>
+    ): Flow<List<DynamicCategoryItem>> =
+        db.collection(collection)
+            .snapshots()
+            .map { snapshot ->
+                if (snapshot.documents.isEmpty()) {
+                    defaults
+                } else {
+                    snapshot.toObjects(
+                        DynamicCategoryItem::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    )
+                        .filter { it.resolvedCode().isNotBlank() }
+                        .sortedWith(
+                            compareBy<DynamicCategoryItem> { it.sortOrder }
+                                .thenBy { it.labelMs.lowercase() }
+                        )
+                        .ifEmpty { defaults }
+                }
+            }
+            .catch { error ->
+                logStreamErrorIfActive(uid, error, OperationType.LIST, collection)
+                emit(defaults)
+            }
+
+    suspend fun saveCategoryItem(
+        collection: String,
+        defaults: List<DynamicCategoryItem>,
+        existingCode: String?,
+        labelMs: String,
+        labelEn: String
+    ): Result<Unit> {
+        var docPath = collection
+        return try {
+            val uid = requireUserId()
+            val cleanMs = labelMs.trim().take(60)
+            val cleanEn = labelEn.trim().ifBlank { cleanMs }.take(60)
+
+            require(cleanMs.length in 1..60) {
+                AppLanguageManager.tr("Nama kategori wajib diisi (1–60 aksara).", "Category name is required (1–60 characters).")
+            }
+            require(cleanEn.length in 1..60) {
+                AppLanguageManager.tr("Nama kategori (Inggeris) mestilah 1–60 aksara.", "English category name must be 1–60 characters.")
+            }
+
+            val existingSnap = db.collection(collection).get().await()
+            if (existingSnap.isEmpty) {
+                val batch = db.batch()
+                var maxOrder = 0
+                var updatedExisting = false
+                defaults.forEachIndexed { idx, def ->
+                    val code = def.resolvedCode()
+                    val docRef = db.collection(collection).document(code)
+                    val isEditedDefault = !existingCode.isNullOrBlank() && code.equals(existingCode, ignoreCase = true)
+                    if (isEditedDefault) updatedExisting = true
+                    batch.set(
+                        docRef,
+                        mapOf(
+                            "code" to code,
+                            "labelMs" to if (isEditedDefault) cleanMs else def.labelMs,
+                            "labelEn" to if (isEditedDefault) cleanEn else def.labelEn,
+                            "sortOrder" to idx,
+                            "updatedBy" to uid,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                    maxOrder = idx + 1
+                }
+                if (existingCode.isNullOrBlank() || !updatedExisting) {
+                    val code = existingCode?.trim()?.takeIf { it.isNotBlank() }
+                        ?: generateUniqueCategoryCode(cleanMs, defaults.map { it.resolvedCode() }.toSet())
+                    val docRef = db.collection(collection).document(code)
+                    docPath = docRef.path
+                    batch.set(
+                        docRef,
+                        mapOf(
+                            "code" to code,
+                            "labelMs" to cleanMs,
+                            "labelEn" to cleanEn,
+                            "sortOrder" to maxOrder,
+                            "updatedBy" to uid,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                batch.commit().await()
+            } else if (!existingCode.isNullOrBlank()) {
+                val cleanCode = existingCode.trim()
+                val docRef = db.collection(collection).document(cleanCode)
+                docPath = docRef.path
+                val existingDoc = existingSnap.documents.firstOrNull { it.id == cleanCode }
+                if (existingDoc != null) {
+                    docRef.update(
+                        mapOf(
+                            "labelMs" to cleanMs,
+                            "labelEn" to cleanEn,
+                            "updatedBy" to uid,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                } else {
+                    val nextOrder = existingSnap.documents.size
+                    docRef.set(
+                        mapOf(
+                            "code" to cleanCode,
+                            "labelMs" to cleanMs,
+                            "labelEn" to cleanEn,
+                            "sortOrder" to nextOrder,
+                            "updatedBy" to uid,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                }
+            } else {
+                val existingCodes = existingSnap.documents.map { it.id }.toSet()
+                val newCode = generateUniqueCategoryCode(cleanMs, existingCodes)
+                val maxSortOrder = existingSnap.documents.maxOfOrNull { doc ->
+                    (doc.get("sortOrder") as? Number)?.toInt() ?: 0
+                } ?: existingSnap.documents.size
+                val docRef = db.collection(collection).document(newCode)
+                docPath = docRef.path
+                docRef.set(
+                    mapOf(
+                        "code" to newCode,
+                        "labelMs" to cleanMs,
+                        "labelEn" to cleanEn,
+                        "sortOrder" to (maxSortOrder + 1),
+                        "updatedBy" to uid,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteCategoryItem(
+        collection: String,
+        defaults: List<DynamicCategoryItem>,
+        code: String
+    ): Result<Unit> {
+        var docPath = "$collection/$code"
+        return try {
+            val uid = requireUserId()
+            val cleanCode = code.trim()
+            require(cleanCode.isNotBlank()) {
+                AppLanguageManager.tr("Kod kategori tidak sah.", "Invalid category code.")
+            }
+
+            val existingSnap = db.collection(collection).get().await()
+            if (existingSnap.isEmpty) {
+                val remaining = defaults.filterNot { it.resolvedCode().equals(cleanCode, ignoreCase = true) }
+                require(remaining.isNotEmpty()) {
+                    AppLanguageManager.tr("Sekurang-kurangnya satu kategori mesti dikekalkan.", "At least one category must remain.")
+                }
+                val batch = db.batch()
+                remaining.forEachIndexed { idx, def ->
+                    val defCode = def.resolvedCode()
+                    batch.set(
+                        db.collection(collection).document(defCode),
+                        mapOf(
+                            "code" to defCode,
+                            "labelMs" to def.labelMs,
+                            "labelEn" to def.labelEn,
+                            "sortOrder" to idx,
+                            "updatedBy" to uid,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                batch.commit().await()
+            } else {
+                val remainingDocs = existingSnap.documents.filterNot { it.id.equals(cleanCode, ignoreCase = true) }
+                require(remainingDocs.isNotEmpty()) {
+                    AppLanguageManager.tr("Sekurang-kurangnya satu kategori mesti dikekalkan.", "At least one category must remain.")
+                }
+                val docRef = db.collection(collection).document(cleanCode)
+                docPath = docRef.path
+                docRef.delete().await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docPath)
+            Result.failure(e)
+        }
+    }
+
     private fun unwrapFirestoreException(error: Throwable): FirebaseFirestoreException? =
         generateSequence(error) { it.cause }
             .filterIsInstance<FirebaseFirestoreException>()
@@ -2057,5 +2286,7 @@ class BulletinRepository(
 
     companion object {
         const val BOOTSTRAPPED_ADMIN_EMAIL = "Raxxon47@gmail.com"
+        const val COLLECTION_NEWS_CATEGORIES = "news_categories"
+        const val COLLECTION_SCHEDULE_CATEGORIES = "schedule_categories"
     }
 }
