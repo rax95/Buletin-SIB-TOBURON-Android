@@ -466,8 +466,8 @@ object MemberExportUtils {
                 // Footer
                 canvas.drawText(
                     AppLanguageManager.tr(
-                        "Buletin SIB Toburon • Dokumen Rasmi Pengurusan Admin",
-                        "Buletin SIB Toburon • Official Admin Directory Report"
+                        "SIB Toburon • Dokumen Rasmi Pengurusan Admin",
+                        "SIB Toburon • Official Admin Directory Report"
                     ),
                     marginX,
                     pageHeight - 18f,

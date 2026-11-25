@@ -61,8 +61,8 @@ class BulletinMessagingService : FirebaseMessagingService() {
         val body = data["body"]
             ?: message.notification?.body
             ?: AppLanguageManager.tr(
-                "Terdapat kemas kini terbaharu di Buletin SIB Toburon.",
-                "There is a new update in Buletin SIB Toburon."
+                "Terdapat kemas kini terbaharu di SIB Toburon.",
+                "There is a new update in SIB Toburon."
             )
 
         BulletinNotificationManager.showBulletinNotification(

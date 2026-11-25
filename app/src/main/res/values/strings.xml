@@ -1,8 +1,11 @@
 <resources>
-    <string name="app_name">Buletin SIB Toburon</string>
+    <string name="app_name">SIB Toburon</string>
     <string name="app_subtitle">Warta, Jadual &amp; Galeri Jemaat Masa Nyata</string>
     <string name="church_name">SIB Toburon</string>
     <string name="church_motto">Bertumbuh dalam Kasih, Bersatu dalam Pelayanan</string>
+    <string name="splash_motto">&quot;Muliakan TUHAN: Dari Lokal ke Global&quot;</string>
+    <string name="splash_scripture_ref">Kisah Para Rasul 1:8</string>
+    <string name="splash_period">SIB 2026-2028</string>
 
     <!-- Navigasi -->
     <string name="nav_news">Berita</string>
@@ -12,17 +15,16 @@
     <string name="nav_account">Akaun</string>
 
     <!-- Pengesahan -->
-    <string name="auth_welcome_title">Selamat Datang ke Buletin SIB Toburon</string>
+    <string name="auth_welcome_title">Selamat Datang ke SIB Toburon</string>
     <string name="auth_welcome_desc">Akses berita terkini, jadual ibadah dan kegiatan gereja, serta galeri foto jemaat yang disegerakkan secara masa nyata.</string>
     <string name="auth_sign_in_google">Log Masuk dengan Google</string>
-    <string name="auth_continue_guest">Masuk sebagai Tetamu (Lihat Buletin)</string>
+    <string name="auth_continue_guest">Masuk sebagai Tetamu</string>
     <string name="auth_guest_hint">Mod Tetamu boleh membaca Berita, Jadual, dan Galeri secara masa nyata tanpa akaun Google.</string>
     <string name="auth_signing_in">Menghubungkan akaun Google…</string>
     <string name="auth_sync_badge">Penyegerakan Masa Nyata Firebase</string>
     <string name="auth_sign_out">Log Keluar</string>
 
     <!-- Status & Tindakan -->
-    <string name="live_sync_active">Segerak Langsung</string>
     <string name="admin_badge">Admin Gereja</string>
     <string name="jemaat_badge">Jemaat SIB Toburon</string>
     <string name="guest_badge">Mod Tetamu (Baca Sahaja)</string>
@@ -61,7 +63,7 @@
     <string name="cd_clear_search">Padam carian</string>
 
     <!-- Notifikasi (FCM) -->
-    <string name="notif_channel_name">Kemas Kini Buletin SIB Toburon</string>
+    <string name="notif_channel_name">Kemas Kini SIB Toburon</string>
     <string name="notif_channel_desc">Notifikasi langsung untuk berita terkini dan jadual kegiatan gereja terbaharu</string>
     <string name="notif_title_section">Notifikasi Tolak Masa Nyata (FCM)</string>
     <string name="notif_enable_permission">Aktifkan Kebenaran Notifikasi</string>

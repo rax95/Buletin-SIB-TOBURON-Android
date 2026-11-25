@@ -1,8 +1,11 @@
 <resources>
-    <string name="app_name">Buletin SIB Toburon</string>
+    <string name="app_name">SIB Toburon</string>
     <string name="app_subtitle">Real-Time Church News, Schedule &amp; Gallery</string>
     <string name="church_name">SIB Toburon</string>
     <string name="church_motto">Growing in Love, United in Service</string>
+    <string name="splash_motto">&quot;Muliakan TUHAN: Dari Lokal ke Global&quot;</string>
+    <string name="splash_scripture_ref">Kisah Para Rasul 1:8</string>
+    <string name="splash_period">SIB 2026-2028</string>
 
     <!-- Navigation -->
     <string name="nav_news">News</string>
@@ -12,17 +15,16 @@
     <string name="nav_account">Account</string>
 
     <!-- Auth -->
-    <string name="auth_welcome_title">Welcome to Buletin SIB Toburon</string>
+    <string name="auth_welcome_title">Welcome to SIB Toburon</string>
     <string name="auth_welcome_desc">Access the latest church news, worship and event schedules, and congregation photo gallery synced in real time.</string>
     <string name="auth_sign_in_google">Sign in with Google</string>
-    <string name="auth_continue_guest">Continue as Guest (View Bulletin)</string>
+    <string name="auth_continue_guest">Continue as Guest</string>
     <string name="auth_guest_hint">Guest Mode lets you read News, Schedule, and Gallery in real time without a Google account.</string>
     <string name="auth_signing_in">Connecting Google account…</string>
     <string name="auth_sync_badge">Firebase Real-Time Sync</string>
     <string name="auth_sign_out">Sign Out</string>
 
     <!-- Status & Actions -->
-    <string name="live_sync_active">Live Sync</string>
     <string name="admin_badge">Church Admin</string>
     <string name="jemaat_badge">SIB Toburon Member</string>
     <string name="guest_badge">Guest Mode (Read Only)</string>
@@ -61,7 +63,7 @@
     <string name="cd_clear_search">Clear search query</string>
 
     <!-- Notifications (FCM) -->
-    <string name="notif_channel_name">Buletin SIB Toburon Updates</string>
+    <string name="notif_channel_name">SIB Toburon Updates</string>
     <string name="notif_channel_desc">Instant notifications for latest church news and event schedules</string>
     <string name="notif_title_section">Real-Time Push Notifications (FCM)</string>
     <string name="notif_enable_permission">Enable Notification Permission</string>

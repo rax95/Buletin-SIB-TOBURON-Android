@@ -17,8 +17,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.example.BuildConfig
 import com.example.MainActivity
 import com.example.R
+import com.example.data.AppVersionConfig
 import com.example.ui.i18n.AppLanguageManager
 import com.google.firebase.Firebase
 import com.google.firebase.messaging.messaging
@@ -34,6 +36,7 @@ object BulletinNotificationManager {
     private const val KEY_NEWS_ENABLED = "news_enabled"
     private const val KEY_SCHEDULES_ENABLED = "schedules_enabled"
     private const val KEY_FCM_TOKEN = "fcm_token"
+    private const val KEY_NOTIFIED_VERSION_CODE = "last_notified_update_version_code"
 
     const val CHANNEL_ID = "bulletin_updates_channel"
     const val TOPIC_NEWS = "sib_toburon_news"
@@ -46,6 +49,7 @@ object BulletinNotificationManager {
     const val TYPE_NEWS = "NEWS"
     const val TYPE_SCHEDULE = "SCHEDULE"
     const val TYPE_MEMBER_REGISTERED = "MEMBER_REGISTERED"
+    const val TYPE_APP_UPDATE = "APP_UPDATE"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -204,6 +208,7 @@ object BulletinNotificationManager {
         if (!isMasterPushEnabled(context)) return false
         return when {
             type.equals(TYPE_MEMBER_REGISTERED, ignoreCase = true) -> true
+            type.equals(TYPE_APP_UPDATE, ignoreCase = true) -> true
             type.equals(TYPE_SCHEDULE, ignoreCase = true) -> isScheduleNotificationsEnabled(context)
             else -> isNewsNotificationsEnabled(context)
         }
@@ -319,8 +324,42 @@ object BulletinNotificationManager {
             ),
             body = AppLanguageManager.tr(
                 "Anda akan menerima makluman masa nyata apabila berita atau jadual baharu diterbitkan.",
-                "You will receive real-time alerts whenever a new bulletin or church event is published."
+                "You will receive real-time alerts whenever a new news post or church event is published."
             ),
+            forceBypassCategoryCheck = true
+        )
+        return true
+    }
+
+    fun notifyAppUpdateAvailable(context: Context, config: AppVersionConfig): Boolean {
+        val appContext = context.applicationContext
+        if (!config.isUpdateAvailable(BuildConfig.VERSION_CODE)) return false
+        val lastNotifiedCode = prefs(appContext).getInt(KEY_NOTIFIED_VERSION_CODE, 0)
+        if (config.latestVersionCode <= lastNotifiedCode) return false
+
+        prefs(appContext).edit()
+            .putInt(KEY_NOTIFIED_VERSION_CODE, config.latestVersionCode)
+            .apply()
+
+        if (!hasNotificationPermission(appContext) || !isMasterPushEnabled(appContext)) {
+            return false
+        }
+
+        val title = AppLanguageManager.tr(
+            "Kemas Kini SIB Toburon v${config.latestVersionName} Tersedia",
+            "SIB Toburon Update v${config.latestVersionName} Available"
+        )
+        val body = config.releaseNotes.takeIf { it.isNotBlank() } ?: AppLanguageManager.tr(
+            "Versi baharu v${config.latestVersionName} (Kod ${config.latestVersionCode}) kini tersedia. Ketik untuk muat turun & kemas kini.",
+            "New version v${config.latestVersionName} (Build ${config.latestVersionCode}) is now available. Tap to download & update."
+        )
+
+        showBulletinNotification(
+            context = appContext,
+            type = TYPE_APP_UPDATE,
+            itemId = config.latestVersionCode.toString(),
+            title = title,
+            body = body,
             forceBypassCategoryCheck = true
         )
         return true
@@ -341,6 +380,7 @@ object BulletinNotificationManager {
 
         val normalizedType = when {
             type.equals(TYPE_MEMBER_REGISTERED, ignoreCase = true) -> TYPE_MEMBER_REGISTERED
+            type.equals(TYPE_APP_UPDATE, ignoreCase = true) -> TYPE_APP_UPDATE
             type.equals(TYPE_SCHEDULE, ignoreCase = true) -> TYPE_SCHEDULE
             else -> TYPE_NEWS
         }

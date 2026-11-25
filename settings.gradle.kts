@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "BuletinSIBToburon"
+rootProject.name = "SIBToburon"
 
 include(":app")

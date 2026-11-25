@@ -75,7 +75,6 @@ import com.example.ui.components.AdminMemberIdCardDialog
 import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
-import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.i18n.tr
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -221,7 +220,6 @@ fun MembersScreen(
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                         )
                                     }
-                                    LiveSyncStatusPill()
                                 }
 
                                 Spacer(Modifier.width(8.dp))

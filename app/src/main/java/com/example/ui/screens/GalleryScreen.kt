@@ -96,7 +96,6 @@ import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
 import com.example.ui.components.GalleryCommentComposerBar
 import com.example.ui.components.GalleryCommentsSection
-import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
 import kotlinx.coroutines.launch
@@ -201,28 +200,20 @@ fun GalleryScreen(
         ) {
             item(span = { GridItemSpan(columnCount) }, key = "gallery_header") {
                 Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = tr("Galeri Foto Interaktif", "Interactive Photo Gallery"),
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = tr(
-                                    "Ketik foto untuk zum, leret kiri/kanan lihat album, dan beri tanda suka",
-                                    "Tap to zoom, swipe left/right to view album photos, and show appreciation"
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        LiveSyncStatusPill()
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = tr("Galeri Foto Interaktif", "Interactive Photo Gallery"),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = tr(
+                                "Ketik foto untuk zum, leret kiri/kanan lihat album, dan beri tanda suka",
+                                "Tap to zoom, swipe left/right to view album photos, and show appreciation"
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     val lang = LocalAppLanguage.current

@@ -1,10 +1,12 @@
 package com.example.ui.components
 
+import android.view.ViewGroup
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -51,6 +54,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -63,7 +67,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -73,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.example.R
 import com.example.data.BaptismStatus
 import com.example.data.ChurchMemberDetail
@@ -348,19 +355,43 @@ fun AdminMemberIdCardDialog(
 
     Dialog(
         onDismissRequest = { if (!isBusy) onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-            shadowElevation = 10.dp,
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect {
+            dialogWindow?.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 20.dp)
-                .widthIn(max = 520.dp)
-                .testTag("member_detail_dialog")
+                .fillMaxSize()
+                .pointerInput(isBusy) {
+                    detectTapGestures {
+                        if (!isBusy) onDismiss()
+                    }
+                }
+                .safeDrawingPadding()
+                .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                shadowElevation = 10.dp,
+                modifier = Modifier
+                    .widthIn(max = 520.dp)
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures { /* absorb taps inside card */ }
+                    }
+                    .testTag("member_detail_dialog")
+            ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 MemberIdCardBanner(
                     subtitle = tr("KAD AHLI RASMI", "OFFICIAL MEMBER CARD"),
@@ -546,6 +577,7 @@ fun AdminMemberIdCardDialog(
                 }
             }
         }
+        }
     }
 }
 
@@ -580,7 +612,7 @@ private fun MemberIdCardBanner(
                     modifier = Modifier.weight(1f)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.app_icon_buletin),
+                        painter = painterResource(id = R.drawable.sib_toburon_logo),
                         contentDescription = tr("Logo Gereja SIB Toburon", "SIB Toburon Church Emblem"),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
@@ -1020,19 +1052,41 @@ private fun MemberIdCardFooterStrip(
     if (showEnlargedQr) {
         Dialog(
             onDismissRequest = { showEnlargedQr = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
         ) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 10.dp,
+            val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+            SideEffect {
+                dialogWindow?.setLayout(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .widthIn(max = 380.dp)
-                    .testTag("member_qr_enlarged_dialog")
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures { showEnlargedQr = false }
+                    }
+                    .safeDrawingPadding()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shadowElevation = 10.dp,
+                    modifier = Modifier
+                        .widthIn(max = 380.dp)
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectTapGestures { /* absorb taps inside card */ }
+                        }
+                        .testTag("member_qr_enlarged_dialog")
+                ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1124,6 +1178,7 @@ private fun MemberIdCardFooterStrip(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
             }
         }
     }

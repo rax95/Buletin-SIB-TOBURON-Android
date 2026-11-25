@@ -74,7 +74,6 @@ import com.example.ui.components.CategoryFilterRow
 import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
-import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.formatScheduleTimeDisplay
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
@@ -353,19 +352,12 @@ private fun ScheduleSpotlightBanner(
             .padding(20.dp)
     ) {
         Column {
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                LiveSyncStatusPill(darkBackdrop = true)
-                Text(
-                    text = tr("$totalCount Agenda Aktif", "$totalCount Active Events"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.86f)
-                )
-            }
-            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = tr("$totalCount Agenda Aktif", "$totalCount Active Events"),
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.86f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = tr("Jadual Kegiatan Gereja", "Church Activity Schedule"),
                 style = MaterialTheme.typography.headlineMedium,

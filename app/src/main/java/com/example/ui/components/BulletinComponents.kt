@@ -1,12 +1,6 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,18 +33,13 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -59,9 +48,7 @@ import com.example.data.CoverPreset
 import com.example.data.ImageUtils
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
-import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
-import com.example.ui.theme.LiveSyncEmerald
 import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
 
@@ -109,59 +96,6 @@ fun BulletinCoverImage(
                 contentDescription = contentDescription,
                 contentScale = contentScale,
                 modifier = modifier
-            )
-        }
-    }
-}
-
-@Composable
-fun LiveSyncStatusPill(
-    modifier: Modifier = Modifier,
-    darkBackdrop: Boolean = false
-) {
-    val transition = rememberInfiniteTransition(label = "live_sync_pulse")
-    val pulseAlpha by transition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_alpha"
-    )
-
-    val containerColor = if (darkBackdrop) {
-        Color.Black.copy(alpha = 0.42f)
-    } else {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-    }
-    val textColor = if (darkBackdrop) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    }
-
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = containerColor,
-        modifier = modifier
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .alpha(pulseAlpha)
-                    .clip(CircleShape)
-                    .background(LiveSyncEmerald)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = tr("Segerak Langsung", "Live Sync"),
-                style = MaterialTheme.typography.labelSmall,
-                color = textColor
             )
         }
     }

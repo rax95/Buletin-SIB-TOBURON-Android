@@ -1,6 +1,6 @@
 {
-  "name": "Buletin SIB Toburon",
-  "description": "Buletin digital real-time SIB Toburon untuk berita terkini, jadwal kegiatan gereja, dan galeri foto interaktif jemaat.",
+  "name": "SIB Toburon",
+  "description": "Aplikasi rasmi SIB Toburon untuk berita terkini, jadual kegiatan gereja, galeri foto interaktif jemaat, dan keahlian.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

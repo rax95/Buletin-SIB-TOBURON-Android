@@ -84,7 +84,6 @@ import com.example.ui.components.CommentReplyTarget
 import com.example.ui.components.EditorialSearchBar
 import com.example.ui.components.EmptyBulletinState
 import com.example.ui.components.ErrorStateCard
-import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NewsCommentComposerBar
 import com.example.ui.components.NewsCommentsSection
 import com.example.ui.components.formatIndonesianTimestamp
@@ -621,18 +620,17 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
                 .padding(18.dp)
         ) {
             Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                LiveSyncStatusPill(darkBackdrop = true)
                 if (isAdmin) {
                     Surface(
                         shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.secondary
                     ) {
                         Text(
-                            text = tr("Admin Buletin", "Bulletin Admin"),
+                            text = tr("Admin Gereja", "Church Admin"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondary,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -643,7 +641,7 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
 
             Column {
                 Text(
-                    text = tr("Buletin SIB Toburon", "SIB Toburon Bulletin"),
+                    text = tr("SIB Toburon", "SIB Toburon"),
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color.White
                 )

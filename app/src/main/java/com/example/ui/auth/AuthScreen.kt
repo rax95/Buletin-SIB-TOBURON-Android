@@ -163,7 +163,7 @@ fun AuthScreen(
                 modifier = Modifier.size(88.dp)
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.app_icon_buletin),
+                    painter = painterResource(id = R.drawable.sib_toburon_logo),
                     contentDescription = stringResource(R.string.app_name),
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -369,7 +369,7 @@ fun AuthScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = tr("Masuk sebagai Tetamu (Lihat Buletin)", "Continue as Guest (View Bulletin)"),
+                            text = tr("Masuk sebagai Tetamu", "Continue as Guest"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )

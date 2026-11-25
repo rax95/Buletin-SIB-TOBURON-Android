@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -53,6 +54,8 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
@@ -94,6 +97,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
+import com.example.BuildConfig
 import com.example.data.AdminMember
 import com.example.data.AppVersionConfig
 import com.example.data.ChurchMemberDetail
@@ -103,7 +107,6 @@ import com.example.data.UserBookmark
 import com.example.data.UserProfile
 import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.components.AppVersionFooterCard
-import com.example.ui.components.LiveSyncStatusPill
 import com.example.ui.components.NotificationSettingsCard
 import com.example.ui.components.OwnMemberIdCard
 import com.example.ui.components.PhotoSourceChooserDialog
@@ -146,6 +149,7 @@ fun ProfileAdminScreen(
     onAddMemberClick: () -> Unit,
     onOpenAddAdminDialog: () -> Unit,
     onRemoveAdminMember: (String) -> Unit,
+    onManageAppVersionClick: () -> Unit,
     onOpenUpdateNotice: () -> Unit,
     onUidCopied: () -> Unit,
     onNotificationPrefsUpdated: (newsEnabled: Boolean, schedulesEnabled: Boolean) -> Unit,
@@ -413,25 +417,22 @@ fun ProfileAdminScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Surface(
-                                        shape = RoundedCornerShape(50),
-                                        color = if (isAdmin) MaterialTheme.colorScheme.secondaryContainer
-                                        else MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Text(
-                                            text = if (isAdmin) {
-                                                tr("Admin Buletin", "Bulletin Admin")
-                                            } else {
-                                                tr("Jemaat SIB Toburon", "SIB Toburon Member")
-                                            },
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isAdmin) MaterialTheme.colorScheme.onSecondaryContainer
-                                            else MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                    LiveSyncStatusPill()
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = if (isAdmin) MaterialTheme.colorScheme.secondaryContainer
+                                    else MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Text(
+                                        text = if (isAdmin) {
+                                            tr("Admin Gereja", "Church Admin")
+                                        } else {
+                                            tr("Jemaat SIB Toburon", "SIB Toburon Member")
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isAdmin) MaterialTheme.colorScheme.onSecondaryContainer
+                                        else MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
                                 }
                             }
                         }
@@ -578,6 +579,121 @@ fun ProfileAdminScreen(
                                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text(tr("Tambah Ahli", "Add Member"))
+                                }
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                            // App Version & Direct Update Link Manager
+                            val publishedVersionName = appVersionConfig?.latestVersionName?.ifBlank { BuildConfig.VERSION_NAME }
+                                ?: BuildConfig.VERSION_NAME
+                            val publishedVersionCode = appVersionConfig?.latestVersionCode ?: BuildConfig.VERSION_CODE
+                            val configuredUrl = appVersionConfig?.updateUrl.orEmpty()
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(14.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.SystemUpdate,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = tr("Pengurus Versi Aplikasi", "App Version Manager"),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = tr(
+                                                    "Versi terbitan: v$publishedVersionName (Kod $publishedVersionCode)",
+                                                    "Published version: v$publishedVersionName (Build $publishedVersionCode)"
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (appVersionConfig?.forceUpdate == true) {
+                                            Surface(
+                                                shape = RoundedCornerShape(50),
+                                                color = MaterialTheme.colorScheme.errorContainer
+                                            ) {
+                                                Text(
+                                                    text = tr("Wajib", "Required"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Link,
+                                            contentDescription = null,
+                                            tint = if (configuredUrl.startsWith("https://")) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = if (configuredUrl.startsWith("https://")) {
+                                                configuredUrl
+                                            } else {
+                                                tr(
+                                                    "Belum ada pautan muat turun terus ditetapkan",
+                                                    "No direct update download link set yet"
+                                                )
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (configuredUrl.startsWith("https://")) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+
+                                    FilledTonalButton(
+                                        onClick = onManageAppVersionClick,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("admin_manage_version_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Tune,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            tr(
+                                                "Urus Versi & Pautan Kemas Kini",
+                                                "Manage Version & Direct Update Link"
+                                            )
+                                        )
+                                    }
                                 }
                             }
 
@@ -1137,19 +1253,16 @@ private fun GuestAccountView(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = tr("Mod Tetamu", "Guest Mode"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                            LiveSyncStatusPill()
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = tr("Mod Tetamu", "Guest Mode"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(

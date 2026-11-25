@@ -7,6 +7,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -93,6 +96,7 @@ import com.example.data.UiState
 import com.example.notifications.BulletinNotificationManager
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.signOutUser
+import com.example.ui.components.AdminAppVersionDialog
 import com.example.ui.components.AdminMemberAddDialog
 import com.example.ui.components.AdminMemberEditorDialog
 import com.example.ui.components.AdminMemberExportDialog
@@ -111,6 +115,7 @@ import com.example.ui.screens.MembersScreen
 import com.example.ui.screens.NewsScreen
 import com.example.ui.screens.ProfileAdminScreen
 import com.example.ui.screens.SchedulesScreen
+import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.BuletinSibTheme
 import com.example.viewmodel.BulletinViewModel
 import com.google.firebase.Firebase
@@ -188,6 +193,7 @@ fun AppContent(
 ) {
     var currentUser by remember { mutableStateOf<FirebaseUser?>(Firebase.auth.currentUser) }
     var isGuestMode by rememberSaveable { mutableStateOf(false) }
+    var showSplash by rememberSaveable { mutableStateOf(true) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -207,37 +213,50 @@ fun AppContent(
         }
     }
 
-    val user = currentUser
-    if (user == null && !isGuestMode) {
-        AuthScreen(
-            onAuthSuccess = {
-                currentUser = Firebase.auth.currentUser
-                isGuestMode = false
-            },
-            onContinueAsGuest = {
-                isGuestMode = true
-            }
-        )
-    } else {
-        // Key by uid (or guest session key) so account switches cleanly tear down & recreate ViewModel/listeners
-        val sessionKey = user?.uid ?: "guest_readonly_session"
-        key(sessionKey) {
-            BuletinMainShell(
-                currentUser = user,
-                sessionKey = sessionKey,
-                pendingDeepLink = pendingDeepLink,
-                onConsumeDeepLink = onConsumeDeepLink,
-                onGoogleSignInSuccess = {
+    Box(modifier = Modifier.fillMaxSize()) {
+        val user = currentUser
+        if (user == null && !isGuestMode) {
+            AuthScreen(
+                onAuthSuccess = {
                     currentUser = Firebase.auth.currentUser
                     isGuestMode = false
                 },
-                onExitGuestMode = {
-                    isGuestMode = false
-                },
-                onSignedOut = {
-                    currentUser = null
-                    isGuestMode = false
+                onContinueAsGuest = {
+                    isGuestMode = true
                 }
+            )
+        } else {
+            // Key by uid (or guest session key) so account switches cleanly tear down & recreate ViewModel/listeners
+            val sessionKey = user?.uid ?: "guest_readonly_session"
+            key(sessionKey) {
+                BuletinMainShell(
+                    currentUser = user,
+                    sessionKey = sessionKey,
+                    isSplashVisible = showSplash,
+                    pendingDeepLink = pendingDeepLink,
+                    onConsumeDeepLink = onConsumeDeepLink,
+                    onGoogleSignInSuccess = {
+                        currentUser = Firebase.auth.currentUser
+                        isGuestMode = false
+                    },
+                    onExitGuestMode = {
+                        isGuestMode = false
+                    },
+                    onSignedOut = {
+                        currentUser = null
+                        isGuestMode = false
+                    }
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showSplash,
+            exit = fadeOut(animationSpec = tween(durationMillis = 360))
+        ) {
+            SplashScreen(
+                onFinished = { showSplash = false },
+                durationMillis = if (pendingDeepLink != null) 900L else 2200L
             )
         }
     }
@@ -247,6 +266,7 @@ fun AppContent(
 private fun BuletinMainShell(
     currentUser: FirebaseUser?,
     sessionKey: String,
+    isSplashVisible: Boolean,
     pendingDeepLink: Pair<String, String>?,
     onConsumeDeepLink: () -> Unit,
     onGoogleSignInSuccess: () -> Unit,
@@ -339,6 +359,7 @@ private fun BuletinMainShell(
     var pendingExportMembers by remember { mutableStateOf<List<ChurchMemberDetail>>(emptyList()) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
     var showMemberQrScanner by remember { mutableStateOf(false) }
+    var showVersionManagerDialog by remember { mutableStateOf(false) }
     var dismissedUpdateVersionCode by rememberSaveable { mutableStateOf(0) }
     var forceShowUpdateDialog by remember { mutableStateOf(false) }
     var dismissedPushOptInThisSession by rememberSaveable { mutableStateOf(false) }
@@ -436,11 +457,22 @@ private fun BuletinMainShell(
         }
     }
 
+    // Notify user whenever a newer app version is published in /app_config/version
+    LaunchedEffect(appVersionConfig) {
+        val config = appVersionConfig ?: return@LaunchedEffect
+        if (config.isUpdateAvailable(BuildConfig.VERSION_CODE)) {
+            BulletinNotificationManager.notifyAppUpdateAvailable(context, config)
+        }
+    }
+
     // Apply deep-link from tapped push notification
     LaunchedEffect(pendingDeepLink, isAdmin) {
         val deepLink = pendingDeepLink ?: return@LaunchedEffect
         val (type, itemId) = deepLink
         when {
+            type.equals(BulletinNotificationManager.TYPE_APP_UPDATE, ignoreCase = true) -> {
+                forceShowUpdateDialog = true
+            }
             type.equals(BulletinNotificationManager.TYPE_MEMBER_REGISTERED, ignoreCase = true) -> {
                 if (isAdmin) {
                     currentTab = BulletinTab.MEMBERS
@@ -653,7 +685,7 @@ private fun BuletinMainShell(
                                     .size(44.dp)
                             ) {
                                 Image(
-                                    painter = painterResource(id = R.drawable.app_icon_buletin),
+                                    painter = painterResource(id = R.drawable.sib_toburon_logo),
                                     contentDescription = stringResource(R.string.app_name),
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier
@@ -905,6 +937,7 @@ private fun BuletinMainShell(
                                 },
                                 onOpenAddAdminDialog = { showAddAdminDialog = true },
                                 onRemoveAdminMember = viewModel::removeAdminMember,
+                                onManageAppVersionClick = { showVersionManagerDialog = true },
                                 onOpenUpdateNotice = { forceShowUpdateDialog = true },
                                 onUidCopied = {
                                     viewModel.showSnackbar(
@@ -948,6 +981,57 @@ private fun BuletinMainShell(
                     }
                 }
             }
+        }
+
+        if (showMemberEditor && currentUser != null) {
+            AdminMemberEditorDialog(
+                initial = editingMember,
+                isBusy = isBusy,
+                onDismiss = { showMemberEditor = false },
+                onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, memberEmail ->
+                    viewModel.saveChurchMember(
+                        existingId = editingMember?.id,
+                        fullName = fullName,
+                        myKadNumber = myKadNumber,
+                        gender = gender,
+                        birthDateIso = birthDateIso,
+                        baptismStatus = baptismStatus,
+                        denomination = denomination,
+                        maritalStatus = maritalStatus,
+                        spouseName = spouseName,
+                        sibMembershipNumber = sibMembershipNumber,
+                        passportPhotoBase64 = passportPhotoBase64,
+                        memberEmail = memberEmail,
+                        onComplete = { showMemberEditor = false }
+                    )
+                }
+            )
+        }
+
+        if (showSelfMemberEditor && currentUser != null) {
+            AdminMemberEditorDialog(
+                initial = ownMemberDetail,
+                isSelfRegistration = true,
+                defaultFullName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUser.displayName,
+                defaultEmail = currentUser.email,
+                isBusy = isBusy,
+                onDismiss = { showSelfMemberEditor = false },
+                onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, _ ->
+                    viewModel.saveOwnChurchMember(
+                        fullName = fullName,
+                        myKadNumber = myKadNumber,
+                        gender = gender,
+                        birthDateIso = birthDateIso,
+                        baptismStatus = baptismStatus,
+                        denomination = denomination,
+                        maritalStatus = maritalStatus,
+                        spouseName = spouseName,
+                        sibMembershipNumber = sibMembershipNumber,
+                        passportPhotoBase64 = passportPhotoBase64,
+                        onComplete = { showSelfMemberEditor = false }
+                    )
+                }
+            )
         }
     }
 
@@ -1025,57 +1109,6 @@ private fun BuletinMainShell(
         )
     }
 
-    if (showMemberEditor && currentUser != null) {
-        AdminMemberEditorDialog(
-            initial = editingMember,
-            isBusy = isBusy,
-            onDismiss = { showMemberEditor = false },
-            onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, memberEmail ->
-                viewModel.saveChurchMember(
-                    existingId = editingMember?.id,
-                    fullName = fullName,
-                    myKadNumber = myKadNumber,
-                    gender = gender,
-                    birthDateIso = birthDateIso,
-                    baptismStatus = baptismStatus,
-                    denomination = denomination,
-                    maritalStatus = maritalStatus,
-                    spouseName = spouseName,
-                    sibMembershipNumber = sibMembershipNumber,
-                    passportPhotoBase64 = passportPhotoBase64,
-                    memberEmail = memberEmail,
-                    onComplete = { showMemberEditor = false }
-                )
-            }
-        )
-    }
-
-    if (showSelfMemberEditor && currentUser != null) {
-        AdminMemberEditorDialog(
-            initial = ownMemberDetail,
-            isSelfRegistration = true,
-            defaultFullName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUser.displayName,
-            defaultEmail = currentUser.email,
-            isBusy = isBusy,
-            onDismiss = { showSelfMemberEditor = false },
-            onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, _ ->
-                viewModel.saveOwnChurchMember(
-                    fullName = fullName,
-                    myKadNumber = myKadNumber,
-                    gender = gender,
-                    birthDateIso = birthDateIso,
-                    baptismStatus = baptismStatus,
-                    denomination = denomination,
-                    maritalStatus = maritalStatus,
-                    spouseName = spouseName,
-                    sibMembershipNumber = sibMembershipNumber,
-                    passportPhotoBase64 = passportPhotoBase64,
-                    onComplete = { showSelfMemberEditor = false }
-                )
-            }
-        )
-    }
-
     if (showMemberExportDialog && isAdmin && currentUser != null) {
         val currentMembersCount = (membersState as? UiState.Success)?.data?.size ?: 0
         AdminMemberExportDialog(
@@ -1118,8 +1151,27 @@ private fun BuletinMainShell(
         )
     }
 
+    if (showVersionManagerDialog && isAdmin && currentUser != null) {
+        AdminAppVersionDialog(
+            currentConfig = appVersionConfig,
+            isBusy = isBusy,
+            onDismiss = { showVersionManagerDialog = false },
+            onSave = { code, name, notes, url, force ->
+                viewModel.saveAppVersionConfig(
+                    latestVersionCode = code,
+                    latestVersionName = name,
+                    releaseNotes = notes,
+                    updateUrl = url,
+                    forceUpdate = force,
+                    onComplete = { showVersionManagerDialog = false }
+                )
+            }
+        )
+    }
+
     val versionNotice = appVersionConfig
-    val shouldShowUpdatePrompt = versionNotice != null &&
+    val shouldShowUpdatePrompt = !isSplashVisible &&
+        versionNotice != null &&
         versionNotice.isUpdateAvailable(BuildConfig.VERSION_CODE) &&
         (versionNotice.forceUpdate || forceShowUpdateDialog || dismissedUpdateVersionCode < versionNotice.latestVersionCode)
 
@@ -1132,7 +1184,7 @@ private fun BuletinMainShell(
             },
             onOpenUrlError = viewModel::showSnackbar
         )
-    } else if (shouldPromptPushOptIn && !dismissedPushOptInThisSession) {
+    } else if (!isSplashVisible && shouldPromptPushOptIn && !dismissedPushOptInThisSession) {
         PushNotificationOptInDialog(
             isAdmin = isAdmin,
             onEnabled = { newsEnabled, schedulesEnabled ->

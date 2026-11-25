@@ -19,7 +19,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -30,6 +32,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -284,7 +288,34 @@ fun AppUpdateAvailableDialog(
                     )
                 }
 
-                if (!hasValidUrl) {
+                if (hasValidUrl) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Link,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = config.updateUrl,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                } else {
                     Text(
                         text = tr(
                             "Sila dapatkan fail kemas kini versi terkini daripada pentadbir gereja SIB Toburon.",
@@ -314,7 +345,9 @@ fun AppUpdateAvailableDialog(
                             )
                         }
                     },
-                    modifier = Modifier.testTag("app_update_download_button")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("app_update_download_button")
                 ) {
                     Icon(
                         imageVector = Icons.Filled.OpenInNew,
@@ -322,12 +355,14 @@ fun AppUpdateAvailableDialog(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(tr("Muat Turun Kemas Kini", "Download Update"))
+                    Text(tr("Kemas Kini Sekarang", "Update Now"))
                 }
             } else if (!config.forceUpdate) {
                 Button(
                     onClick = onDismiss,
-                    modifier = Modifier.testTag("app_update_ok_button")
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("app_update_ok_button")
                 ) {
                     Text(tr("Faham", "Got It"))
                 }
@@ -359,6 +394,7 @@ fun AdminAppVersionDialog(
         forceUpdate: Boolean
     ) -> Unit
 ) {
+    val context = LocalContext.current
     var versionCodeText by remember(currentConfig) {
         mutableStateOf((currentConfig?.latestVersionCode ?: BuildConfig.VERSION_CODE).toString())
     }
@@ -387,7 +423,7 @@ fun AdminAppVersionDialog(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
@@ -399,8 +435,8 @@ fun AdminAppVersionDialog(
                 ) {
                     Text(
                         text = tr(
-                            "Binaan pada peranti ini: v${BuildConfig.VERSION_NAME} (Kod ${BuildConfig.VERSION_CODE}). Apabila anda terbitkan versi baharu, tetapkan Kod Versi lebih tinggi supaya semua pengguna menerima notis kemas kini.",
-                            "This device's build: v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE}). When you release a newer build, set a higher Version Code so users automatically receive an update notice."
+                            "Binaan pada peranti ini: v${BuildConfig.VERSION_NAME} (Kod ${BuildConfig.VERSION_CODE}). Apabila anda terbitkan versi baharu, tetapkan Kod Versi lebih tinggi supaya semua pengguna menerima notifikasi & popup kemas kini.",
+                            "This device's build: v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE}). When you release a newer build, set a higher Version Code so users automatically receive a notification and update popup."
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -416,7 +452,7 @@ fun AdminAppVersionDialog(
                         value = versionName,
                         onValueChange = { versionName = it.take(32); validationError = null },
                         label = { Text(tr("Nama Versi *", "Version Name *")) },
-                        placeholder = { Text("1.1.0") },
+                        placeholder = { Text("1.2.0") },
                         singleLine = true,
                         modifier = Modifier
                             .weight(1.2f)
@@ -429,7 +465,7 @@ fun AdminAppVersionDialog(
                             validationError = null
                         },
                         label = { Text(tr("Kod Versi *", "Version Code *")) },
-                        placeholder = { Text("2") },
+                        placeholder = { Text("${BuildConfig.VERSION_CODE + 1}") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier
@@ -438,16 +474,100 @@ fun AdminAppVersionDialog(
                     )
                 }
 
-                OutlinedTextField(
-                    value = updateUrl,
-                    onValueChange = { updateUrl = it.take(500); validationError = null },
-                    label = { Text(tr("Pautan Muat Turun / Play Store (HTTPS)", "Download / Play Store URL (HTTPS)")) },
-                    placeholder = { Text("https://play.google.com/store/apps/details?id=...") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("admin_version_url_input")
-                )
+                // Dedicated Direct Update Link Section
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Link,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = tr(
+                                    "Pautan Langsung Kemas Kini App",
+                                    "Direct App Update Link"
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            text = tr(
+                                "Tampal pautan muat turun terus APK (cth. Google Drive, GitHub Releases) atau pautan Play Store bermula dengan https://.",
+                                "Paste a direct APK download link (e.g., Google Drive, GitHub Releases) or Play Store link starting with https://."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = updateUrl,
+                            onValueChange = { updateUrl = it.take(500); validationError = null },
+                            label = { Text(tr("Pautan Muat Turun Langsung (HTTPS)", "Direct Download Link (HTTPS)")) },
+                            placeholder = { Text("https://...") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Link, contentDescription = null)
+                            },
+                            trailingIcon = {
+                                if (updateUrl.isNotEmpty()) {
+                                    IconButton(onClick = { updateUrl = ""; validationError = null }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = tr("Padam pautan", "Clear link")
+                                        )
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_version_url_input")
+                        )
+                        val cleanPreviewUrl = updateUrl.trim()
+                        if (cleanPreviewUrl.startsWith("https://")) {
+                            TextButton(
+                                onClick = {
+                                    runCatching {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(cleanPreviewUrl)).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    }.onFailure {
+                                        validationError = AppLanguageManager.tr(
+                                            "Tidak dapat membuka pautan tersebut pada peranti.",
+                                            "Unable to open this link on the device."
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.End)
+                                    .testTag("admin_test_version_url_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(tr("Uji Pautan", "Test Link"))
+                            }
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = releaseNotes,

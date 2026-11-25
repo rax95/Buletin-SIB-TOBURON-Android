@@ -362,7 +362,7 @@ class BulletinRepository(
         topic: String,
         authorId: String
     ): Map<String, Any> {
-        val safeTitle = title.trim().take(160).let { if (it.length < 2) "Buletin SIB Toburon" else it }
+        val safeTitle = title.trim().take(160).let { if (it.length < 2) "SIB Toburon" else it }
         val safeBody = body.trim().take(320).let {
             if (it.length < 2) AppLanguageManager.tr("Kemas kini terbaharu tersedia.", "A new update is available.") else it
         }
@@ -443,7 +443,7 @@ class BulletinRepository(
                 batch.set(
                     notifRef,
                     buildNotificationEventPayload(
-                        title = AppLanguageManager.tr("Berita Baharu: $cleanTitle", "New Bulletin: $cleanTitle"),
+                        title = AppLanguageManager.tr("Berita Baharu: $cleanTitle", "Latest News: $cleanTitle"),
                         body = cleanSummary,
                         eventType = BulletinNotificationManager.TYPE_NEWS,
                         targetId = docRef.id,
@@ -526,7 +526,7 @@ class BulletinRepository(
                 batch.set(
                     notifRef,
                     buildNotificationEventPayload(
-                        title = AppLanguageManager.tr("Berita Baharu: $cleanTitle", "New Bulletin: $cleanTitle"),
+                        title = AppLanguageManager.tr("Berita Baharu: $cleanTitle", "Latest News: $cleanTitle"),
                         body = cleanSummary,
                         eventType = BulletinNotificationManager.TYPE_NEWS,
                         targetId = newsId,
