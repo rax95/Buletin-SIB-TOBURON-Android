@@ -1799,6 +1799,137 @@ test("Dynamic news and schedule categories allow public read, admin-only CRUD, a
   );
 });
 
+// 14. Web QR Member Registration (/app_config/member_registration + token-gated webreg_* creation)
+test("Admin manages /app_config/member_registration privately and valid QR token allows browser member registration", async () => {
+  const adminDb = adminContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(JEMAAT_ALICE, {
+    email: "webuser@gmail.com",
+    email_verified: true,
+  }).firestore();
+  const guestDb = testEnv.unauthenticatedContext().firestore();
+  const ts = pastDate(3000);
+  const validToken = "SibRegToken2026AbCdEf99";
+
+  // Admin creates /app_config/member_registration
+  await assertSucceeds(
+    adminDb.collection("app_config").doc("member_registration").set({
+      portalUrl: "https://gen-lang-client-0216024023.web.app",
+      accessToken: validToken,
+      enabled: true,
+      updatedBy: ADMIN_UID,
+      updatedAt: ts,
+    })
+  );
+
+  // Admin can read /app_config/member_registration; non-admin & guest CANNOT read secret token
+  await assertSucceeds(adminDb.collection("app_config").doc("member_registration").get());
+  await assertFails(aliceDb.collection("app_config").doc("member_registration").get());
+  await assertFails(guestDb.collection("app_config").doc("member_registration").get());
+
+  // Browser user with wrong token or invalid doc prefix CANNOT register
+  await assertFails(
+    guestDb.collection("church_members").doc("webreg_bad_01").set({
+      fullName: "Invalid Token User",
+      gender: "LELAKI",
+      baptismStatus: "BELUM_DIBAPTIS",
+      published: true,
+      authorId: "web_qr_reg",
+      registrationToken: "wrong_token_12345678",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(
+    guestDb.collection("church_members").doc("member_spoof_01").set({
+      fullName: "Wrong Prefix User",
+      gender: "LELAKI",
+      baptismStatus: "BELUM_DIBAPTIS",
+      published: true,
+      authorId: "web_qr_reg",
+      registrationToken: validToken,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+
+  // Browser/iOS user with valid registration token CAN register atomically into church_members + church_member_details + notification_events
+  const webId = "webreg_ios_test_01";
+  const webBatch = guestDb.batch();
+  webBatch.set(guestDb.collection("church_members").doc(webId), {
+    fullName: "Daniel iOS Safari",
+    gender: "LELAKI",
+    baptismStatus: "DIBAPTIS",
+    published: true,
+    authorId: "web_qr_reg",
+    registrationToken: validToken,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  webBatch.set(guestDb.collection("church_member_details").doc(webId), {
+    fullName: "Daniel iOS Safari",
+    myKadNumber: "920815-12-3456",
+    gender: "LELAKI",
+    birthDate: "1992-08-15",
+    baptismStatus: "DIBAPTIS",
+    denomination: "SIB",
+    maritalStatus: "BERKAHWIN",
+    spouseName: "Grace",
+    memberEmail: "webuser@gmail.com",
+    authorId: "web_qr_reg",
+    registrationToken: validToken,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  webBatch.set(guestDb.collection("notification_events").doc("evt_web_01"), {
+    title: "Ahli Baharu (Pautan Web)",
+    body: "Daniel iOS Safari telah mendaftar melalui pautan QR.",
+    eventType: "MEMBER_REGISTERED",
+    targetId: webId,
+    topic: "sib_toburon_admin_members",
+    published: false,
+    authorId: "web_qr_reg",
+    registrationToken: validToken,
+    createdAt: ts,
+  });
+  await assertSucceeds(webBatch.commit());
+
+  // Admin can read, edit, and delete web-registered member; matching Google email auto-links
+  await assertSucceeds(adminDb.collection("church_member_details").doc(webId).get());
+  await assertSucceeds(
+    aliceDb.collection("church_member_details").where("memberEmail", "==", "webuser@gmail.com").get()
+  );
+  await assertSucceeds(
+    adminDb.collection("church_member_details").doc(webId).update({
+      sibMembershipNumber: "SIB-2026-088",
+      updatedAt: pastDate(1000),
+    })
+  );
+
+  // When Admin pauses the registration link, new browser submissions are rejected
+  await assertSucceeds(
+    adminDb.collection("app_config").doc("member_registration").set({
+      portalUrl: "https://gen-lang-client-0216024023.web.app",
+      accessToken: validToken,
+      enabled: false,
+      updatedBy: ADMIN_UID,
+      updatedAt: pastDate(500),
+    })
+  );
+  await assertFails(
+    guestDb.collection("church_members").doc("webreg_paused_02").set({
+      fullName: "Paused Link User",
+      gender: "PEREMPUAN",
+      baptismStatus: "BELUM_DIBAPTIS",
+      published: true,
+      authorId: "web_qr_reg",
+      registrationToken: validToken,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+});
+
+
 
 
 

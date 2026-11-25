@@ -370,6 +370,41 @@ data class AppVersionConfig(
         latestVersionCode > currentVersionCode
 }
 
+@Keep
+@IgnoreExtraProperties
+data class MemberRegistrationConfig(
+    @DocumentId val id: String = "",
+    val portalUrl: String = DEFAULT_PORTAL_URL,
+    val accessToken: String = "",
+    val enabled: Boolean = true,
+    val updatedBy: String = "",
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    fun isUnconfiguredGitHubPagesUrl(): Boolean {
+        val clean = portalUrl.trim().lowercase()
+        return clean.isBlank() ||
+            clean.contains("your-username.github.io") ||
+            clean.contains("username.github.io") ||
+            clean == LEGACY_FIREBASE_HOSTING_URL
+    }
+
+    fun buildFullRegistrationUrl(): String {
+        val base = portalUrl.trim().ifBlank { DEFAULT_PORTAL_URL }.trimEnd('/')
+        val token = accessToken.trim()
+        if (token.isBlank()) return "$base/"
+        return if ('?' in base) {
+            "$base&reg=$token"
+        } else {
+            "$base/?reg=$token"
+        }
+    }
+
+    companion object {
+        const val DEFAULT_PORTAL_URL = "https://your-username.github.io/sib-toburon"
+        private const val LEGACY_FIREBASE_HOSTING_URL = "https://gen-lang-client-0216024023.web.app"
+    }
+}
+
 enum class MemberGender(val code: String, val label: String, val labelEn: String) {
     LELAKI("LELAKI", "Lelaki", "Male"),
     PEREMPUAN("PEREMPUAN", "Perempuan", "Female");

@@ -2052,6 +2052,122 @@ class BulletinRepository(
         }
     }
 
+    // --- WEB MEMBER REGISTRATION LINK & QR CONFIG (/app_config/member_registration) ---
+
+    fun observeMemberRegistrationConfig(uid: String?, isAdmin: Boolean): Flow<MemberRegistrationConfig?> = flow {
+        if (uid.isNullOrBlank() || !isAdmin) {
+            emit(null)
+            return@flow
+        }
+        val docPath = "app_config/member_registration"
+        emitAll(
+            db.collection("app_config").document("member_registration")
+                .snapshots()
+                .map { snapshot ->
+                    if (!snapshot.exists()) null
+                    else snapshot.toObject(
+                        MemberRegistrationConfig::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    )
+                }
+                .catch { error ->
+                    logStreamErrorIfActive(uid, error, OperationType.GET, docPath)
+                    emit(null)
+                }
+        )
+    }
+
+    suspend fun saveMemberRegistrationConfig(
+        portalUrl: String,
+        accessToken: String,
+        enabled: Boolean
+    ): Result<Unit> {
+        val docPath = "app_config/member_registration"
+        return try {
+            val uid = requireUserId()
+            val cleanUrl = portalUrl.trim().trimEnd('/')
+            val cleanToken = accessToken.trim()
+
+            require(cleanUrl.length in 10..500 && cleanUrl.startsWith("https://")) {
+                AppLanguageManager.tr(
+                    "Pautan portal pendaftaran mesti bermula dengan https:// (10–500 aksara).",
+                    "Registration portal URL must start with https:// (10–500 characters)."
+                )
+            }
+            require(cleanToken.matches(Regex("^[a-zA-Z0-9_\\-]{16,64}$"))) {
+                AppLanguageManager.tr(
+                    "Token akses pendaftaran tidak sah (16–64 aksara alfanumerik).",
+                    "Invalid registration access token (16–64 alphanumeric characters)."
+                )
+            }
+
+            db.collection("app_config").document("member_registration")
+                .set(
+                    mapOf(
+                        "portalUrl" to cleanUrl,
+                        "accessToken" to cleanToken,
+                        "enabled" to enabled,
+                        "updatedBy" to uid,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun ensureMemberRegistrationConfig(): Result<MemberRegistrationConfig> {
+        val docPath = "app_config/member_registration"
+        return try {
+            val uid = requireUserId()
+            val docRef = db.collection("app_config").document("member_registration")
+            val snap = docRef.get().await()
+            val existing = if (snap.exists()) {
+                snap.toObject(
+                    MemberRegistrationConfig::class.java,
+                    DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                )
+            } else null
+            if (existing != null && existing.accessToken.isNotBlank() && existing.portalUrl.startsWith("https://")) {
+                Result.success(existing)
+            } else {
+                val portal = existing?.portalUrl?.takeIf { it.startsWith("https://") }
+                    ?: MemberRegistrationConfig.DEFAULT_PORTAL_URL
+                val token = existing?.accessToken?.takeIf { it.matches(Regex("^[a-zA-Z0-9_\\-]{16,64}$")) }
+                    ?: MemberQrUtils.generateRegistrationAccessToken()
+                val enabled = existing?.enabled ?: true
+                docRef.set(
+                    mapOf(
+                        "portalUrl" to portal,
+                        "accessToken" to token,
+                        "enabled" to enabled,
+                        "updatedBy" to uid,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+                Result.success(
+                    MemberRegistrationConfig(
+                        id = "member_registration",
+                        portalUrl = portal,
+                        accessToken = token,
+                        enabled = enabled,
+                        updatedBy = uid
+                    )
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
     // --- DYNAMIC NEWS & SCHEDULE CATEGORIES ---
 
     fun observeNewsCategories(uid: String?): Flow<List<DynamicCategoryItem>> =

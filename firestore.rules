@@ -268,6 +268,29 @@ service cloud.firestore {
         isValidTimestamp(data.updatedAt);
     }
 
+    function isValidMemberRegistrationConfig(data) {
+      return data.portalUrl is string &&
+        data.portalUrl.size() >= 10 &&
+        data.portalUrl.size() <= 500 &&
+        data.portalUrl.matches('^https://.*') &&
+        data.accessToken is string &&
+        data.accessToken.size() >= 16 &&
+        data.accessToken.size() <= 64 &&
+        data.accessToken.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.enabled is bool &&
+        isValidId(data.updatedBy) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidWebRegistrationToken(token) {
+      return token is string &&
+        token.size() >= 16 &&
+        token.size() <= 64 &&
+        exists(/databases/$(database)/documents/app_config/member_registration) &&
+        get(/databases/$(database)/documents/app_config/member_registration).data.enabled == true &&
+        get(/databases/$(database)/documents/app_config/member_registration).data.accessToken == token;
+    }
+
     function isValidDynamicCategory(data) {
       return data.code is string &&
         data.code.size() >= 1 &&
@@ -574,27 +597,35 @@ service cloud.firestore {
         )
       );
 
-      allow create: if isSignedIn() &&
-        isValidId(eventId) &&
+      allow create: if isValidId(eventId) &&
         isValidNotificationEvent(incoming()) &&
-        incoming().authorId == request.auth.uid &&
         incoming().keys().hasAll([
           'title', 'body', 'eventType', 'targetId', 'topic',
           'published', 'authorId', 'createdAt'
         ]) &&
         incoming().keys().hasOnly([
           'title', 'body', 'eventType', 'targetId', 'topic',
-          'published', 'authorId', 'createdAt'
+          'published', 'authorId', 'registrationToken', 'createdAt'
         ]) && (
-          (isAdmin() &&
-            incoming().published == true &&
-            incoming().eventType in ['NEWS', 'SCHEDULE'] &&
-            incoming().topic in ['sib_toburon_news', 'sib_toburon_schedules']) ||
-          (hasVerifiedEmail() &&
+          (isSignedIn() &&
+            incoming().authorId == request.auth.uid && (
+              (isAdmin() &&
+                incoming().published == true &&
+                incoming().eventType in ['NEWS', 'SCHEDULE'] &&
+                incoming().topic in ['sib_toburon_news', 'sib_toburon_schedules']) ||
+              (hasVerifiedEmail() &&
+                incoming().published == false &&
+                incoming().eventType == 'MEMBER_REGISTERED' &&
+                incoming().topic == 'sib_toburon_admin_members' &&
+                incoming().targetId == 'member_' + request.auth.uid)
+            )) ||
+          (incoming().authorId == 'web_qr_reg' &&
             incoming().published == false &&
             incoming().eventType == 'MEMBER_REGISTERED' &&
             incoming().topic == 'sib_toburon_admin_members' &&
-            incoming().targetId == 'member_' + request.auth.uid)
+            incoming().targetId.matches('^webreg_[a-zA-Z0-9_\\-]+$') &&
+            'registrationToken' in incoming() &&
+            isValidWebRegistrationToken(incoming().registrationToken))
         );
 
       allow delete: if isSignedIn() && isValidId(eventId) && isAdmin();
@@ -614,15 +645,22 @@ service cloud.firestore {
         isBootstrappedAdmin()
       );
 
-      allow create: if isSignedIn() &&
-        isValidId(memberId) &&
+      allow create: if isValidId(memberId) &&
         isValidChurchMemberPublic(incoming()) &&
-        incoming().authorId == request.auth.uid &&
-        incoming().published == true &&
-        incoming().keys().hasAll(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
-        incoming().keys().hasOnly(['fullName', 'gender', 'baptismStatus', 'passportPhotoBase64', 'published', 'authorId', 'createdAt', 'updatedAt']) && (
-          isAdmin() ||
-          (hasVerifiedEmail() && memberId == 'member_' + request.auth.uid)
+        incoming().published == true && (
+          (isSignedIn() &&
+            incoming().authorId == request.auth.uid &&
+            incoming().keys().hasAll(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'createdAt', 'updatedAt']) &&
+            incoming().keys().hasOnly(['fullName', 'gender', 'baptismStatus', 'passportPhotoBase64', 'published', 'authorId', 'createdAt', 'updatedAt']) && (
+              isAdmin() ||
+              (hasVerifiedEmail() && memberId == 'member_' + request.auth.uid)
+            )) ||
+          (memberId.matches('^webreg_[a-zA-Z0-9_\\-]+$') &&
+            incoming().authorId == 'web_qr_reg' &&
+            'registrationToken' in incoming() &&
+            isValidWebRegistrationToken(incoming().registrationToken) &&
+            incoming().keys().hasAll(['fullName', 'gender', 'baptismStatus', 'published', 'authorId', 'registrationToken', 'createdAt', 'updatedAt']) &&
+            incoming().keys().hasOnly(['fullName', 'gender', 'baptismStatus', 'passportPhotoBase64', 'published', 'authorId', 'registrationToken', 'createdAt', 'updatedAt']))
         );
 
       allow update: if isSignedIn() &&
@@ -655,21 +693,35 @@ service cloud.firestore {
         isOwnMemberDetail(resource.data)
       );
 
-      allow create: if isSignedIn() &&
-        isValidId(memberId) &&
-        isValidChurchMemberDetail(incoming()) &&
-        incoming().authorId == request.auth.uid &&
-        incoming().keys().hasAll([
-          'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination',
-          'authorId', 'createdAt', 'updatedAt'
-        ]) &&
-        incoming().keys().hasOnly([
-          'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
-          'myKadNumber', 'spouseName', 'sibMembershipNumber',
-          'passportPhotoBase64', 'memberEmail', 'authorId', 'createdAt', 'updatedAt'
-        ]) && (
-          isAdmin() ||
-          (memberId == 'member_' + request.auth.uid && isOwnMemberDetail(incoming()))
+      allow create: if isValidId(memberId) &&
+        isValidChurchMemberDetail(incoming()) && (
+          (isSignedIn() &&
+            incoming().authorId == request.auth.uid &&
+            incoming().keys().hasAll([
+              'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination',
+              'authorId', 'createdAt', 'updatedAt'
+            ]) &&
+            incoming().keys().hasOnly([
+              'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
+              'myKadNumber', 'spouseName', 'sibMembershipNumber',
+              'passportPhotoBase64', 'memberEmail', 'authorId', 'createdAt', 'updatedAt'
+            ]) && (
+              isAdmin() ||
+              (memberId == 'member_' + request.auth.uid && isOwnMemberDetail(incoming()))
+            )) ||
+          (memberId.matches('^webreg_[a-zA-Z0-9_\\-]+$') &&
+            incoming().authorId == 'web_qr_reg' &&
+            'registrationToken' in incoming() &&
+            isValidWebRegistrationToken(incoming().registrationToken) &&
+            incoming().keys().hasAll([
+              'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination',
+              'authorId', 'registrationToken', 'createdAt', 'updatedAt'
+            ]) &&
+            incoming().keys().hasOnly([
+              'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
+              'myKadNumber', 'spouseName', 'sibMembershipNumber',
+              'passportPhotoBase64', 'memberEmail', 'authorId', 'registrationToken', 'createdAt', 'updatedAt'
+            ]))
         );
 
       allow update: if isSignedIn() &&
@@ -689,24 +741,34 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(memberId) && isAdmin();
     }
 
-    // 12. Konfigurasi Versi Aplikasi (/app_config/version) - Bacaan umum (get sahaja); hanya Admin boleh ubah
+    // 12. Konfigurasi Aplikasi (/app_config/version & /app_config/member_registration)
     match /app_config/{configId} {
-      allow get: if configId == 'version';
+      allow get: if configId == 'version' ||
+        (configId == 'member_registration' && isSignedIn() && isAdmin());
       allow list: if false;
 
-      allow create, update: if isSignedIn() &&
-        isAdmin() &&
-        configId == 'version' &&
-        isValidAppVersionConfig(incoming()) &&
-        incoming().updatedBy == request.auth.uid &&
-        incoming().keys().hasAll([
-          'latestVersionCode', 'latestVersionName', 'releaseNotes',
-          'updateUrl', 'forceUpdate', 'updatedBy', 'updatedAt'
-        ]) &&
-        incoming().keys().hasOnly([
-          'latestVersionCode', 'latestVersionName', 'releaseNotes',
-          'updateUrl', 'forceUpdate', 'updatedBy', 'updatedAt'
-        ]);
+      allow create, update: if isSignedIn() && isAdmin() && (
+        (configId == 'version' &&
+          isValidAppVersionConfig(incoming()) &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().keys().hasAll([
+            'latestVersionCode', 'latestVersionName', 'releaseNotes',
+            'updateUrl', 'forceUpdate', 'updatedBy', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'latestVersionCode', 'latestVersionName', 'releaseNotes',
+            'updateUrl', 'forceUpdate', 'updatedBy', 'updatedAt'
+          ])) ||
+        (configId == 'member_registration' &&
+          isValidMemberRegistrationConfig(incoming()) &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().keys().hasAll([
+            'portalUrl', 'accessToken', 'enabled', 'updatedBy', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'portalUrl', 'accessToken', 'enabled', 'updatedBy', 'updatedAt'
+          ]))
+      );
 
       allow delete: if false;
     }

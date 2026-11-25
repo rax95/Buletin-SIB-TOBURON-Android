@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SortByAlpha
@@ -91,12 +92,14 @@ import com.example.data.AppVersionConfig
 import com.example.data.ChurchMemberDetail
 import com.example.data.ChurchMemberPublic
 import com.example.data.DynamicCategoryItem
+import com.example.data.MemberRegistrationConfig
 import com.example.data.UiState
 import com.example.data.UserProfile
 import com.example.ui.components.AdminGoogleUsersView
 import com.example.ui.components.AdminManageAdministratorView
 import com.example.ui.components.AdminManageEventsView
 import com.example.ui.components.AdminMemberIdCardDialog
+import com.example.ui.components.AdminMemberRegistrationQrView
 import com.example.ui.components.AdminNavigationColumnCard
 import com.example.ui.components.AdminStatPill
 import com.example.ui.components.AdminSubPageHeader
@@ -120,19 +123,21 @@ private enum class AdminSection {
     CHURCH_MEMBERS,
     GOOGLE_USERS,
     MANAGE_ADMINISTRATOR,
-    VERSION_MANAGER
+    VERSION_MANAGER,
+    MEMBER_REGISTRATION_QR
 }
 
 /**
  * Admin-only Control & Management Tab:
  * - Main Dashboard:
  *   - Top summary counters (News, Schedule, Gallery, Members).
- *   - Five dedicated click-to-open columns:
+ *   - Six dedicated click-to-open columns:
  *     1. Manage Events
  *     2. Church Members
  *     3. Google Signed-in Users
  *     4. Manage Administrator
  *     5. Version Manager
+ *     6. Member Registration QR & Link
  */
 @Composable
 fun AdminScreen(
@@ -149,6 +154,7 @@ fun AdminScreen(
     registeredUsers: List<UserProfile>,
     currentAdminUid: String,
     appVersionConfig: AppVersionConfig?,
+    memberRegistrationConfig: MemberRegistrationConfig?,
     newsCategories: List<DynamicCategoryItem>,
     scheduleCategories: List<DynamicCategoryItem>,
     onSearchQueryChange: (String) -> Unit,
@@ -170,6 +176,10 @@ fun AdminScreen(
     onRemoveAdminMember: (String) -> Unit,
     onCopyUid: (String) -> Unit,
     onManageAppVersionClick: () -> Unit,
+    onEnsureMemberRegistrationConfig: () -> Unit,
+    onSaveMemberRegistrationConfig: (portalUrl: String, accessToken: String, enabled: Boolean) -> Unit,
+    onRegenerateMemberRegistrationToken: () -> Unit,
+    onCopyRegistrationLink: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var activeSection by rememberSaveable { mutableStateOf<AdminSection?>(null) }
@@ -332,6 +342,26 @@ fun AdminScreen(
                             badgeTestTag = "admin_version_manager_badge"
                         )
 
+                        // 6. Member Registration QR & Web Link (directly below Version Manager)
+                        AdminNavigationColumnCard(
+                            icon = Icons.Filled.QrCode2,
+                            iconBgColor = MaterialTheme.colorScheme.primaryContainer,
+                            iconTintColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            title = tr("QR & Pautan Pendaftaran Ahli", "Member Registration QR & Link"),
+                            subtitle = tr(
+                                "Imbas QR atau buka borang web untuk iPhone iOS & tanpa aplikasi",
+                                "Scan QR or open web registration form for iPhone iOS & non-app users"
+                            ),
+                            badgeText = when {
+                                memberRegistrationConfig == null -> tr("Sediakan", "Setup")
+                                memberRegistrationConfig.enabled -> tr("Aktif", "Active")
+                                else -> tr("Dijeda", "Paused")
+                            },
+                            onClick = { activeSection = AdminSection.MEMBER_REGISTRATION_QR },
+                            cardTestTag = "admin_member_reg_qr_card",
+                            badgeTestTag = "admin_member_reg_qr_badge"
+                        )
+
                         Spacer(Modifier.height(12.dp))
                     }
                 }
@@ -391,6 +421,18 @@ fun AdminScreen(
                     appVersionConfig = appVersionConfig,
                     onBack = { activeSection = null },
                     onManageAppVersionClick = onManageAppVersionClick
+                )
+            }
+
+            AdminSection.MEMBER_REGISTRATION_QR -> {
+                AdminMemberRegistrationQrView(
+                    config = memberRegistrationConfig,
+                    isBusy = isBusy,
+                    onBack = { activeSection = null },
+                    onEnsureConfig = onEnsureMemberRegistrationConfig,
+                    onSaveConfig = onSaveMemberRegistrationConfig,
+                    onRegenerateToken = onRegenerateMemberRegistrationToken,
+                    onCopyLink = onCopyRegistrationLink
                 )
             }
         }

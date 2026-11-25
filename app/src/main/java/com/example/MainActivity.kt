@@ -311,6 +311,7 @@ private fun BuletinMainShell(
     val adminMembers by viewModel.adminMembers.collectAsStateWithLifecycle()
     val registeredUsers by viewModel.registeredUsers.collectAsStateWithLifecycle()
     val appVersionConfig by viewModel.appVersionConfig.collectAsStateWithLifecycle()
+    val memberRegistrationConfig by viewModel.memberRegistrationConfig.collectAsStateWithLifecycle()
     val newsCategories by viewModel.newsCategories.collectAsStateWithLifecycle()
     val scheduleCategories by viewModel.scheduleCategories.collectAsStateWithLifecycle()
 
@@ -851,6 +852,7 @@ private fun BuletinMainShell(
                                     registeredUsers = registeredUsers,
                                     currentAdminUid = currentUser?.uid.orEmpty(),
                                     appVersionConfig = appVersionConfig,
+                                    memberRegistrationConfig = memberRegistrationConfig,
                                     newsCategories = newsCategories,
                                     scheduleCategories = scheduleCategories,
                                     onSearchQueryChange = viewModel::setMemberSearchQuery,
@@ -905,6 +907,26 @@ private fun BuletinMainShell(
                                     },
                                     onManageAppVersionClick = {
                                         showVersionManagerDialog = true
+                                    },
+                                    onEnsureMemberRegistrationConfig = viewModel::ensureMemberRegistrationConfig,
+                                    onSaveMemberRegistrationConfig = { portalUrl, accessToken, enabled ->
+                                        viewModel.saveMemberRegistrationConfig(
+                                            portalUrl = portalUrl,
+                                            accessToken = accessToken,
+                                            enabled = enabled
+                                        )
+                                    },
+                                    onRegenerateMemberRegistrationToken = {
+                                        viewModel.regenerateMemberRegistrationToken()
+                                    },
+                                    onCopyRegistrationLink = { url ->
+                                        clipboard.setText(AnnotatedString(url))
+                                        viewModel.showSnackbar(
+                                            AppLanguageManager.tr(
+                                                "Pautan pendaftaran ahli disalin ke papan klip.",
+                                                "Member registration link copied to clipboard."
+                                            )
+                                        )
                                     }
                                 )
                             }

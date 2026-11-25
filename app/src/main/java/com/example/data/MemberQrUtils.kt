@@ -84,13 +84,28 @@ object MemberQrUtils {
         sizePx: Int = 512,
         foregroundColor: Int = Color.rgb(16, 46, 38),
         backgroundColor: Int = Color.WHITE
-    ): ImageBitmap? {
+    ): ImageBitmap? = generateQrBitmapRaw(
+        content = content,
+        sizePx = sizePx,
+        foregroundColor = foregroundColor,
+        backgroundColor = backgroundColor
+    )?.asImageBitmap()
+
+    /**
+     * Generates a raw Android [Bitmap] QR Code suitable for both Compose display and PNG sharing.
+     */
+    fun generateQrBitmapRaw(
+        content: String,
+        sizePx: Int = 720,
+        foregroundColor: Int = Color.rgb(16, 46, 38),
+        backgroundColor: Int = Color.WHITE
+    ): Bitmap? {
         if (content.isBlank() || sizePx <= 0) return null
         return runCatching {
             val hints = mapOf(
                 EncodeHintType.CHARACTER_SET to "UTF-8",
                 EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
-                EncodeHintType.MARGIN to 1
+                EncodeHintType.MARGIN to 2
             )
             val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx, hints)
             val width = matrix.width
@@ -104,7 +119,20 @@ object MemberQrUtils {
             }
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
-            bitmap.asImageBitmap()
+            bitmap
         }.getOrNull()
+    }
+
+    /**
+     * Generates a cryptographically random 24-character URL-safe access token for web registration links.
+     */
+    fun generateRegistrationAccessToken(length: Int = 24): String {
+        val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+        val random = java.security.SecureRandom()
+        return buildString(length) {
+            repeat(length) {
+                append(alphabet[random.nextInt(alphabet.length)])
+            }
+        }
     }
 }

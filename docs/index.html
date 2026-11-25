@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Pendaftaran Ahli SIB Toburon</title>
+  <meta name="theme-color" content="#1B5E4E" />
+  <style>
+    :root {
+      --pine: #1B5E4E;
+      --pine-dark: #103F34;
+      --pine-soft: #E6F2EE;
+      --gold: #C89B3C;
+      --gold-soft: #FDF5E4;
+      --bg: #F5F7F5;
+      --card: #FFFFFF;
+      --text: #16211E;
+      --muted: #5A6B65;
+      --border: #D8E2DD;
+      --danger: #B3261E;
+      --danger-soft: #FDECEA;
+      --success: #1B5E4E;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 16px 14px 40px;
+    }
+
+    .shell {
+      max-width: 580px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, var(--pine-dark), var(--pine));
+      color: #fff;
+      border-radius: 22px;
+      padding: 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 10px 26px rgba(16, 63, 52, 0.16);
+      position: relative;
+    }
+
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(242, 200, 121, 0.22);
+      color: #FCE09B;
+      border: 1px solid rgba(242, 200, 121, 0.45);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      margin-bottom: 8px;
+    }
+
+    .lang-toggle {
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 36px;
+      white-space: nowrap;
+    }
+
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .hero p {
+      margin: 0;
+      font-size: 13.5px;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: 0 4px 14px rgba(16, 63, 52, 0.05);
+      margin-bottom: 14px;
+    }
+
+    .section-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--pine);
+      margin: 0 0 8px;
+    }
+
+    .field-group {
+      margin-bottom: 16px;
+    }
+
+    label.field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="date"],
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 16px; /* Prevents iOS Safari zoom */
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      background: #FAFCFB;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--pine);
+      background: #fff;
+    }
+
+    .row-2 {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .row-2 > .grow { flex: 1; }
+
+    .age-box {
+      min-width: 82px;
+      background: var(--gold-soft);
+      border: 1px solid rgba(200, 155, 60, 0.45);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      text-align: center;
+    }
+
+    .age-box .age-lbl {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    .age-box .age-val {
+      font-size: 15px;
+      font-weight: 800;
+      color: #6B4D0E;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip-btn {
+      border: 1.5px solid var(--border);
+      background: #FAFCFB;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 44px;
+      flex: 1 1 auto;
+      text-align: center;
+    }
+
+    .chip-btn.active {
+      background: var(--pine);
+      border-color: var(--pine);
+      color: #fff;
+    }
+
+    .photo-box {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 12px;
+      background: #F8FAF9;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 12px;
+    }
+
+    .photo-preview {
+      width: 78px;
+      height: 102px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--pine-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      color: var(--pine);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .photo-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .btn-secondary {
+      display: inline-block;
+      background: var(--pine-soft);
+      color: var(--pine-dark);
+      border: 1px solid rgba(27, 94, 78, 0.25);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-remove {
+      background: transparent;
+      border: none;
+      color: var(--danger);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 8px;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--pine);
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      padding: 15px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 52px;
+      box-shadow: 0 6px 16px rgba(27, 94, 78, 0.22);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .alert {
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13.5px;
+      margin-bottom: 14px;
+    }
+
+    .alert-error {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border: 1px solid rgba(179, 38, 30, 0.25);
+    }
+
+    .alert-info {
+      background: var(--gold-soft);
+      color: #6B4D0E;
+      border: 1px solid rgba(200, 155, 60, 0.35);
+    }
+
+    .success-card {
+      text-align: center;
+      padding: 28px 20px;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: var(--pine-soft);
+      color: var(--pine);
+      font-size: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .hidden { display: none !important; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <div class="hero-top">
+        <div>
+          <span class="badge">SIB Toburon • Pendaftaran Web</span>
+          <h1 id="heroTitle">Daftar Ahli Jemaat Baharu</h1>
+        </div>
+        <button type="button" class="lang-toggle" id="langToggle">EN</button>
+      </div>
+      <p id="heroSubtitle">Isi maklumat anda di bawah. Setelah disimpan, rekod anda akan terus dimasukkan ke senarai ahli SIB Toburon.</p>
+    </div>
+
+    <div id="tokenCard" class="card hidden">
+      <p class="section-title" id="tokenTitle">Kod Akses Pendaftaran Diperlukan</p>
+      <p class="hint" id="tokenHint" style="margin-bottom: 10px;">Sila imbas Kod QR pendaftaran daripada Admin SIB Toburon, atau masukkan kod pautan pendaftaran di bawah.</p>
+      <div class="field-group" style="margin-bottom: 10px;">
+        <input type="text" id="manualTokenInput" placeholder="Masukkan kod pendaftaran (reg)..." />
+      </div>
+      <button type="button" class="btn-primary" id="applyTokenBtn">Teruskan ke Borang</button>
+    </div>
+
+    <form id="memberForm" class="card">
+      <div id="formError" class="alert alert-error hidden"></div>
+
+      <!-- 1. Gambar & Nama Penuh -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec1">1. Gambar Ahli &amp; Nama Penuh</p>
+        <div class="photo-box">
+          <div class="photo-preview" id="photoPreview">3:4</div>
+          <div style="flex:1">
+            <div class="hint" id="lblPhotoHint" style="margin-top:0; margin-bottom:8px;">Gambar saiz pasport untuk Kad Ahli SIB Toburon (pilihan).</div>
+            <input type="file" id="photoInput" accept="image/*" class="hidden" />
+            <button type="button" class="btn-secondary" id="pickPhotoBtn">Pilih / Ambil Gambar</button>
+            <button type="button" class="btn-remove hidden" id="removePhotoBtn">Padam</button>
+            <div class="hint" id="photoStatus"></div>
+          </div>
+        </div>
+        <label class="field-label" for="fullName" id="lblFullName">Nama penuh ahli *</label>
+        <input type="text" id="fullName" maxlength="120" required placeholder="Contoh: Johanes bin Lukas" />
+      </div>
+
+      <!-- 2. Nombor MyKad -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec2">2. Nombor MyKad</p>
+        <label class="field-label" for="myKadNumber" id="lblMyKad">Nombor ID (MyKad)</label>
+        <input type="text" id="myKadNumber" maxlength="30" placeholder="950614-12-5431" />
+      </div>
+
+      <!-- 3. Tarikh Lahir -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec3">3. Tarikh Lahir *</p>
+        <div class="row-2">
+          <div class="grow">
+            <input type="date" id="birthDate" required />
+          </div>
+          <div class="age-box">
+            <span class="age-lbl" id="lblAgeTitle">UMUR</span>
+            <span class="age-val" id="ageValue">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Jantina -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec4">4. Jantina</p>
+        <div class="chip-row" id="genderChips">
+          <button type="button" class="chip-btn active" data-value="LELAKI" id="btnMale">Lelaki</button>
+          <button type="button" class="chip-btn" data-value="PEREMPUAN" id="btnFemale">Perempuan</button>
+        </div>
+      </div>
+
+      <!-- 5. Status Perkahwinan -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec5">5. Status Perkahwinan</p>
+        <div class="chip-row" id="maritalChips">
+          <button type="button" class="chip-btn active" data-value="BUJANG" id="btnSingle">Bujang</button>
+          <button type="button" class="chip-btn" data-value="BERKAHWIN" id="btnMarried">Berkahwin</button>
+          <button type="button" class="chip-btn" data-value="BALU_DUDA" id="btnWidowed">Balu / Duda</button>
+          <button type="button" class="chip-btn" data-value="BERCERAI" id="btnDivorced">Bercerai</button>
+        </div>
+        <div id="spouseWrap" class="hidden" style="margin-top: 10px;">
+          <label class="field-label" for="spouseName" id="lblSpouse">Nama Isteri</label>
+          <input type="text" id="spouseName" maxlength="120" placeholder="Masukkan nama penuh pasangan" />
+        </div>
+      </div>
+
+      <!-- 6. Status Baptisan -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec6">6. Status Baptisan &amp; Denominasi</p>
+        <div class="chip-row" id="baptismChips">
+          <button type="button" class="chip-btn active" data-value="BELUM_DIBAPTIS" id="btnNotBaptized">Belum Dibaptis</button>
+          <button type="button" class="chip-btn" data-value="DIBAPTIS" id="btnBaptized">Sudah Dibaptis</button>
+        </div>
+        <div id="denomWrap" class="hidden" style="margin-top: 10px;">
+          <label class="field-label" for="denomination" id="lblDenom">Denominasi Gereja *</label>
+          <input type="text" id="denomination" maxlength="80" value="SIB" placeholder="Contoh: SIB, Katolik, Anglikan" />
+        </div>
+      </div>
+
+      <!-- 7. Nombor SIB & Emel -->
+      <div class="field-group">
+        <p class="section-title" id="lblSec7">7. Keanggotaan SIB &amp; Emel Google (Pilihan)</p>
+        <label class="field-label" for="sibMembershipNumber" id="lblSibNo">Nombor Keanggotaan SIB</label>
+        <input type="text" id="sibMembershipNumber" maxlength="40" placeholder="Biarkan kosong jika belum ada" style="margin-bottom: 10px;" />
+
+        <label class="field-label" for="memberEmail" id="lblEmail">Alamat Emel Google (jika ada)</label>
+        <input type="email" id="memberEmail" maxlength="160" placeholder="contoh@gmail.com" />
+        <div class="hint" id="lblEmailHint">Jika ahli log masuk aplikasi menggunakan emel Google ini kemudian, Kad Ahli akan terpaut secara automatik.</div>
+      </div>
+
+      <button type="submit" class="btn-primary" id="submitBtn">Simpan &amp; Daftar Ahli</button>
+    </form>
+
+    <div id="successCard" class="card success-card hidden">
+      <div class="success-icon">✓</div>
+      <h2 id="successTitle" style="margin: 0 0 8px;">Pendaftaran Berjaya!</h2>
+      <p id="successBody" style="color: var(--muted); margin: 0 0 18px;"></p>
+      <button type="button" class="btn-primary" id="registerAnotherBtn">Daftar Ahli Lain</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import {
+      initializeFirestore,
+      doc,
+      writeBatch,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCj4lj8J7shxalqWqaqvp1YTzMnqg9k0Rk",
+      authDomain: "gen-lang-client-0216024023.firebaseapp.com",
+      projectId: "gen-lang-client-0216024023",
+      storageBucket: "gen-lang-client-0216024023.firebasestorage.app",
+      messagingSenderId: "264188826522",
+      appId: "1:264188826522:web:sibtoburonreg"
+    };
+
+    const FIRESTORE_DATABASE_ID = "ai-studio-android-buletins-c79f5777-052f-4011-8215-1d032fc8e6a8";
+    const app = initializeApp(firebaseConfig);
+    const db = initializeFirestore(app, {}, FIRESTORE_DATABASE_ID);
+
+    let lang = "ms";
+    let regToken = new URLSearchParams(window.location.search).get("reg")?.trim() || "";
+    let selectedGender = "LELAKI";
+    let selectedMarital = "BUJANG";
+    let selectedBaptism = "BELUM_DIBAPTIS";
+    let passportPhotoBase64 = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    const copy = {
+      ms: {
+        langBtn: "EN",
+        heroTitle: "Daftar Ahli Jemaat Baharu",
+        heroSubtitle: "Isi maklumat anda di bawah. Setelah disimpan, rekod anda akan terus dimasukkan ke senarai ahli SIB Toburon.",
+        sec1: "1. Gambar Ahli & Nama Penuh",
+        photoHint: "Gambar saiz pasport untuk Kad Ahli SIB Toburon (pilihan).",
+        pickPhoto: "Pilih / Ambil Gambar",
+        removePhoto: "Padam",
+        fullName: "Nama penuh ahli *",
+        sec2: "2. Nombor MyKad",
+        myKad: "Nombor ID (MyKad)",
+        sec3: "3. Tarikh Lahir *",
+        ageTitle: "UMUR",
+        yrs: "thn",
+        sec4: "4. Jantina",
+        male: "Lelaki",
+        female: "Perempuan",
+        sec5: "5. Status Perkahwinan",
+        single: "Bujang",
+        married: "Berkahwin",
+        widowed: "Balu / Duda",
+        divorced: "Bercerai",
+        wife: "Nama Isteri",
+        husband: "Nama Suami",
+        sec6: "6. Status Baptisan & Denominasi",
+        notBaptized: "Belum Dibaptis",
+        baptized: "Sudah Dibaptis",
+        denom: "Denominasi Gereja *",
+        sec7: "7. Keanggotaan SIB & Emel Google (Pilihan)",
+        sibNo: "Nombor Keanggotaan SIB",
+        email: "Alamat Emel Google (jika ada)",
+        emailHint: "Jika ahli log masuk aplikasi menggunakan emel Google ini kemudian, Kad Ahli akan terpaut secara automatik.",
+        submit: "Simpan & Daftar Ahli",
+        saving: "Menyimpan...",
+        successTitle: "Pendaftaran Berjaya!",
+        registerAnother: "Daftar Ahli Lain",
+        errName: "Nama penuh ahli mestilah 2 hingga 120 aksara.",
+        errDob: "Sila pilih tarikh lahir yang sah.",
+        errDenom: "Sila nyatakan denominasi gereja.",
+        errToken: "Pautan pendaftaran ini tiada kod akses yang sah atau telah dijeda oleh Admin.",
+        successMsg: (name, id) => `Terima kasih, ${name}. Maklumat anda telah disimpan dan terus dimasukkan ke senarai ahli SIB Toburon (Rujukan: ${id}).`
+      },
+      en: {
+        langBtn: "BM",
+        heroTitle: "Register New Church Member",
+        heroSubtitle: "Fill in your details below. Once saved, your record is immediately added to the SIB Toburon members list.",
+        sec1: "1. Member Photo & Full Name",
+        photoHint: "Passport-size photo for SIB Toburon Member Card (optional).",
+        pickPhoto: "Choose / Take Photo",
+        removePhoto: "Remove",
+        fullName: "Member full name *",
+        sec2: "2. MyKad Number",
+        myKad: "ID Number (MyKad)",
+        sec3: "3. Date of Birth *",
+        ageTitle: "AGE",
+        yrs: "yrs",
+        sec4: "4. Gender",
+        male: "Male",
+        female: "Female",
+        sec5: "5. Marital Status",
+        single: "Single",
+        married: "Married",
+        widowed: "Widowed",
+        divorced: "Divorced",
+        wife: "Wife's Name",
+        husband: "Husband's Name",
+        sec6: "6. Baptism Status & Denomination",
+        notBaptized: "Not Yet Baptized",
+        baptized: "Baptized",
+        denom: "Church Denomination *",
+        sec7: "7. SIB Membership & Google Email (Optional)",
+        sibNo: "SIB Membership Number",
+        email: "Google Email Address (optional)",
+        emailHint: "If the member later signs into the Android app with this Google email, their Member Card links automatically.",
+        submit: "Save & Register Member",
+        saving: "Saving...",
+        successTitle: "Registration Successful!",
+        registerAnother: "Register Another Member",
+        errName: "Member full name must be 2 to 120 characters.",
+        errDob: "Please enter a valid date of birth.",
+        errDenom: "Please specify church denomination.",
+        errToken: "This registration link is missing a valid access token or was paused by Admin.",
+        successMsg: (name, id) => `Thank you, ${name}. Your details were saved and added directly to the SIB Toburon members list (Ref: ${id}).`
+      }
+    };
+
+    function updateTexts() {
+      const t = copy[lang];
+      $("langToggle").textContent = t.langBtn;
+      $("heroTitle").textContent = t.heroTitle;
+      $("heroSubtitle").textContent = t.heroSubtitle;
+      $("lblSec1").textContent = t.sec1;
+      $("lblPhotoHint").textContent = t.photoHint;
+      $("pickPhotoBtn").textContent = t.pickPhoto;
+      $("removePhotoBtn").textContent = t.removePhoto;
+      $("lblFullName").textContent = t.fullName;
+      $("lblSec2").textContent = t.sec2;
+      $("lblMyKad").textContent = t.myKad;
+      $("lblSec3").textContent = t.sec3;
+      $("lblAgeTitle").textContent = t.ageTitle;
+      $("lblSec4").textContent = t.sec4;
+      $("btnMale").textContent = t.male;
+      $("btnFemale").textContent = t.female;
+      $("lblSec5").textContent = t.sec5;
+      $("btnSingle").textContent = t.single;
+      $("btnMarried").textContent = t.married;
+      $("btnWidowed").textContent = t.widowed;
+      $("btnDivorced").textContent = t.divorced;
+      $("lblSpouse").textContent = selectedGender === "PEREMPUAN" ? t.husband : t.wife;
+      $("lblSec6").textContent = t.sec6;
+      $("btnNotBaptized").textContent = t.notBaptized;
+      $("btnBaptized").textContent = t.baptized;
+      $("lblDenom").textContent = t.denom;
+      $("lblSec7").textContent = t.sec7;
+      $("lblSibNo").textContent = t.sibNo;
+      $("lblEmail").textContent = t.email;
+      $("lblEmailHint").textContent = t.emailHint;
+      $("submitBtn").textContent = t.submit;
+      $("successTitle").textContent = t.successTitle;
+      $("registerAnotherBtn").textContent = t.registerAnother;
+      updateAgePreview();
+    }
+
+    function checkTokenState() {
+      if (!regToken || regToken.length < 16) {
+        $("tokenCard").classList.remove("hidden");
+        $("memberForm").classList.add("hidden");
+      } else {
+        $("tokenCard").classList.add("hidden");
+        $("memberForm").classList.remove("hidden");
+      }
+    }
+
+    function updateAgePreview() {
+      const dobVal = $("birthDate").value;
+      if (!dobVal) {
+        $("ageValue").textContent = "--";
+        return;
+      }
+      const parts = dobVal.split("-").map(Number);
+      if (parts.length !== 3) {
+        $("ageValue").textContent = "--";
+        return;
+      }
+      const today = new Date();
+      let age = today.getFullYear() - parts[0];
+      const mDiff = (today.getMonth() + 1) - parts[1];
+      if (mDiff < 0 || (mDiff === 0 && today.getDate() < parts[2])) age--;
+      $("ageValue").textContent = age >= 0 && age <= 130 ? `${age} ${copy[lang].yrs}` : "--";
+    }
+
+    $("langToggle").addEventListener("click", () => {
+      lang = lang === "ms" ? "en" : "ms";
+      updateTexts();
+    });
+
+    $("applyTokenBtn").addEventListener("click", () => {
+      const entered = $("manualTokenInput").value.trim();
+      if (entered.length >= 16) {
+        regToken = entered;
+        checkTokenState();
+      }
+    });
+
+    $("birthDate").max = new Date().toISOString().split("T")[0];
+    $("birthDate").addEventListener("change", updateAgePreview);
+
+    document.querySelectorAll("#genderChips .chip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedGender = btn.dataset.value;
+        document.querySelectorAll("#genderChips .chip-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        $("lblSpouse").textContent = selectedGender === "PEREMPUAN" ? copy[lang].husband : copy[lang].wife;
+      });
+    });
+
+    document.querySelectorAll("#maritalChips .chip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedMarital = btn.dataset.value;
+        document.querySelectorAll("#maritalChips .chip-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        $("spouseWrap").classList.toggle("hidden", selectedMarital !== "BERKAHWIN");
+      });
+    });
+
+    document.querySelectorAll("#baptismChips .chip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedBaptism = btn.dataset.value;
+        document.querySelectorAll("#baptismChips .chip-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        $("denomWrap").classList.toggle("hidden", selectedBaptism !== "DIBAPTIS");
+        if (selectedBaptism === "DIBAPTIS" && !$("denomination").value.trim()) {
+          $("denomination").value = "SIB";
+        }
+      });
+    });
+
+    $("pickPhotoBtn").addEventListener("click", () => $("photoInput").click());
+    $("removePhotoBtn").addEventListener("click", () => {
+      passportPhotoBase64 = null;
+      $("photoInput").value = "";
+      $("photoPreview").innerHTML = "3:4";
+      $("photoStatus").textContent = "";
+      $("removePhotoBtn").classList.add("hidden");
+    });
+
+    $("photoInput").addEventListener("change", (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 420;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w >= h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+            else { w = Math.round((w * maxDim) / h); h = maxDim; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+
+          let rawB64 = "";
+          for (const q of [0.82, 0.65, 0.5, 0.35]) {
+            const dataUrl = canvas.toDataURL("image/jpeg", q);
+            rawB64 = dataUrl.split(",")[1] || "";
+            if (rawB64.length <= 120000) break;
+          }
+          passportPhotoBase64 = rawB64.length <= 150000 ? rawB64 : null;
+          if (passportPhotoBase64) {
+            $("photoPreview").innerHTML = `<img src="data:image/jpeg;base64,${passportPhotoBase64}" alt="Passport Photo" />`;
+            $("photoStatus").textContent = `${w}x${h} • ${Math.round((passportPhotoBase64.length * 3) / 4 / 1024)} KB`;
+            $("removePhotoBtn").classList.remove("hidden");
+          }
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function generateWebId(prefix) {
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      const arr = new Uint8Array(14);
+      crypto.getRandomValues(arr);
+      let out = prefix;
+      for (const b of arr) out += chars[b % chars.length];
+      return out;
+    }
+
+    function showFormError(msg) {
+      $("formError").textContent = msg;
+      $("formError").classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    $("memberForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("formError").classList.add("hidden");
+      const t = copy[lang];
+
+      const fullName = $("fullName").value.trim();
+      const myKad = $("myKadNumber").value.trim();
+      const birthDate = $("birthDate").value.trim();
+      const denomination = selectedBaptism === "DIBAPTIS" ? $("denomination").value.trim() : "";
+      const spouseName = selectedMarital === "BERKAHWIN" ? $("spouseName").value.trim() : "";
+      const sibNumber = $("sibMembershipNumber").value.trim();
+      const memberEmail = $("memberEmail").value.trim().toLowerCase();
+
+      if (fullName.length < 2 || fullName.length > 120) return showFormError(t.errName);
+      if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(birthDate)) return showFormError(t.errDob);
+      if (selectedBaptism === "DIBAPTIS" && !denomination) return showFormError(t.errDenom);
+      if (!regToken || regToken.length < 16) return showFormError(t.errToken);
+
+      const submitBtn = $("submitBtn");
+      submitBtn.disabled = true;
+      submitBtn.textContent = t.saving;
+
+      try {
+        const webMemberId = generateWebId("webreg_");
+        const notifId = generateWebId("evt_web_");
+
+        const publicPayload = {
+          fullName,
+          gender: selectedGender,
+          baptismStatus: selectedBaptism,
+          published: true,
+          authorId: "web_qr_reg",
+          registrationToken: regToken,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        if (passportPhotoBase64) publicPayload.passportPhotoBase64 = passportPhotoBase64;
+
+        const detailPayload = {
+          fullName,
+          gender: selectedGender,
+          birthDate,
+          baptismStatus: selectedBaptism,
+          denomination,
+          maritalStatus: selectedMarital,
+          authorId: "web_qr_reg",
+          registrationToken: regToken,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        if (myKad) detailPayload.myKadNumber = myKad;
+        if (spouseName) detailPayload.spouseName = spouseName;
+        if (sibNumber) detailPayload.sibMembershipNumber = sibNumber;
+        if (passportPhotoBase64) detailPayload.passportPhotoBase64 = passportPhotoBase64;
+        if (memberEmail) detailPayload.memberEmail = memberEmail;
+
+        const notifPayload = {
+          title: "Ahli Baharu (Borang QR Web)",
+          body: `${fullName} telah mendaftar melalui pautan QR web.`,
+          eventType: "MEMBER_REGISTERED",
+          targetId: webMemberId,
+          topic: "sib_toburon_admin_members",
+          published: false,
+          authorId: "web_qr_reg",
+          registrationToken: regToken,
+          createdAt: serverTimestamp()
+        };
+
+        const batch = writeBatch(db);
+        batch.set(doc(db, "church_members", webMemberId), publicPayload);
+        batch.set(doc(db, "church_member_details", webMemberId), detailPayload);
+        batch.set(doc(db, "notification_events", notifId), notifPayload);
+        await batch.commit();
+
+        $("memberForm").classList.add("hidden");
+        $("successBody").textContent = t.successMsg(fullName, webMemberId);
+        $("successCard").classList.remove("hidden");
+      } catch (err) {
+        console.error(err);
+        const msg = String(err?.message || err);
+        if (msg.includes("PERMISSION_DENIED") || msg.includes("Missing or insufficient permissions")) {
+          showFormError(t.errToken);
+        } else {
+          showFormError(msg);
+        }
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = t.submit;
+      }
+    });
+
+    $("registerAnotherBtn").addEventListener("click", () => {
+      $("memberForm").reset();
+      passportPhotoBase64 = null;
+      $("photoPreview").innerHTML = "3:4";
+      $("photoStatus").textContent = "";
+      $("removePhotoBtn").classList.add("hidden");
+      $("spouseWrap").classList.add("hidden");
+      $("denomWrap").classList.add("hidden");
+      selectedGender = "LELAKI";
+      selectedMarital = "BUJANG";
+      selectedBaptism = "BELUM_DIBAPTIS";
+      document.querySelectorAll("#genderChips .chip-btn").forEach((b) => b.classList.toggle("active", b.dataset.value === "LELAKI"));
+      document.querySelectorAll("#maritalChips .chip-btn").forEach((b) => b.classList.toggle("active", b.dataset.value === "BUJANG"));
+      document.querySelectorAll("#baptismChips .chip-btn").forEach((b) => b.classList.toggle("active", b.dataset.value === "BELUM_DIBAPTIS"));
+      $("successCard").classList.add("hidden");
+      $("memberForm").classList.remove("hidden");
+      updateAgePreview();
+    });
+
+    updateTexts();
+    checkTokenState();
+  </script>
+</body>
+</html>

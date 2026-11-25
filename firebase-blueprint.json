@@ -676,6 +676,35 @@
         }
       },
       "required": ["code", "labelMs", "labelEn", "sortOrder", "updatedBy", "updatedAt"]
+    },
+    "MemberRegistrationConfig": {
+      "title": "MemberRegistrationConfig",
+      "description": "Konfigurasi pautan web & token Kod QR pendaftaran ahli luar aplikasi untuk iOS/pelayar (/app_config/member_registration).",
+      "type": "object",
+      "properties": {
+        "portalUrl": {
+          "type": "string",
+          "description": "Pautan web HTTPS halaman pendaftaran ahli (cth. https://gen-lang-client-0216024023.web.app)"
+        },
+        "accessToken": {
+          "type": "string",
+          "description": "Token akses unik (16-64 aksara alfanumerik) yang diselitkan dalam pautan & Kod QR"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Status pengaktifan pautan pendaftaran web awam"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID admin yang mengemas kini konfigurasi"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu kemas kini terakhir (FieldValue.serverTimestamp())"
+        }
+      },
+      "required": ["portalUrl", "accessToken", "enabled", "updatedBy", "updatedAt"]
     }
   },
   "firestore": {
@@ -733,7 +762,7 @@
     },
     "/app_config/{configId}": {
       "schema": { "$ref": "#/entities/AppVersionConfig" },
-      "description": "Konfigurasi versi terkini aplikasi (/app_config/version) untuk notis kemas kini automatik"
+      "description": "Konfigurasi aplikasi (/app_config/version untuk versi aplikasi & /app_config/member_registration untuk pautan QR pendaftaran web)"
     },
     "/news_categories/{catId}": {
       "schema": { "$ref": "#/entities/DynamicCategoryItem" },

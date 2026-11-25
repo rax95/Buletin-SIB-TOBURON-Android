@@ -20,6 +20,7 @@ import com.example.data.GalleryPhoto
 import com.example.data.MaritalStatus
 import com.example.data.MemberGender
 import com.example.data.MemberQrUtils
+import com.example.data.MemberRegistrationConfig
 import com.example.data.NewsArticle
 import com.example.data.NewsCategory
 import com.example.data.NewsComment
@@ -229,6 +230,21 @@ class BulletinViewModel(
     val appVersionConfig: StateFlow<AppVersionConfig?> = repository.observeAppVersionConfig(currentUserId)
         .catch { error ->
             unwrapOrRethrow("appVersionConfig", error)
+            emit(null)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = null
+        )
+
+    // Real-time Member Web Registration QR & Link Config (/app_config/member_registration, Admin-only)
+    val memberRegistrationConfig: StateFlow<MemberRegistrationConfig?> = isAdmin
+        .flatMapLatest { admin ->
+            repository.observeMemberRegistrationConfig(currentUserId, admin)
+        }
+        .catch { error ->
+            unwrapOrRethrow("memberRegistrationConfig", error)
             emit(null)
         }
         .stateIn(
@@ -1239,6 +1255,68 @@ class BulletinViewModel(
                 releaseNotes = releaseNotes,
                 updateUrl = updateUrl,
                 forceUpdate = forceUpdate
+            )
+        }
+    }
+
+    fun ensureMemberRegistrationConfig() {
+        if (!isAdmin.value) return
+        viewModelScope.launch {
+            repository.ensureMemberRegistrationConfig()
+                .onFailure { err ->
+                    _snackbarMessage.tryEmit(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menyediakan pautan pendaftaran ahli.",
+                            "Failed to initialize member registration link."
+                        )
+                    )
+                }
+        }
+    }
+
+    fun saveMemberRegistrationConfig(
+        portalUrl: String,
+        accessToken: String,
+        enabled: Boolean,
+        successMessage: String? = null,
+        onComplete: () -> Unit = {}
+    ) {
+        if (!isAdmin.value) return
+        val resolvedMsg = successMessage ?: AppLanguageManager.tr(
+            if (enabled) "Pautan & QR pendaftaran ahli dikemas kini."
+            else "Pendaftaran ahli melalui pautan web dijeda.",
+            if (enabled) "Member registration QR & link updated."
+            else "Web member registration paused."
+        )
+        runMutation(
+            successMessage = resolvedMsg,
+            onComplete = onComplete
+        ) {
+            repository.saveMemberRegistrationConfig(
+                portalUrl = portalUrl,
+                accessToken = accessToken,
+                enabled = enabled
+            )
+        }
+    }
+
+    fun regenerateMemberRegistrationToken(onComplete: () -> Unit = {}) {
+        if (!isAdmin.value) return
+        val current = memberRegistrationConfig.value
+        val portal = current?.portalUrl?.takeIf { it.startsWith("https://") }
+            ?: MemberRegistrationConfig.DEFAULT_PORTAL_URL
+        val newToken = MemberQrUtils.generateRegistrationAccessToken()
+        runMutation(
+            successMessage = AppLanguageManager.tr(
+                "Kod QR & pautan pendaftaran baharu berjaya dijana.",
+                "New registration QR code & link generated."
+            ),
+            onComplete = onComplete
+        ) {
+            repository.saveMemberRegistrationConfig(
+                portalUrl = portal,
+                accessToken = newToken,
+                enabled = true
             )
         }
     }
