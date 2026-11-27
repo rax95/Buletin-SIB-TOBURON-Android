@@ -1,11 +1,21 @@
 package com.example.data
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.util.Base64
+import com.example.R
+import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,6 +50,41 @@ object MemberExportUtils {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         val prefix = AppLanguageManager.tr("Senarai_Ahli_SIB_Toburon", "SIB_Toburon_Members_List")
         return "${prefix}_${stamp}.${format.extension}"
+    }
+
+    fun suggestedMemberCvFileName(member: ChurchMemberDetail): String {
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        val safeName = member.fullName
+            .trim()
+            .replace(Regex("[^A-Za-z0-9]+"), "_")
+            .trim('_')
+            .take(40)
+            .ifEmpty { "Ahli_SIB" }
+        return "${safeName}_Maklumat_Ahli_${stamp}.pdf"
+    }
+
+    suspend fun exportMemberCvPdfToUri(
+        context: Context,
+        uri: Uri,
+        member: ChurchMemberDetail
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val bytes = buildMemberCvPdfBytes(context, member)
+            val outputStream: OutputStream = context.contentResolver.openOutputStream(uri)
+                ?: throw IllegalStateException(
+                    AppLanguageManager.tr(
+                        "Tidak dapat membuka storan peranti untuk menyimpan fail.",
+                        "Unable to open device storage to save the file."
+                    )
+                )
+            outputStream.use { out ->
+                out.write(bytes)
+                out.flush()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun exportMembersToUri(
@@ -82,6 +127,7 @@ object MemberExportUtils {
             AppLanguageManager.tr("Bil", "No"),
             AppLanguageManager.tr("Nama Penuh", "Full Name"),
             AppLanguageManager.tr("No. MyKad", "MyKad No."),
+            AppLanguageManager.tr("No. Tel", "Tel. No."),
             AppLanguageManager.tr("Jantina", "Gender"),
             AppLanguageManager.tr("Tarikh Lahir", "Date of Birth"),
             AppLanguageManager.tr("Umur (Tahun)", "Age (Years)"),
@@ -140,6 +186,7 @@ object MemberExportUtils {
                 (idx + 1).toString(),
                 member.fullName,
                 member.myKadNumber?.takeIf { it.isNotBlank() } ?: "-",
+                member.phoneNumber?.takeIf { it.isNotBlank() } ?: "-",
                 member.resolvedGender().localizedLabel(lang),
                 birthReadable,
                 ageText,
@@ -152,7 +199,7 @@ object MemberExportUtils {
             rowsXml.append("""<row r="$rowNum">""")
             values.forEachIndexed { colIdx, value ->
                 val ref = "${colLetter(colIdx)}$rowNum"
-                if (colIdx == 0 || (colIdx == 5 && value.toIntOrNull() != null)) {
+                if (colIdx == 0 || (colIdx == 6 && value.toIntOrNull() != null)) {
                     rowsXml.append("""<c r="$ref" s="4"><v>$value</v></c>""")
                 } else {
                     rowsXml.append(inlineStringCell(ref, value, style = 4))
@@ -167,21 +214,22 @@ object MemberExportUtils {
     <col min="1" max="1" width="6" customWidth="1"/>
     <col min="2" max="2" width="28" customWidth="1"/>
     <col min="3" max="3" width="18" customWidth="1"/>
-    <col min="4" max="4" width="12" customWidth="1"/>
-    <col min="5" max="5" width="16" customWidth="1"/>
-    <col min="6" max="6" width="13" customWidth="1"/>
-    <col min="7" max="7" width="18" customWidth="1"/>
-    <col min="8" max="8" width="22" customWidth="1"/>
-    <col min="9" max="9" width="18" customWidth="1"/>
-    <col min="10" max="10" width="16" customWidth="1"/>
-    <col min="11" max="11" width="20" customWidth="1"/>
+    <col min="4" max="4" width="17" customWidth="1"/>
+    <col min="5" max="5" width="12" customWidth="1"/>
+    <col min="6" max="6" width="16" customWidth="1"/>
+    <col min="7" max="7" width="13" customWidth="1"/>
+    <col min="8" max="8" width="18" customWidth="1"/>
+    <col min="9" max="9" width="22" customWidth="1"/>
+    <col min="10" max="10" width="18" customWidth="1"/>
+    <col min="11" max="11" width="16" customWidth="1"/>
+    <col min="12" max="12" width="20" customWidth="1"/>
   </cols>
   <sheetData>
     $rowsXml
   </sheetData>
   <mergeCells count="2">
-    <mergeCell ref="A1:K1"/>
-    <mergeCell ref="A2:K2"/>
+    <mergeCell ref="A1:L1"/>
+    <mergeCell ref="A2:L2"/>
   </mergeCells>
 </worksheet>"""
 
@@ -494,6 +542,511 @@ object MemberExportUtils {
         } finally {
             pdf.close()
         }
+    }
+
+    /**
+     * Builds an A4 Portrait CV / Resume-style Member Profile PDF for an individual church member.
+     */
+    internal fun buildMemberCvPdfBytes(
+        context: Context,
+        member: ChurchMemberDetail
+    ): ByteArray {
+        val pageWidth = 595
+        val pageHeight = 842
+        val headerHeight = 144f
+        val goldBarHeight = 4f
+        val bodyTop = headerHeight + goldBarHeight
+        val footerTop = 804f
+
+        val pineDeep = Color.rgb(16, 46, 38)
+        val pineMid = Color.rgb(27, 67, 50)
+        val goldAccent = Color.rgb(212, 175, 55)
+        val goldLight = Color.rgb(243, 217, 139)
+        val dividerColor = Color.rgb(210, 219, 214)
+        val textDark = Color.rgb(24, 30, 27)
+        val textMuted = Color.rgb(90, 102, 96)
+        val badgeBg = Color.rgb(225, 240, 232)
+
+        val lang = AppLanguageManager.current()
+        val now = Date()
+        val exportTimestamp = "${SimpleDateFormat("dd MMM yyyy", lang.locale).format(now)}, ${SimpleDateFormat("h:mm a", Locale.US).format(now)}"
+        val displayName = member.fullName.trim().ifEmpty {
+            AppLanguageManager.tr("Ahli Jemaat SIB Toburon", "SIB Toburon Member")
+        }
+        val sibLabel = member.resolvedSibMembershipLabel(lang)
+        val hasSib = !member.sibMembershipNumber.isNullOrBlank()
+        val myKadDisplay = member.myKadNumber?.trim()?.takeIf { it.isNotEmpty() } ?: "-"
+        val phoneDisplay = member.phoneNumber?.trim()?.takeIf { it.isNotEmpty() } ?: "-"
+        val birthDisplay = member.birthDate.trim().takeIf { it.isNotEmpty() }
+            ?.let { formatBirthDateReadable(it, lang) } ?: "-"
+        val ageValue = member.calculatedAge()
+        val ageDisplay = ageValue?.let {
+            if (lang == AppLanguage.EN) "$it years old" else "$it tahun"
+        } ?: "-"
+        val genderDisplay = member.resolvedGender().localizedLabel(lang)
+        val maritalDisplay = member.resolvedMaritalStatusLabel(lang)
+        val isMarried = member.resolvedMaritalStatus() == MaritalStatus.BERKAHWIN
+        val spouseValue = member.spouseName?.trim()?.takeIf { it.isNotEmpty() } ?: "-"
+        val baptismStatus = member.resolvedBaptismStatus()
+        val isBaptized = baptismStatus == BaptismStatus.DIBAPTIS
+        val baptismDisplay = baptismStatus.localizedLabel(lang)
+        val denominationDisplay = member.denomination.trim().takeIf { it.isNotEmpty() } ?: "-"
+        val emailDisplay = member.memberEmail?.trim()?.takeIf { it.isNotEmpty() }
+            ?: AppLanguageManager.tr("Belum dipautkan", "Not linked yet")
+
+        val pdf = PdfDocument()
+        try {
+            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+            val page = pdf.startPage(pageInfo)
+            val canvas = page.canvas
+
+            // 1. Page background
+            val whitePaint = Paint().apply { color = Color.WHITE; style = Paint.Style.FILL }
+            canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), whitePaint)
+
+            val borderLinePaint = Paint().apply {
+                color = dividerColor
+                strokeWidth = 0.9f
+                style = Paint.Style.STROKE
+            }
+
+            // 3. Top Executive CV Header Banner
+            val headerPaint = Paint().apply {
+                shader = LinearGradient(
+                    0f, 0f, pageWidth.toFloat(), headerHeight,
+                    pineDeep, pineMid, Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRect(0f, 0f, pageWidth.toFloat(), headerHeight, headerPaint)
+
+            // Subtle decorative watermark circle in top-right of banner
+            val watermarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(18, 255, 255, 255)
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(pageWidth - 36f, 24f, 88f, watermarkPaint)
+
+            // Gold accent stripe
+            val goldBarPaint = Paint().apply { color = goldAccent; style = Paint.Style.FILL }
+            canvas.drawRect(0f, headerHeight, pageWidth.toFloat(), bodyTop, goldBarPaint)
+
+            // 4. Passport Portrait (Top-Left inside Header)
+            val photoRect = RectF(26f, 18f, 112f, 128f) // 86 x 110 pt (~3:4)
+            val photoFramePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.FILL
+            }
+            canvas.drawRoundRect(photoRect, 9f, 9f, photoFramePaint)
+
+            val innerPhotoRect = RectF(
+                photoRect.left + 2.5f,
+                photoRect.top + 2.5f,
+                photoRect.right - 2.5f,
+                photoRect.bottom - 2.5f
+            )
+            val passportBitmap = decodeBase64Bitmap(member.passportPhotoBase64)
+            if (passportBitmap != null) {
+                drawBitmapCenterCroppedInRoundedRect(canvas, passportBitmap, innerPhotoRect, 7f)
+                passportBitmap.recycle()
+            } else {
+                val placeholderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.rgb(225, 237, 230)
+                    style = Paint.Style.FILL
+                }
+                canvas.drawRoundRect(innerPhotoRect, 7f, 7f, placeholderBg)
+                val initials = displayName
+                    .split(Regex("\\s+"))
+                    .filter { it.isNotEmpty() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercaseChar().toString() }
+                    .ifEmpty { "ST" }
+                val initialsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = pineMid
+                    textSize = 24f
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                }
+                canvas.drawText(initials, innerPhotoRect.centerX(), innerPhotoRect.centerY() + 4f, initialsPaint)
+                val noPhotoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = textMuted
+                    textSize = 7.5f
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                }
+                canvas.drawText(
+                    AppLanguageManager.tr("TIADA FOTO", "NO PHOTO"),
+                    innerPhotoRect.centerX(),
+                    innerPhotoRect.bottom - 12f,
+                    noPhotoPaint
+                )
+            }
+
+            // 5. Church Emblem (Top-Right inside Header)
+            val emblemBitmap = runCatching {
+                BitmapFactory.decodeResource(context.resources, R.drawable.sib_toburon_logo)
+            }.getOrNull()
+            if (emblemBitmap != null) {
+                val emblemRect = RectF(pageWidth - 68f, 18f, pageWidth - 26f, 60f)
+                val emblemBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }
+                canvas.drawOval(emblemRect, emblemBgPaint)
+                val emblemInner = RectF(emblemRect.left + 2f, emblemRect.top + 2f, emblemRect.right - 2f, emblemRect.bottom - 2f)
+                drawBitmapCenterCroppedInRoundedRect(canvas, emblemBitmap, emblemInner, 20f)
+                val emblemStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = goldLight
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.4f
+                }
+                canvas.drawOval(emblemRect, emblemStroke)
+                emblemBitmap.recycle()
+            }
+
+            // 6. Header Text (Member Name & Badges)
+            val headerTextLeft = 130f
+            val headerMaxWidth = pageWidth - 82f - headerTextLeft
+            val eyebrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = goldLight
+                textSize = 8.5f
+                letterSpacing = 0.08f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            canvas.drawText(
+                AppLanguageManager.tr(
+                    "GEREJA SIB TOBURON  •  MAKLUMAT AHLI",
+                    "SIB TOBURON CHURCH  •  MEMBER INFORMATION"
+                ),
+                headerTextLeft,
+                32f,
+                eyebrowPaint
+            )
+
+            val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = 20f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            val nameLines = wrapText(displayName, namePaint, headerMaxWidth).take(2)
+            var nameY = 58f
+            nameLines.forEachIndexed { idx, line ->
+                val text = if (idx == 1 && nameLines.size == 2) {
+                    ellipsizeText(line, namePaint, headerMaxWidth)
+                } else {
+                    line
+                }
+                canvas.drawText(text, headerTextLeft, nameY, namePaint)
+                nameY += 23f
+            }
+
+            // Header Pill Badges (SIB No. + Baptism Status)
+            val badgeY = (nameY + 4f).coerceAtMost(106f)
+            val pillTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = pineDeep
+                textSize = 8.8f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            val sibChipText = if (hasSib) "SIB: $sibLabel" else AppLanguageManager.tr("NO. SIB: Belum ada", "SIB NO: Unassigned")
+            val sibChipWidth = pillTextPaint.measureText(sibChipText) + 18f
+            val sibChipRect = RectF(headerTextLeft, badgeY, headerTextLeft + sibChipWidth, badgeY + 19f)
+            val goldChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = goldLight; style = Paint.Style.FILL }
+            canvas.drawRoundRect(sibChipRect, 9.5f, 9.5f, goldChipPaint)
+            canvas.drawText(sibChipText, sibChipRect.left + 9f, sibChipRect.top + 13f, pillTextPaint)
+
+            val statusChipText = if (isBaptized && member.denomination.isNotBlank()) {
+                "$baptismDisplay • ${member.denomination.trim()}"
+            } else {
+                baptismDisplay
+            }
+            val statusChipX = sibChipRect.right + 8f
+            val availableStatusW = (pageWidth - 26f - statusChipX - 18f).coerceAtLeast(60f)
+            val fittedStatusText = ellipsizeText(statusChipText, pillTextPaint, availableStatusW)
+            val statusChipW = pillTextPaint.measureText(fittedStatusText) + 18f
+            val statusChipRect = RectF(statusChipX, badgeY, statusChipX + statusChipW, badgeY + 19f)
+            val statusChipBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (isBaptized) badgeBg else Color.argb(46, 255, 255, 255)
+                style = Paint.Style.FILL
+            }
+            val statusChipTextPaint = Paint(pillTextPaint).apply {
+                color = if (isBaptized) pineDeep else Color.WHITE
+            }
+            canvas.drawRoundRect(statusChipRect, 9.5f, 9.5f, statusChipBg)
+            canvas.drawText(fittedStatusText, statusChipRect.left + 9f, statusChipRect.top + 13f, statusChipTextPaint)
+
+            // 7. FULL-WIDTH MAIN CV BODY
+            val mainX = 30f
+            val mainRight = pageWidth - 30f
+            val mainW = mainRight - mainX // 535f
+            var mainY = bodyTop + 28f
+
+            val rowLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textMuted
+                textSize = 9.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            val rowValuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textDark
+                textSize = 10.2f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            }
+
+            // Section 1: Personal Details
+            mainY = drawCvSectionHeader(
+                canvas,
+                title = AppLanguageManager.tr("BUTIRAN PERIBADI", "PERSONAL DETAILS"),
+                x = mainX, y = mainY, width = mainW,
+                pineColor = pineDeep, goldColor = goldAccent, ruleColor = dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Nama Penuh", "Full Name"),
+                displayName, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("No. MyKad", "MyKad No."),
+                myKadDisplay, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("No. Tel", "Tel. No."),
+                phoneDisplay, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Tarikh Lahir", "Date of Birth"),
+                birthDisplay, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Umur", "Age"),
+                ageDisplay, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Jantina", "Gender"),
+                genderDisplay, rowLabelPaint, rowValuePaint, dividerColor,
+                drawBottomDivider = false
+            )
+            mainY += 18f
+
+            // Section 2: Family & Marital Status
+            mainY = drawCvSectionHeader(
+                canvas,
+                title = AppLanguageManager.tr("KELUARGA & PERKAHWINAN", "FAMILY & MARITAL STATUS"),
+                x = mainX, y = mainY, width = mainW,
+                pineColor = pineDeep, goldColor = goldAccent, ruleColor = dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Status Perkahwinan", "Marital Status"),
+                maritalDisplay, rowLabelPaint, rowValuePaint, dividerColor,
+                drawBottomDivider = isMarried || !member.spouseName.isNullOrBlank()
+            )
+            if (isMarried || !member.spouseName.isNullOrBlank()) {
+                mainY = drawDetailKeyValueRow(
+                    canvas, mainX, mainY, mainW,
+                    member.resolvedSpouseFieldLabel(lang),
+                    spouseValue, rowLabelPaint, rowValuePaint, dividerColor,
+                    drawBottomDivider = false
+                )
+            }
+            mainY += 18f
+
+            // Section 3: Spiritual & Church Membership Record
+            mainY = drawCvSectionHeader(
+                canvas,
+                title = AppLanguageManager.tr("REKOD KEROHANIAN & KEANGGOTAAN", "SPIRITUAL & MEMBERSHIP RECORD"),
+                x = mainX, y = mainY, width = mainW,
+                pineColor = pineDeep, goldColor = goldAccent, ruleColor = dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Status Baptisan", "Baptism Status"),
+                baptismDisplay, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Denominasi Gereja", "Church Denomination"),
+                denominationDisplay, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            mainY = drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("No. Keanggotaan SIB", "SIB Membership No."),
+                sibLabel, rowLabelPaint, rowValuePaint, dividerColor
+            )
+            drawDetailKeyValueRow(
+                canvas, mainX, mainY, mainW,
+                AppLanguageManager.tr("Akaun Google Terpaut", "Linked Google Account"),
+                emailDisplay, rowLabelPaint, rowValuePaint, dividerColor,
+                drawBottomDivider = false
+            )
+
+            // 9. Document Footer
+            canvas.drawLine(0f, footerTop, pageWidth.toFloat(), footerTop, borderLinePaint)
+            val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textMuted
+                textSize = 8.5f
+            }
+            canvas.drawText(
+                AppLanguageManager.tr(
+                    "Gereja SIB Toburon  •  Dokumen Maklumat Ahli Rasmi",
+                    "SIB Toburon Church  •  Official Member Information Document"
+                ),
+                26f,
+                footerTop + 22f,
+                footerPaint
+            )
+            val rightFooter = AppLanguageManager.tr(
+                "Dieksport: $exportTimestamp   •   Halaman 1 / 1",
+                "Exported: $exportTimestamp   •   Page 1 / 1"
+            )
+            val rightFooterW = footerPaint.measureText(rightFooter)
+            canvas.drawText(rightFooter, pageWidth - 26f - rightFooterW, footerTop + 22f, footerPaint)
+
+            pdf.finishPage(page)
+
+            val baos = ByteArrayOutputStream()
+            pdf.writeTo(baos)
+            return baos.toByteArray()
+        } finally {
+            pdf.close()
+        }
+    }
+
+    private fun drawCvSectionHeader(
+        canvas: android.graphics.Canvas,
+        title: String,
+        x: Float,
+        y: Float,
+        width: Float,
+        pineColor: Int,
+        goldColor: Int,
+        ruleColor: Int
+    ): Float {
+        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = pineColor
+            textSize = 11f
+            letterSpacing = 0.05f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        canvas.drawText(title, x, y, headerPaint)
+        val ruleY = y + 6f
+        canvas.drawLine(x, ruleY, x + width, ruleY, Paint().apply { color = ruleColor; strokeWidth = 0.9f })
+        canvas.drawLine(x, ruleY, x + 52f, ruleY, Paint().apply { color = goldColor; strokeWidth = 2.2f })
+        return y + 24f
+    }
+
+    private fun drawDetailKeyValueRow(
+        canvas: android.graphics.Canvas,
+        x: Float,
+        startY: Float,
+        width: Float,
+        label: String,
+        value: String,
+        labelPaint: Paint,
+        valuePaint: Paint,
+        dividerColor: Int,
+        drawBottomDivider: Boolean = true
+    ): Float {
+        val labelColWidth = width * 0.36f
+        val valueX = x + labelColWidth + 12f
+        val valueWidth = width - labelColWidth - 12f
+
+        canvas.drawText(ellipsizeText(label, labelPaint, labelColWidth), x, startY, labelPaint)
+        val lines = wrapText(value.ifBlank { "-" }, valuePaint, valueWidth).take(3)
+        var y = startY
+        lines.forEach { line ->
+            canvas.drawText(line, valueX, y, valuePaint)
+            y += 14.5f
+        }
+        val rowBottom = y - 1f
+        if (drawBottomDivider) {
+            canvas.drawLine(
+                x, rowBottom, x + width, rowBottom,
+                Paint().apply { color = dividerColor; strokeWidth = 0.6f }
+            )
+        }
+        return rowBottom + 15f
+    }
+
+    private fun decodeBase64Bitmap(base64: String?): Bitmap? {
+        if (base64.isNullOrBlank()) return null
+        return runCatching {
+            val cleaned = base64.substringAfter("base64,", base64).trim()
+            val bytes = Base64.decode(cleaned, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
+    }
+
+    private fun drawBitmapCenterCroppedInRoundedRect(
+        canvas: android.graphics.Canvas,
+        bitmap: Bitmap,
+        dst: RectF,
+        cornerRadius: Float
+    ) {
+        if (bitmap.width <= 0 || bitmap.height <= 0) return
+        val dstRatio = dst.width() / dst.height()
+        val srcRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+        val srcRect = if (srcRatio > dstRatio) {
+            val cropW = (bitmap.height * dstRatio).toInt().coerceAtLeast(1)
+            val left = ((bitmap.width - cropW) / 2).coerceAtLeast(0)
+            Rect(left, 0, (left + cropW).coerceAtMost(bitmap.width), bitmap.height)
+        } else {
+            val cropH = (bitmap.width / dstRatio).toInt().coerceAtLeast(1)
+            val top = ((bitmap.height - cropH) / 2).coerceAtLeast(0)
+            Rect(0, top, bitmap.width, (top + cropH).coerceAtMost(bitmap.height))
+        }
+        canvas.save()
+        val clipPath = Path().apply {
+            addRoundRect(dst, cornerRadius, cornerRadius, Path.Direction.CW)
+        }
+        canvas.clipPath(clipPath)
+        val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(bitmap, srcRect, dst, bitmapPaint)
+        canvas.restore()
+    }
+
+    private fun wrapText(text: String, paint: Paint, maxWidth: Float): List<String> {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return listOf("-")
+        val result = mutableListOf<String>()
+        val words = trimmed.split(Regex("\\s+"))
+        var currentLine = StringBuilder()
+
+        fun flushLine() {
+            if (currentLine.isNotEmpty()) {
+                result.add(currentLine.toString())
+                currentLine = StringBuilder()
+            }
+        }
+
+        words.forEach { word ->
+            val candidate = if (currentLine.isEmpty()) word else "${currentLine} $word"
+            if (paint.measureText(candidate) <= maxWidth) {
+                currentLine.clear()
+                currentLine.append(candidate)
+            } else {
+                flushLine()
+                if (paint.measureText(word) <= maxWidth) {
+                    currentLine.append(word)
+                } else {
+                    // Break extra-long tokens (such as emails or long IDs) cleanly
+                    var chunk = StringBuilder()
+                    word.forEach { ch ->
+                        val next = chunk.toString() + ch
+                        if (paint.measureText(next) <= maxWidth || chunk.isEmpty()) {
+                            chunk.append(ch)
+                        } else {
+                            result.add(chunk.toString())
+                            chunk = StringBuilder().append(ch)
+                        }
+                    }
+                    if (chunk.isNotEmpty()) {
+                        currentLine.append(chunk.toString())
+                    }
+                }
+            }
+        }
+        flushLine()
+        return if (result.isEmpty()) listOf("-") else result
     }
 
     private fun ellipsizeText(text: String, paint: Paint, maxWidth: Float): String {

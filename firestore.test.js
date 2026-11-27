@@ -856,14 +856,21 @@ test("Church members directory exposes full names only; personal details are str
     })
   );
 
-  // Admin links member_001 to Alice's verified Google email with MyKad, spouseName, and SIB membership number
+  // Admin links member_001 to Alice's verified Google email with MyKad, phoneNumber, spouseName, and SIB membership number
   await assertSucceeds(
     adminDb.collection("church_member_details").doc("member_001").update({
       memberEmail: "alice@example.com",
       myKadNumber: "950614-12-5431",
+      phoneNumber: "012-3456789",
       spouseName: "Maria Toburon",
       sibMembershipNumber: "SIB-TBR-0042",
       updatedAt: pastDate(300),
+    })
+  );
+  await assertFails(
+    adminDb.collection("church_member_details").doc("member_001").update({
+      phoneNumber: "0".repeat(26),
+      updatedAt: pastDate(290),
     })
   );
 
@@ -1868,6 +1875,7 @@ test("Admin manages /app_config/member_registration privately and valid QR token
   webBatch.set(guestDb.collection("church_member_details").doc(webId), {
     fullName: "Daniel iOS Safari",
     myKadNumber: "920815-12-3456",
+    phoneNumber: "+6019-8881234",
     gender: "LELAKI",
     birthDate: "1992-08-15",
     baptismStatus: "DIBAPTIS",

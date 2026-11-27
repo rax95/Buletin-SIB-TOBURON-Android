@@ -9,9 +9,15 @@ import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.util.Base64
+import android.util.LruCache
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
+import androidx.core.graphics.scale
 import com.example.ui.i18n.AppLanguageManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -230,12 +236,30 @@ object ImageUtils {
         }.getOrDefault(bitmap)
     }
 
-    fun decodeBase64ToImageBitmap(base64: String?): ImageBitmap? {
+    private val base64BitmapCache = LruCache<String, ImageBitmap>(36)
+
+    private fun buildCacheKey(base64: String?): String? {
         if (base64.isNullOrBlank()) return null
+        val cleaned = base64.substringAfter("base64,", base64).trim()
+        if (cleaned.isEmpty()) return null
+        return "${cleaned.length}:${cleaned.hashCode()}"
+    }
+
+    fun getCachedBase64ImageBitmap(base64: String?): ImageBitmap? {
+        val key = buildCacheKey(base64) ?: return null
+        return base64BitmapCache.get(key)
+    }
+
+    fun decodeBase64ToImageBitmap(base64: String?): ImageBitmap? {
+        val raw = base64 ?: return null
+        val key = buildCacheKey(raw) ?: return null
+        base64BitmapCache.get(key)?.let { return it }
         return try {
-            val cleaned = base64.substringAfter("base64,", base64).trim()
+            val cleaned = raw.substringAfter("base64,", raw).trim()
             val bytes = Base64.decode(cleaned, Base64.DEFAULT)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()?.also { bitmap ->
+                base64BitmapCache.put(key, bitmap)
+            }
         } catch (_: Exception) {
             null
         }
@@ -255,6 +279,23 @@ object ImageUtils {
             targetHeight = maxDimension
             targetWidth = (maxDimension * ratio).toInt().coerceAtLeast(1)
         }
-        return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        return bitmap.scale(targetWidth, targetHeight)
     }
+}
+
+@Composable
+fun rememberBase64ImageBitmap(base64: String?): ImageBitmap? {
+    val cached = remember(base64) { ImageUtils.getCachedBase64ImageBitmap(base64) }
+    val decoded by produceState<ImageBitmap?>(initialValue = cached, base64) {
+        if (cached != null) {
+            value = cached
+        } else if (base64.isNullOrBlank()) {
+            value = null
+        } else {
+            value = withContext(Dispatchers.Default) {
+                ImageUtils.decodeBase64ToImageBitmap(base64)
+            }
+        }
+    }
+    return cached ?: decoded
 }

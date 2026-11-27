@@ -4,7 +4,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -39,13 +38,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.R
 import kotlinx.coroutines.delay
 
@@ -119,8 +118,8 @@ fun SplashScreen(
                     .size(148.dp)
                     .testTag("splash_logo")
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.sib_toburon_logo),
+                AsyncImage(
+                    model = R.drawable.sib_toburon_logo,
                     contentDescription = stringResource(R.string.app_name),
                     contentScale = ContentScale.Fit,
                     modifier = Modifier

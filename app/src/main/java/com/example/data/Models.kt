@@ -503,6 +503,7 @@ data class ChurchMemberDetail(
     @DocumentId val id: String = "",
     val fullName: String = "",
     val myKadNumber: String? = null,
+    val phoneNumber: String? = null,
     val gender: String = MemberGender.LELAKI.code,
     val birthDate: String = "",
     val baptismStatus: String = BaptismStatus.BELUM_DIBAPTIS.code,

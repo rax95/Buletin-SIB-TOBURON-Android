@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -217,7 +218,8 @@ fun MemberQrScannerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
-                    .padding(horizontal = 16.dp, vertical = 40.dp)
+                    .safeDrawingPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Surface(
                     shape = CircleShape,
@@ -296,7 +298,8 @@ fun MemberQrScannerDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 24.dp, vertical = 48.dp)
+                    .safeDrawingPadding()
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
             ) {
                 if (cameraError != null) {
                     Surface(

@@ -1,6 +1,5 @@
 package com.example.ui.auth
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,11 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,12 +50,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.CompactLanguageTogglePill
@@ -66,29 +65,35 @@ import com.example.ui.i18n.tr
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit,
-    onContinueAsGuest: () -> Unit
+    onContinueAsGuest: () -> Unit,
+    isSplashVisible: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
 
     var isLoading by remember { mutableStateOf(false) }
-    var isCheckingAutoSignIn by remember { mutableStateOf(true) }
+    var isCheckingAutoSignIn by remember { mutableStateOf(false) }
+    var hasAttemptedAutoSignIn by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        attemptAutoSignIn(
-            context = context,
-            credentialManager = credentialManager,
-            onAuthSuccess = {
-                isCheckingAutoSignIn = false
-                onAuthSuccess()
-            },
-            onUnauthenticated = {
-                isCheckingAutoSignIn = false
-            },
-            scope = scope
-        )
+    LaunchedEffect(isSplashVisible) {
+        if (!isSplashVisible && !hasAttemptedAutoSignIn) {
+            hasAttemptedAutoSignIn = true
+            isCheckingAutoSignIn = true
+            attemptAutoSignIn(
+                context = context,
+                credentialManager = credentialManager,
+                onAuthSuccess = {
+                    isCheckingAutoSignIn = false
+                    onAuthSuccess()
+                },
+                onUnauthenticated = {
+                    isCheckingAutoSignIn = false
+                },
+                scope = scope
+            )
+        }
     }
 
     val currentLanguage = LocalAppLanguage.current
@@ -104,8 +109,8 @@ fun AuthScreen(
                 .fillMaxWidth()
                 .height(340.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.img_hero_sanctuary),
+            AsyncImage(
+                model = R.drawable.img_hero_sanctuary,
                 contentDescription = tr(
                     "Foto bangunan gereja SIB Toburon bermandikan cahaya pagi",
                     "Photo of SIB Toburon church sanctuary in morning light"
@@ -162,8 +167,8 @@ fun AuthScreen(
                 color = Color.White,
                 modifier = Modifier.size(88.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.sib_toburon_logo),
+                AsyncImage(
+                    model = R.drawable.sib_toburon_logo,
                     contentDescription = stringResource(R.string.app_name),
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -338,7 +343,7 @@ fun AuthScreen(
                             )
                         } else {
                             Icon(
-                                imageVector = Icons.Rounded.Login,
+                                imageVector = Icons.AutoMirrored.Rounded.Login,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp)
                             )

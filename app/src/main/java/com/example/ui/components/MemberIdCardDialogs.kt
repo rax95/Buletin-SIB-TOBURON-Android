@@ -1,6 +1,6 @@
 package com.example.ui.components
 
-import android.view.ViewGroup
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WaterDrop
@@ -54,7 +56,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -69,25 +70,22 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.BaptismStatus
 import com.example.data.ChurchMemberDetail
-import com.example.data.ImageUtils
 import com.example.data.MaritalStatus
 import com.example.data.MemberQrUtils
 import com.example.data.UserProfile
 import com.example.data.formatBirthDateReadable
+import com.example.data.rememberBase64ImageBitmap
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
 import com.example.ui.theme.HarvestGold
@@ -232,6 +230,19 @@ fun OwnMemberIdCard(
                         )
                     }
 
+                    val ownPhone = ownMemberDetail?.phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
+                    if (ownPhone != null) {
+                        IdCardFieldTile(
+                            icon = Icons.Filled.Phone,
+                            label = tr("NO. TELEFON (TEL. NO.)", "PHONE NUMBER (TEL. NO.)"),
+                            value = ownPhone,
+                            isMonospace = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("kad_ahli_phone_value")
+                        )
+                    }
+
                     if (ownMemberDetail == null) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -335,12 +346,14 @@ fun AdminMemberIdCardDialog(
     isBusy: Boolean,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
-    onRequestDelete: () -> Unit
+    onRequestDelete: () -> Unit,
+    onExportCvPdf: (() -> Unit)? = null
 ) {
     val lang = LocalAppLanguage.current
     val age = detail.calculatedAge()
     val readableBirthDate = formatBirthDateReadable(detail.birthDate, lang)
     val myKadDisplay = detail.myKadNumber?.takeIf { it.isNotBlank() } ?: "-"
+    val phoneDisplay = detail.phoneNumber?.trim()?.takeIf { it.isNotEmpty() } ?: "-"
     val sibNumberDisplay = detail.resolvedSibMembershipLabel(lang)
     val hasSibNumber = !detail.sibMembershipNumber.isNullOrBlank()
     val memberQrPayload = remember(detail.id, detail.sibMembershipNumber, detail.memberEmail) {
@@ -353,32 +366,27 @@ fun AdminMemberIdCardDialog(
     val isBaptized = detail.resolvedBaptismStatus() == BaptismStatus.DIBAPTIS
     val isMarried = detail.resolvedMaritalStatus() == MaritalStatus.BERKAHWIN
 
-    Dialog(
-        onDismissRequest = { if (!isBusy) onDismiss() },
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-        SideEffect {
-            dialogWindow?.setLayout(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(isBusy) {
-                    detectTapGestures {
-                        if (!isBusy) onDismiss()
-                    }
+    BackHandler(enabled = !isBusy) {
+        onDismiss()
+    }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.64f))
+            .pointerInput(isBusy) {
+                detectTapGestures {
+                    if (!isBusy) onDismiss()
                 }
-                .safeDrawingPadding()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
+            }
+            .padding(horizontal = 12.dp, vertical = 12.dp)
+    ) {
+        BoxWithConstraints(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
         ) {
+            val dialogMaxHeight = maxHeight
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -387,16 +395,21 @@ fun AdminMemberIdCardDialog(
                 modifier = Modifier
                     .widthIn(max = 520.dp)
                     .fillMaxWidth()
+                    .heightIn(max = dialogMaxHeight)
                     .pointerInput(Unit) {
                         detectTapGestures { /* absorb taps inside card */ }
                     }
                     .testTag("member_detail_dialog")
             ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                MemberIdCardBanner(
-                    subtitle = tr("KAD AHLI RASMI", "OFFICIAL MEMBER CARD"),
-                    onClose = { if (!isBusy) onDismiss() }
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = dialogMaxHeight)
+                ) {
+                    MemberIdCardBanner(
+                        subtitle = tr("KAD AHLI RASMI", "OFFICIAL MEMBER CARD"),
+                        onClose = { if (!isBusy) onDismiss() }
+                    )
 
                 // Scrollable ID Card Body
                 Column(
@@ -470,6 +483,18 @@ fun AdminMemberIdCardDialog(
                             )
                         }
 
+                        // Tel. No.
+                        IdCardFieldTile(
+                            icon = Icons.Filled.Phone,
+                            label = tr("NO. TELEFON (TEL. NO.)", "PHONE NUMBER (TEL. NO.)"),
+                            value = phoneDisplay,
+                            isMonospace = phoneDisplay != "-",
+                            isMutedValue = phoneDisplay == "-",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("member_detail_phone_value")
+                        )
+
                         // Row 3: Status Perkahwinan + Status Baptisan
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -531,52 +556,80 @@ fun AdminMemberIdCardDialog(
                     }
                 )
 
-                // Admin Actions: Padam & Edit
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                // Admin Actions: Export PDF (CV) + Padam & Edit
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 18.dp, vertical = 14.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = onRequestDelete,
-                        enabled = !isBusy,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
-                            .testTag("member_detail_delete_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(tr("Padam", "Delete"))
+                    if (onExportCvPdf != null) {
+                        FilledTonalButton(
+                            onClick = onExportCvPdf,
+                            enabled = !isBusy,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("member_detail_export_pdf_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PictureAsPdf,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = tr("Eksport Data Individu (PDF)", "Export Individual Data (PDF)"),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
-                    Button(
-                        onClick = onEdit,
-                        enabled = !isBusy,
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
-                            .testTag("member_detail_edit_button")
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(tr("Edit", "Edit"))
+                        OutlinedButton(
+                            onClick = onRequestDelete,
+                            enabled = !isBusy,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("member_detail_delete_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(tr("Padam", "Delete"))
+                        }
+                        Button(
+                            onClick = onEdit,
+                            enabled = !isBusy,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("member_detail_edit_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(tr("Edit", "Edit"))
+                        }
                     }
                 }
+                }
             }
-        }
         }
     }
 }
@@ -611,8 +664,8 @@ private fun MemberIdCardBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.sib_toburon_logo),
+                    AsyncImage(
+                        model = R.drawable.sib_toburon_logo,
                         contentDescription = tr("Logo Gereja SIB Toburon", "SIB Toburon Church Emblem"),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
@@ -682,9 +735,7 @@ private fun MemberIdHeroRow(
     subLine: String,
     badgeIcon: ImageVector = Icons.Filled.WaterDrop
 ) {
-    val decodedPhoto = remember(passportPhotoBase64) {
-        ImageUtils.decodeBase64ToImageBitmap(passportPhotoBase64)
-    }
+    val decodedPhoto = rememberBase64ImageBitmap(passportPhotoBase64)
     val initials = remember(fullName) {
         fullName
             .trim()
@@ -1050,47 +1101,23 @@ private fun MemberIdCardFooterStrip(
     }
 
     if (showEnlargedQr) {
-        Dialog(
-            onDismissRequest = { showEnlargedQr = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false
-            )
-        ) {
-            val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-            SideEffect {
-                dialogWindow?.setLayout(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            }
-            Box(
-                contentAlignment = Alignment.Center,
+        Dialog(onDismissRequest = { showEnlargedQr = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shadowElevation = 10.dp,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures { showEnlargedQr = false }
-                    }
-                    .safeDrawingPadding()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .testTag("member_qr_enlarged_dialog")
             ) {
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    shadowElevation = 10.dp,
-                    modifier = Modifier
-                        .widthIn(max = 380.dp)
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectTapGestures { /* absorb taps inside card */ }
-                        }
-                        .testTag("member_qr_enlarged_dialog")
-                ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(22.dp)
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1178,7 +1205,6 @@ private fun MemberIdCardFooterStrip(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
             }
         }
     }

@@ -36,12 +36,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.QrCode2
@@ -165,6 +165,7 @@ fun AdminScreen(
     onAddMember: () -> Unit,
     onEditMember: (ChurchMemberDetail) -> Unit,
     onDeleteMember: (String) -> Unit,
+    onExportMemberCvPdf: (ChurchMemberDetail) -> Unit = {},
     onScanMemberQrClick: () -> Unit,
     onExportMembersClick: () -> Unit,
     onAddNewsClick: () -> Unit,
@@ -195,12 +196,13 @@ fun AdminScreen(
     val publishedVersionName = appVersionConfig?.latestVersionName?.ifBlank { BuildConfig.VERSION_NAME }
         ?: BuildConfig.VERSION_NAME
 
-    AnimatedContent(
-        targetState = activeSection,
-        transitionSpec = { fadeIn() togetherWith fadeOut() },
-        label = "admin_section_nav",
-        modifier = modifier.fillMaxSize()
-    ) { section ->
+    Box(modifier = modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = activeSection,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "admin_section_nav",
+            modifier = Modifier.fillMaxSize()
+        ) { section ->
         when (section) {
             null -> {
                 Box(
@@ -278,7 +280,7 @@ fun AdminScreen(
 
                         // 1. Manage Events
                         AdminNavigationColumnCard(
-                            icon = Icons.Filled.EventNote,
+                            icon = Icons.AutoMirrored.Filled.EventNote,
                             iconBgColor = MaterialTheme.colorScheme.primaryContainer,
                             iconTintColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             title = tr("Urus Acara", "Manage Events"),
@@ -494,8 +496,10 @@ fun AdminScreen(
             isBusy = isBusy,
             onDismiss = onDismissMemberDetail,
             onEdit = { onEditMember(selectedMemberDetail) },
-            onRequestDelete = { pendingDeleteMember = selectedMemberDetail }
+            onRequestDelete = { pendingDeleteMember = selectedMemberDetail },
+            onExportCvPdf = { onExportMemberCvPdf(selectedMemberDetail) }
         )
+    }
     }
 
     val memberToDelete = pendingDeleteMember

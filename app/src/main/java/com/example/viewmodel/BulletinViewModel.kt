@@ -1056,6 +1056,7 @@ class BulletinViewModel(
         existingId: String?,
         fullName: String,
         myKadNumber: String?,
+        phoneNumber: String? = null,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
@@ -1068,6 +1069,7 @@ class BulletinViewModel(
         onComplete: () -> Unit = {}
     ) {
         val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanPhone = phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
         val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
         val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
             spouseName?.trim()?.takeIf { it.isNotEmpty() }
@@ -1088,6 +1090,7 @@ class BulletinViewModel(
                     _selectedMemberDetail.value = _selectedMemberDetail.value?.copy(
                         fullName = fullName.trim(),
                         myKadNumber = cleanMyKad,
+                        phoneNumber = cleanPhone,
                         gender = gender.code,
                         birthDate = birthDateIso.trim(),
                         baptismStatus = baptismStatus.code,
@@ -1106,6 +1109,7 @@ class BulletinViewModel(
                 repository.createChurchMember(
                     fullName = fullName,
                     myKadNumber = cleanMyKad,
+                    phoneNumber = cleanPhone,
                     gender = gender,
                     birthDateIso = birthDateIso,
                     baptismStatus = baptismStatus,
@@ -1121,6 +1125,7 @@ class BulletinViewModel(
                     memberId = existingId,
                     fullName = fullName,
                     myKadNumber = cleanMyKad,
+                    phoneNumber = cleanPhone,
                     gender = gender,
                     birthDateIso = birthDateIso,
                     baptismStatus = baptismStatus,
@@ -1138,6 +1143,7 @@ class BulletinViewModel(
     fun saveOwnChurchMember(
         fullName: String,
         myKadNumber: String?,
+        phoneNumber: String? = null,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
@@ -1160,6 +1166,7 @@ class BulletinViewModel(
         }
         val existingOwnId = ownMemberDetail.value?.id
         val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanPhone = phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
         val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
         val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
             spouseName?.trim()?.takeIf { it.isNotEmpty() }
@@ -1187,6 +1194,7 @@ class BulletinViewModel(
                 repository.registerOwnChurchMember(
                     fullName = fullName,
                     myKadNumber = cleanMyKad,
+                    phoneNumber = cleanPhone,
                     gender = gender,
                     birthDateIso = birthDateIso,
                     baptismStatus = baptismStatus,
@@ -1202,6 +1210,7 @@ class BulletinViewModel(
                     memberId = existingOwnId,
                     fullName = fullName,
                     myKadNumber = cleanMyKad,
+                    phoneNumber = cleanPhone,
                     gender = gender,
                     birthDateIso = birthDateIso,
                     baptismStatus = baptismStatus,

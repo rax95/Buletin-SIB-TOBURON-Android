@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,7 +44,7 @@ enum class AppLanguage(
     val shortLabel: String,
     val locale: Locale
 ) {
-    MS("ms", "Bahasa Malaysia", "BM", Locale("ms", "MY")),
+    MS("ms", "Bahasa Malaysia", "BM", Locale.Builder().setLanguage("ms").setRegion("MY").build()),
     EN("en", "English", "EN", Locale.ENGLISH);
 
     companion object {
@@ -68,7 +69,7 @@ object AppLanguageManager {
     fun setLanguage(context: Context, lang: AppLanguage) {
         _language.value = lang
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_LANGUAGE, lang.code).apply()
+        prefs.edit { putString(KEY_LANGUAGE, lang.code) }
     }
 
     fun current(): AppLanguage = _language.value

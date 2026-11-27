@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -64,7 +66,7 @@ object MemberQrUtils {
     fun parseMemberQrPayload(rawValue: String?): ParsedMemberQr? {
         val trimmed = rawValue?.trim().orEmpty()
         if (trimmed.isEmpty()) return null
-        val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return null
+        val uri = runCatching { trimmed.toUri() }.getOrNull() ?: return null
         if (!uri.scheme.equals(QR_SCHEME, ignoreCase = true)) return null
         if (!uri.host.equals(QR_HOST, ignoreCase = true)) return null
 
@@ -117,7 +119,7 @@ object MemberQrUtils {
                     pixels[offset + x] = if (matrix[x, y]) foregroundColor else backgroundColor
                 }
             }
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(width, height)
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
             bitmap
         }.getOrNull()

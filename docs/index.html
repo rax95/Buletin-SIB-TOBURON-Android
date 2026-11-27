@@ -4,48 +4,60 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Pendaftaran Ahli SIB Toburon</title>
-  <meta name="theme-color" content="#1B5E4E" />
+  <meta name="theme-color" content="#103F34" />
   <style>
     :root {
       --pine: #1B5E4E;
       --pine-dark: #103F34;
       --pine-soft: #E6F2EE;
       --gold: #C89B3C;
+      --gold-light: #F2C879;
       --gold-soft: #FDF5E4;
-      --bg: #F5F7F5;
+      --bg: #F3F6F4;
       --card: #FFFFFF;
+      --surface-low: #F8FAF9;
       --text: #16211E;
       --muted: #5A6B65;
-      --border: #D8E2DD;
+      --border: #D5E0DA;
       --danger: #B3261E;
       --danger-soft: #FDECEA;
-      --success: #1B5E4E;
-      --radius: 16px;
+      --radius: 18px;
     }
 
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
-      padding: 16px 14px 40px;
+      padding: 16px 14px 48px;
+      -webkit-font-smoothing: antialiased;
     }
 
     .shell {
-      max-width: 580px;
+      max-width: 600px;
       margin: 0 auto;
     }
 
+    /* Hero Banner matching Kad Ahli SIB Toburon */
     .hero {
       background: linear-gradient(135deg, var(--pine-dark), var(--pine));
       color: #fff;
       border-radius: 22px;
-      padding: 20px;
-      margin-bottom: 14px;
-      box-shadow: 0 10px 26px rgba(16, 63, 52, 0.16);
-      position: relative;
+      overflow: hidden;
+      margin-bottom: 16px;
+      box-shadow: 0 12px 28px rgba(16, 63, 52, 0.18);
+    }
+
+    .hero-inner {
+      padding: 20px 20px 18px;
+    }
+
+    .hero-gold-bar {
+      height: 4px;
+      background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold));
     }
 
     .hero-top {
@@ -53,63 +65,109 @@
       justify-content: space-between;
       align-items: flex-start;
       gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .hero-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .hero-crest {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid var(--gold-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
     }
 
     .badge {
       display: inline-block;
-      background: rgba(242, 200, 121, 0.22);
+      background: rgba(242, 200, 121, 0.2);
       color: #FCE09B;
       border: 1px solid rgba(242, 200, 121, 0.45);
       border-radius: 999px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      padding: 4px 10px;
-      margin-bottom: 8px;
+      letter-spacing: 0.4px;
+      padding: 3px 10px;
+      margin-bottom: 4px;
     }
 
     .lang-toggle {
-      background: rgba(255, 255, 255, 0.14);
-      border: 1px solid rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
       color: #fff;
       border-radius: 999px;
-      padding: 6px 12px;
+      padding: 7px 14px;
       font-size: 13px;
       font-weight: 700;
       cursor: pointer;
-      min-height: 36px;
+      min-height: 40px;
       white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .lang-toggle:active {
+      background: rgba(255, 255, 255, 0.25);
     }
 
     .hero h1 {
-      margin: 0 0 6px;
-      font-size: 22px;
+      margin: 0 0 4px;
+      font-size: 20px;
       line-height: 1.25;
+      font-weight: 800;
     }
 
     .hero p {
       margin: 0;
       font-size: 13.5px;
-      color: rgba(255, 255, 255, 0.88);
+      color: rgba(255, 255, 255, 0.9);
     }
 
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 18px;
-      box-shadow: 0 4px 14px rgba(16, 63, 52, 0.05);
+      padding: 20px 18px;
+      box-shadow: 0 4px 16px rgba(16, 63, 52, 0.05);
       margin-bottom: 14px;
     }
 
-    .section-title {
-      font-size: 13.5px;
-      font-weight: 700;
-      color: var(--pine);
-      margin: 0 0 8px;
+    .section-block {
+      padding-bottom: 18px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid #E7EEEA;
     }
 
-    .field-group {
-      margin-bottom: 16px;
+    .section-block:last-of-type {
+      border-bottom: none;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--pine);
+      margin: 0 0 10px;
+    }
+
+    .section-title svg {
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+      fill: currentColor;
     }
 
     label.field-label {
@@ -121,23 +179,26 @@
     }
 
     input[type="text"],
+    input[type="tel"],
     input[type="email"],
     input[type="date"],
     select {
       width: 100%;
       padding: 12px 14px;
-      font-size: 16px; /* Prevents iOS Safari zoom */
+      font-size: 16px; /* Prevents iOS Safari auto-zoom */
+      font-family: inherit;
       border: 1.5px solid var(--border);
       border-radius: 12px;
       background: #FAFCFB;
       color: var(--text);
       outline: none;
-      transition: border-color 0.15s ease;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
     }
 
     input:focus, select:focus {
       border-color: var(--pine);
       background: #fff;
+      box-shadow: 0 0 0 3px rgba(27, 94, 78, 0.1);
     }
 
     .row-2 {
@@ -146,10 +207,10 @@
       align-items: stretch;
     }
 
-    .row-2 > .grow { flex: 1; }
+    .row-2 > .grow { flex: 1; min-width: 0; }
 
     .age-box {
-      min-width: 82px;
+      min-width: 86px;
       background: var(--gold-soft);
       border: 1px solid rgba(200, 155, 60, 0.45);
       border-radius: 12px;
@@ -157,19 +218,20 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 6px 10px;
+      padding: 6px 12px;
       text-align: center;
+      flex-shrink: 0;
     }
 
     .age-box .age-lbl {
       font-size: 10px;
       font-weight: 700;
       color: var(--muted);
-      letter-spacing: 0.5px;
+      letter-spacing: 0.6px;
     }
 
     .age-box .age-val {
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 800;
       color: #6B4D0E;
     }
@@ -192,6 +254,15 @@
       min-height: 44px;
       flex: 1 1 auto;
       text-align: center;
+      transition: all 0.15s ease;
+    }
+
+    .chip-btn.small-chip {
+      padding: 7px 12px;
+      font-size: 12.5px;
+      min-height: 36px;
+      flex: 0 1 auto;
+      border-radius: 10px;
     }
 
     .chip-btn.active {
@@ -205,19 +276,20 @@
       gap: 14px;
       align-items: center;
       padding: 12px;
-      background: #F8FAF9;
+      background: var(--surface-low);
       border: 1px solid var(--border);
       border-radius: 14px;
       margin-bottom: 12px;
     }
 
     .photo-preview {
-      width: 78px;
-      height: 102px;
+      width: 82px;
+      height: 108px;
       border-radius: 10px;
       border: 1.5px solid var(--border);
       background: var(--pine-soft);
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       overflow: hidden;
@@ -225,6 +297,7 @@
       color: var(--pine);
       font-size: 12px;
       font-weight: 700;
+      gap: 4px;
     }
 
     .photo-preview img {
@@ -233,26 +306,51 @@
       object-fit: cover;
     }
 
+    .photo-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
     .btn-secondary {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       background: var(--pine-soft);
       color: var(--pine-dark);
       border: 1px solid rgba(27, 94, 78, 0.25);
       border-radius: 10px;
-      padding: 9px 14px;
-      font-size: 13.5px;
+      padding: 9px 12px;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
+      min-height: 40px;
+    }
+
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      color: var(--pine-dark);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 40px;
     }
 
     .btn-remove {
       background: transparent;
       border: none;
       color: var(--danger);
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
       cursor: pointer;
-      padding: 6px 8px;
+      padding: 6px 4px;
     }
 
     .btn-primary {
@@ -287,70 +385,163 @@
       border: 1px solid rgba(179, 38, 30, 0.25);
     }
 
-    .alert-info {
-      background: var(--gold-soft);
-      color: #6B4D0E;
-      border: 1px solid rgba(200, 155, 60, 0.35);
+    .success-card {
+      padding: 24px 20px;
     }
 
-    .success-card {
+    .success-header {
       text-align: center;
-      padding: 28px 20px;
+      margin-bottom: 18px;
     }
 
     .success-icon {
-      width: 64px;
-      height: 64px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       background: var(--pine-soft);
       color: var(--pine);
-      font-size: 32px;
+      font-size: 30px;
+      font-weight: 700;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      margin-bottom: 10px;
+    }
+
+    .summary-card {
+      background: var(--surface-low);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 18px;
+      text-align: left;
+    }
+
+    .summary-top {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding-bottom: 12px;
       margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .summary-photo {
+      width: 58px;
+      height: 76px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--pine-soft);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: var(--pine);
+      flex-shrink: 0;
+    }
+
+    .summary-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .summary-tile {
+      background: #fff;
+      border: 1px solid #E2EAE5;
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+
+    .summary-tile.full {
+      grid-column: 1 / -1;
+    }
+
+    .summary-tile-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .summary-tile-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
     }
 
     .hidden { display: none !important; }
-    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
   </style>
 </head>
 <body>
   <div class="shell">
     <div class="hero">
-      <div class="hero-top">
-        <div>
-          <span class="badge">SIB Toburon • Pendaftaran Web</span>
-          <h1 id="heroTitle">Daftar Ahli Jemaat Baharu</h1>
+      <div class="hero-inner">
+        <div class="hero-top">
+          <div class="hero-brand">
+            <div class="hero-crest" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L4 8.5V21H9.5V14.5H14.5V21H20V8.5L12 2Z" fill="#103F34"/>
+                <path d="M12 5.2V11.2M9.5 7.8H14.5" stroke="#F2C879" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div>
+              <span class="badge" id="heroBadge">GEREJA SIB TOBURON • PENDAFTARAN WEB</span>
+              <h1 id="heroTitle">Daftar Ahli Jemaat Baharu</h1>
+            </div>
+          </div>
+          <button type="button" class="lang-toggle" id="langToggle">EN</button>
         </div>
-        <button type="button" class="lang-toggle" id="langToggle">EN</button>
+        <p id="heroSubtitle">Isi maklumat anda di bawah. Setelah disimpan, rekod anda akan terus dimasukkan ke senarai ahli Admin dan Kad Ahli SIB Toburon.</p>
       </div>
-      <p id="heroSubtitle">Isi maklumat anda di bawah. Setelah disimpan, rekod anda akan terus dimasukkan ke senarai ahli SIB Toburon.</p>
+      <div class="hero-gold-bar"></div>
     </div>
 
     <div id="tokenCard" class="card hidden">
       <p class="section-title" id="tokenTitle">Kod Akses Pendaftaran Diperlukan</p>
-      <p class="hint" id="tokenHint" style="margin-bottom: 10px;">Sila imbas Kod QR pendaftaran daripada Admin SIB Toburon, atau masukkan kod pautan pendaftaran di bawah.</p>
-      <div class="field-group" style="margin-bottom: 10px;">
+      <p class="hint" id="tokenHint" style="margin-bottom: 12px;">Sila imbas Kod QR pendaftaran daripada Admin SIB Toburon, atau masukkan kod pautan pendaftaran di bawah.</p>
+      <div style="margin-bottom: 12px;">
         <input type="text" id="manualTokenInput" placeholder="Masukkan kod pendaftaran (reg)..." />
       </div>
       <button type="button" class="btn-primary" id="applyTokenBtn">Teruskan ke Borang</button>
     </div>
 
-    <form id="memberForm" class="card">
+    <form id="memberForm" class="card" novalidate>
       <div id="formError" class="alert alert-error hidden"></div>
 
-      <!-- 1. Gambar & Nama Penuh -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec1">1. Gambar Ahli &amp; Nama Penuh</p>
+      <!-- 1. Gambar Ahli & Nama Penuh -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M20 7h-5V4c0-1.1-.9-2-2-2h-2c-1.1 0-2 .9-2 2v3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm-9-3h2v5h-2V4zm-2 12c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm6 3H5v-.75c0-1.66 3.34-2.5 5-2.5s5 .84 5 2.5V19z"/></svg>
+          <span id="lblSec1">1. Gambar Ahli &amp; Nama Penuh</span>
+        </p>
         <div class="photo-box">
-          <div class="photo-preview" id="photoPreview">3:4</div>
-          <div style="flex:1">
+          <div class="photo-preview" id="photoPreview">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="#1B5E4E" opacity="0.7"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            <span>3:4</span>
+          </div>
+          <div style="flex:1; min-width: 0;">
             <div class="hint" id="lblPhotoHint" style="margin-top:0; margin-bottom:8px;">Gambar saiz pasport untuk Kad Ahli SIB Toburon (pilihan).</div>
+            <input type="file" id="cameraInput" accept="image/*" capture="user" class="hidden" />
             <input type="file" id="photoInput" accept="image/*" class="hidden" />
-            <button type="button" class="btn-secondary" id="pickPhotoBtn">Pilih / Ambil Gambar</button>
-            <button type="button" class="btn-remove hidden" id="removePhotoBtn">Padam</button>
+            <div class="photo-actions">
+              <button type="button" class="btn-secondary" id="takePhotoBtn">Kamera</button>
+              <button type="button" class="btn-outline" id="pickPhotoBtn">Galeri</button>
+              <button type="button" class="btn-remove hidden" id="removePhotoBtn">Padam</button>
+            </div>
             <div class="hint" id="photoStatus"></div>
+            <div class="hint hidden" id="photoError" style="color: var(--danger);"></div>
           </div>
         </div>
         <label class="field-label" for="fullName" id="lblFullName">Nama penuh ahli *</label>
@@ -358,15 +549,31 @@
       </div>
 
       <!-- 2. Nombor MyKad -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec2">2. Nombor MyKad</p>
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>
+          <span id="lblSec2">2. Nombor MyKad</span>
+        </p>
         <label class="field-label" for="myKadNumber" id="lblMyKad">Nombor ID (MyKad)</label>
         <input type="text" id="myKadNumber" maxlength="30" placeholder="950614-12-5431" />
       </div>
 
-      <!-- 3. Tarikh Lahir -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec3">3. Tarikh Lahir *</p>
+      <!-- 3. No. Telefon (Tel. No.) -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 011 1V20a1 1 0 01-1 1C10.61 21 3 13.39 3 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.46.57 3.58a1 1 0 01-.24 1.01l-2.21 2.2z"/></svg>
+          <span id="lblSec3">3. No. Telefon (Tel. No.)</span>
+        </p>
+        <label class="field-label" for="phoneNumber" id="lblPhone">No. Tel (cth. 012-3456789)</label>
+        <input type="tel" id="phoneNumber" maxlength="25" inputmode="tel" autocomplete="tel" placeholder="012-3456789" />
+      </div>
+
+      <!-- 4. Tarikh Lahir -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+          <span id="lblSec4">4. Tarikh Lahir *</span>
+        </p>
         <div class="row-2">
           <div class="grow">
             <input type="date" id="birthDate" required />
@@ -376,52 +583,81 @@
             <span class="age-val" id="ageValue">--</span>
           </div>
         </div>
+        <div class="hint" id="lblDobHint">Umur akan dikira secara automatik berdasarkan tarikh lahir.</div>
       </div>
 
-      <!-- 4. Jantina -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec4">4. Jantina</p>
+      <!-- 5. Jantina -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M5.5 22v-7.5H4V9c0-1.1.9-2 2-2h3c1.1 0 2 .9 2 2v5.5H9.5V22h-4zM18 22v-6h3l-2.54-7.63A2.01 2.01 0 0016.56 7h-.12a2 2 0 00-1.9 1.37L12 16h3v6h3zM7.5 6a2 2 0 100-4 2 2 0 000 4zm9 0a2 2 0 100-4 2 2 0 000 4z"/></svg>
+          <span id="lblSec5">5. Jantina</span>
+        </p>
         <div class="chip-row" id="genderChips">
           <button type="button" class="chip-btn active" data-value="LELAKI" id="btnMale">Lelaki</button>
           <button type="button" class="chip-btn" data-value="PEREMPUAN" id="btnFemale">Perempuan</button>
         </div>
       </div>
 
-      <!-- 5. Status Perkahwinan -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec5">5. Status Perkahwinan</p>
+      <!-- 6. Status Perkahwinan -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <span id="lblSec6">6. Status Perkahwinan</span>
+        </p>
         <div class="chip-row" id="maritalChips">
           <button type="button" class="chip-btn active" data-value="BUJANG" id="btnSingle">Bujang</button>
           <button type="button" class="chip-btn" data-value="BERKAHWIN" id="btnMarried">Berkahwin</button>
           <button type="button" class="chip-btn" data-value="BALU_DUDA" id="btnWidowed">Balu / Duda</button>
           <button type="button" class="chip-btn" data-value="BERCERAI" id="btnDivorced">Bercerai</button>
         </div>
-        <div id="spouseWrap" class="hidden" style="margin-top: 10px;">
+        <div id="spouseWrap" class="hidden" style="margin-top: 12px;">
           <label class="field-label" for="spouseName" id="lblSpouse">Nama Isteri</label>
-          <input type="text" id="spouseName" maxlength="120" placeholder="Masukkan nama penuh pasangan" />
+          <input type="text" id="spouseName" maxlength="120" placeholder="Masukkan nama penuh isteri" />
         </div>
       </div>
 
-      <!-- 6. Status Baptisan -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec6">6. Status Baptisan &amp; Denominasi</p>
+      <!-- 7. Status Baptisan & Denominasi -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
+          <span id="lblSec7">7. Status Baptisan</span>
+        </p>
         <div class="chip-row" id="baptismChips">
           <button type="button" class="chip-btn active" data-value="BELUM_DIBAPTIS" id="btnNotBaptized">Belum Dibaptis</button>
           <button type="button" class="chip-btn" data-value="DIBAPTIS" id="btnBaptized">Sudah Dibaptis</button>
         </div>
-        <div id="denomWrap" class="hidden" style="margin-top: 10px;">
-          <label class="field-label" for="denomination" id="lblDenom">Denominasi Gereja *</label>
-          <input type="text" id="denomination" maxlength="80" value="SIB" placeholder="Contoh: SIB, Katolik, Anglikan" />
+        <div id="denomWrap" class="hidden" style="margin-top: 12px;">
+          <label class="field-label" for="denomination" id="lblDenom">Nama Denominasi Gereja *</label>
+          <input type="text" id="denomination" maxlength="80" value="SIB" placeholder="Contoh: SIB" style="margin-bottom: 8px;" />
+          <div class="chip-row" id="denomPresets">
+            <button type="button" class="chip-btn small-chip active" data-preset="SIB">SIB</button>
+            <button type="button" class="chip-btn small-chip" data-preset="Katolik">Katolik</button>
+            <button type="button" class="chip-btn small-chip" data-preset="Anglikan">Anglikan</button>
+            <button type="button" class="chip-btn small-chip" data-preset="PCS">PCS</button>
+            <button type="button" class="chip-btn small-chip" data-preset="Baptis">Baptis</button>
+            <button type="button" class="chip-btn small-chip" data-preset="Methodist">Methodist</button>
+          </div>
         </div>
       </div>
 
-      <!-- 7. Nombor SIB & Emel -->
-      <div class="field-group">
-        <p class="section-title" id="lblSec7">7. Keanggotaan SIB &amp; Emel Google (Pilihan)</p>
-        <label class="field-label" for="sibMembershipNumber" id="lblSibNo">Nombor Keanggotaan SIB</label>
-        <input type="text" id="sibMembershipNumber" maxlength="40" placeholder="Biarkan kosong jika belum ada" style="margin-bottom: 10px;" />
+      <!-- 8. Nombor Keanggotaan SIB -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M22 10V6c0-1.11-.9-2-2-2H4c-1.1 0-1.99.89-1.99 2v4c1.1 0 1.99.9 1.99 2s-.89 2-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-4c-1.1 0-2-.9-2-2s.9-2 2-2zm-9 7.5h-2v-2h2v2zm0-4.5h-2v-2h2v2zm0-4.5h-2v-2h2v2z"/></svg>
+          <span id="lblSec8">8. Nombor Keanggotaan SIB</span>
+        </p>
+        <label class="field-label" for="sibMembershipNumber" id="lblSibNo">Nombor Keanggotaan SIB (Jika ada)</label>
+        <input type="text" id="sibMembershipNumber" maxlength="40" placeholder="Belum ada" />
+        <div class="hint" id="lblSibHint">Biarkan kosong jika belum ada nombor keanggotaan (akan dipaparkan sebagai "Belum ada").</div>
+      </div>
 
-        <label class="field-label" for="memberEmail" id="lblEmail">Alamat Emel Google (jika ada)</label>
+      <!-- 9. Emel Google Ahli (Pilihan • Pautan Automatik) -->
+      <div class="section-block">
+        <p class="section-title">
+          <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+          <span id="lblSec9">9. Emel Google Ahli (Pilihan • Pautan Automatik)</span>
+        </p>
+        <label class="field-label" for="memberEmail" id="lblEmail">Emel Google ahli (Pilihan)</label>
         <input type="email" id="memberEmail" maxlength="160" placeholder="contoh@gmail.com" />
         <div class="hint" id="lblEmailHint">Jika ahli log masuk aplikasi menggunakan emel Google ini kemudian, Kad Ahli akan terpaut secara automatik.</div>
       </div>
@@ -430,9 +666,12 @@
     </form>
 
     <div id="successCard" class="card success-card hidden">
-      <div class="success-icon">✓</div>
-      <h2 id="successTitle" style="margin: 0 0 8px;">Pendaftaran Berjaya!</h2>
-      <p id="successBody" style="color: var(--muted); margin: 0 0 18px;"></p>
+      <div class="success-header">
+        <div class="success-icon">✓</div>
+        <h2 id="successTitle" style="margin: 0 0 6px;">Pendaftaran Berjaya!</h2>
+        <p id="successBody" style="color: var(--muted); margin: 0; font-size: 13.5px;"></p>
+      </div>
+      <div id="successSummary" class="summary-card"></div>
       <button type="button" class="btn-primary" id="registerAnotherBtn">Daftar Ahli Lain</button>
     </div>
   </div>
@@ -465,131 +704,340 @@
     let selectedMarital = "BUJANG";
     let selectedBaptism = "BELUM_DIBAPTIS";
     let passportPhotoBase64 = null;
+    let lastSubmittedRecord = null;
 
     const $ = (id) => document.getElementById(id);
 
     const copy = {
       ms: {
+        pageTitle: "Pendaftaran Ahli SIB Toburon",
         langBtn: "EN",
+        heroBadge: "GEREJA SIB TOBURON • PENDAFTARAN WEB",
         heroTitle: "Daftar Ahli Jemaat Baharu",
-        heroSubtitle: "Isi maklumat anda di bawah. Setelah disimpan, rekod anda akan terus dimasukkan ke senarai ahli SIB Toburon.",
+        heroSubtitle: "Isi maklumat anda di bawah. Setelah disimpan, rekod anda akan terus dimasukkan ke senarai ahli Admin dan Kad Ahli SIB Toburon.",
+        tokenTitle: "Kod Akses Pendaftaran Diperlukan",
+        tokenHint: "Sila imbas Kod QR pendaftaran daripada Admin SIB Toburon, atau masukkan kod pautan pendaftaran di bawah.",
+        tokenPlaceholder: "Masukkan kod pendaftaran (reg)...",
+        applyTokenBtn: "Teruskan ke Borang",
         sec1: "1. Gambar Ahli & Nama Penuh",
         photoHint: "Gambar saiz pasport untuk Kad Ahli SIB Toburon (pilihan).",
-        pickPhoto: "Pilih / Ambil Gambar",
+        takePhoto: "Kamera",
+        pickPhoto: "Galeri",
         removePhoto: "Padam",
         fullName: "Nama penuh ahli *",
+        fullNamePh: "Contoh: Johanes bin Lukas",
         sec2: "2. Nombor MyKad",
         myKad: "Nombor ID (MyKad)",
-        sec3: "3. Tarikh Lahir *",
+        sec3: "3. No. Telefon (Tel. No.)",
+        phone: "No. Tel (cth. 012-3456789)",
+        sec4: "4. Tarikh Lahir *",
         ageTitle: "UMUR",
         yrs: "thn",
-        sec4: "4. Jantina",
+        dobHint: "Umur akan dikira secara automatik berdasarkan tarikh lahir.",
+        sec5: "5. Jantina",
         male: "Lelaki",
         female: "Perempuan",
-        sec5: "5. Status Perkahwinan",
+        sec6: "6. Status Perkahwinan",
         single: "Bujang",
         married: "Berkahwin",
         widowed: "Balu / Duda",
         divorced: "Bercerai",
         wife: "Nama Isteri",
+        wifePh: "Masukkan nama penuh isteri",
         husband: "Nama Suami",
-        sec6: "6. Status Baptisan & Denominasi",
+        husbandPh: "Masukkan nama penuh suami",
+        sec7: "7. Status Baptisan",
         notBaptized: "Belum Dibaptis",
         baptized: "Sudah Dibaptis",
-        denom: "Denominasi Gereja *",
-        sec7: "7. Keanggotaan SIB & Emel Google (Pilihan)",
-        sibNo: "Nombor Keanggotaan SIB",
-        email: "Alamat Emel Google (jika ada)",
+        denom: "Nama Denominasi Gereja *",
+        denomPh: "Contoh: SIB",
+        sec8: "8. Nombor Keanggotaan SIB",
+        sibNo: "Nombor Keanggotaan SIB (Jika ada)",
+        sibPh: "Belum ada",
+        sibHint: "Biarkan kosong jika belum ada nombor keanggotaan (akan dipaparkan sebagai \"Belum ada\").",
+        sec9: "9. Emel Google Ahli (Pilihan • Pautan Automatik)",
+        email: "Emel Google ahli (Pilihan)",
         emailHint: "Jika ahli log masuk aplikasi menggunakan emel Google ini kemudian, Kad Ahli akan terpaut secara automatik.",
         submit: "Simpan & Daftar Ahli",
         saving: "Menyimpan...",
         successTitle: "Pendaftaran Berjaya!",
         registerAnother: "Daftar Ahli Lain",
         errName: "Nama penuh ahli mestilah 2 hingga 120 aksara.",
-        errDob: "Sila pilih tarikh lahir yang sah.",
-        errDenom: "Sila nyatakan denominasi gereja.",
+        errDob: "Sila pilih tarikh lahir yang sah (tidak melebihi hari ini).",
+        errDenom: "Sila nyatakan nama denominasi gereja.",
+        errPhoto: "Gagal memproses gambar. Sila pilih fail gambar lain.",
         errToken: "Pautan pendaftaran ini tiada kod akses yang sah atau telah dijeda oleh Admin.",
-        successMsg: (name, id) => `Terima kasih, ${name}. Maklumat anda telah disimpan dan terus dimasukkan ke senarai ahli SIB Toburon (Rujukan: ${id}).`
+        successMsg: (name, id) => `Terima kasih, ${name}. Rekod anda telah disimpan terus ke senarai ahli SIB Toburon (Rujukan: ${id}).`,
+        sumMyKad: "Nombor MyKad",
+        sumPhone: "No. Telefon",
+        sumDob: "Tarikh Lahir",
+        sumGender: "Jantina",
+        sumMarital: "Status Perkahwinan",
+        sumBaptism: "Status Baptisan",
+        sumSib: "No. Keanggotaan SIB",
+        sumEmail: "Emel Google",
+        unassigned: "Belum ada"
       },
       en: {
+        pageTitle: "SIB Toburon Member Registration",
         langBtn: "BM",
+        heroBadge: "SIB TOBURON CHURCH • WEB REGISTRATION",
         heroTitle: "Register New Church Member",
-        heroSubtitle: "Fill in your details below. Once saved, your record is immediately added to the SIB Toburon members list.",
+        heroSubtitle: "Fill in your details below. Once saved, your record is immediately added to the Admin members list and SIB Toburon Member Card.",
+        tokenTitle: "Registration Access Code Required",
+        tokenHint: "Please scan the registration QR code from an SIB Toburon Admin, or enter the registration link code below.",
+        tokenPlaceholder: "Enter registration code (reg)...",
+        applyTokenBtn: "Continue to Form",
         sec1: "1. Member Photo & Full Name",
         photoHint: "Passport-size photo for SIB Toburon Member Card (optional).",
-        pickPhoto: "Choose / Take Photo",
+        takePhoto: "Camera",
+        pickPhoto: "Gallery",
         removePhoto: "Remove",
         fullName: "Member full name *",
+        fullNamePh: "Example: John Lukas",
         sec2: "2. MyKad Number",
         myKad: "ID Number (MyKad)",
-        sec3: "3. Date of Birth *",
+        sec3: "3. Phone Number (Tel. No.)",
+        phone: "Tel. No. (e.g. 012-3456789)",
+        sec4: "4. Date of Birth *",
         ageTitle: "AGE",
         yrs: "yrs",
-        sec4: "4. Gender",
+        dobHint: "Age is calculated automatically from the date of birth.",
+        sec5: "5. Gender",
         male: "Male",
         female: "Female",
-        sec5: "5. Marital Status",
+        sec6: "6. Marital Status",
         single: "Single",
         married: "Married",
         widowed: "Widowed",
         divorced: "Divorced",
         wife: "Wife's Name",
+        wifePh: "Enter wife's full name",
         husband: "Husband's Name",
-        sec6: "6. Baptism Status & Denomination",
+        husbandPh: "Enter husband's full name",
+        sec7: "7. Baptism Status",
         notBaptized: "Not Yet Baptized",
         baptized: "Baptized",
         denom: "Church Denomination *",
-        sec7: "7. SIB Membership & Google Email (Optional)",
-        sibNo: "SIB Membership Number",
-        email: "Google Email Address (optional)",
+        denomPh: "Example: SIB",
+        sec8: "8. SIB Membership Number",
+        sibNo: "SIB Membership Number (Optional)",
+        sibPh: "Not yet assigned",
+        sibHint: "Leave empty if unassigned (will be displayed as \"Not yet assigned\").",
+        sec9: "9. Member Google Email (Optional • Auto-Link)",
+        email: "Member Google email (Optional)",
         emailHint: "If the member later signs into the Android app with this Google email, their Member Card links automatically.",
         submit: "Save & Register Member",
         saving: "Saving...",
         successTitle: "Registration Successful!",
         registerAnother: "Register Another Member",
         errName: "Member full name must be 2 to 120 characters.",
-        errDob: "Please enter a valid date of birth.",
-        errDenom: "Please specify church denomination.",
+        errDob: "Please select a valid date of birth (not in the future).",
+        errDenom: "Please enter the church denomination.",
+        errPhoto: "Failed to process image. Please choose another photo.",
         errToken: "This registration link is missing a valid access token or was paused by Admin.",
-        successMsg: (name, id) => `Thank you, ${name}. Your details were saved and added directly to the SIB Toburon members list (Ref: ${id}).`
+        successMsg: (name, id) => `Thank you, ${name}. Your record was saved directly to the SIB Toburon members list (Ref: ${id}).`,
+        sumMyKad: "MyKad Number",
+        sumPhone: "Phone No.",
+        sumDob: "Date of Birth",
+        sumGender: "Gender",
+        sumMarital: "Marital Status",
+        sumBaptism: "Baptism Status",
+        sumSib: "SIB Membership No.",
+        sumEmail: "Google Email",
+        unassigned: "Not yet assigned"
       }
     };
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function calculateAge(dobVal) {
+      if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dobVal)) return null;
+      const parts = dobVal.split("-").map(Number);
+      const birth = new Date(parts[0], parts[1] - 1, parts[2]);
+      const today = new Date();
+      if (
+        Number.isNaN(birth.getTime()) ||
+        birth.getFullYear() !== parts[0] ||
+        birth.getMonth() !== parts[1] - 1 ||
+        birth.getDate() !== parts[2] ||
+        birth > today ||
+        parts[0] < 1900
+      ) {
+        return null;
+      }
+      let age = today.getFullYear() - parts[0];
+      const mDiff = (today.getMonth() + 1) - parts[1];
+      if (mDiff < 0 || (mDiff === 0 && today.getDate() < parts[2])) age--;
+      return age >= 0 && age <= 130 ? age : null;
+    }
+
+    function updateAgePreview() {
+      const age = calculateAge($("birthDate").value);
+      $("ageValue").textContent = age !== null ? `${age} ${copy[lang].yrs}` : "--";
+    }
+
+    function syncDenomPresetChips() {
+      const val = $("denomination").value.trim().toLowerCase();
+      document.querySelectorAll("#denomPresets .chip-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.preset.toLowerCase() === val);
+      });
+    }
+
+    function renderSuccessSummary() {
+      if (!lastSubmittedRecord) return;
+      const t = copy[lang];
+      const r = lastSubmittedRecord;
+      $("successBody").textContent = t.successMsg(r.fullName, r.webMemberId);
+
+      const initials = r.fullName
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0].toUpperCase())
+        .join("") || "ST";
+
+      const photoHtml = r.passportPhotoBase64
+        ? `<img src="data:image/jpeg;base64,${r.passportPhotoBase64}" alt="${escapeHtml(r.fullName)}" />`
+        : escapeHtml(initials);
+
+      const genderLabel = r.gender === "PEREMPUAN" ? t.female : t.male;
+      const maritalMap = {
+        BUJANG: t.single,
+        BERKAHWIN: t.married,
+        BALU_DUDA: t.widowed,
+        BERCERAI: t.divorced
+      };
+      const maritalLabel = maritalMap[r.maritalStatus] || r.maritalStatus;
+      const baptismLabel = r.baptismStatus === "DIBAPTIS"
+        ? `${t.baptized}${r.denomination ? ` (${r.denomination})` : ""}`
+        : t.notBaptized;
+      const age = calculateAge(r.birthDate);
+      const dobLabel = age !== null ? `${r.birthDate} (${age} ${t.yrs})` : r.birthDate;
+
+      const spouseLabel = r.gender === "PEREMPUAN" ? t.husband : t.wife;
+
+      $("successSummary").innerHTML = `
+        <div class="summary-top">
+          <div class="summary-photo">${photoHtml}</div>
+          <div style="min-width:0; flex:1;">
+            <div style="font-size:15px; font-weight:800; color:var(--text);">${escapeHtml(r.fullName)}</div>
+            <div style="font-size:12px; font-weight:700; color:var(--pine); margin-top:2px;">
+              SIB: ${escapeHtml(r.sibNumber || t.unassigned)}
+            </div>
+          </div>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-tile">
+            <div class="summary-tile-label">${escapeHtml(t.sumMyKad)}</div>
+            <div class="summary-tile-val">${escapeHtml(r.myKad || "-")}</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-tile-label">${escapeHtml(t.sumPhone)}</div>
+            <div class="summary-tile-val">${escapeHtml(r.phone || "-")}</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-tile-label">${escapeHtml(t.sumDob)}</div>
+            <div class="summary-tile-val">${escapeHtml(dobLabel)}</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-tile-label">${escapeHtml(t.sumGender)}</div>
+            <div class="summary-tile-val">${escapeHtml(genderLabel)}</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-tile-label">${escapeHtml(t.sumMarital)}</div>
+            <div class="summary-tile-val">${escapeHtml(maritalLabel)}</div>
+          </div>
+          <div class="summary-tile">
+            <div class="summary-tile-label">${escapeHtml(t.sumBaptism)}</div>
+            <div class="summary-tile-val">${escapeHtml(baptismLabel)}</div>
+          </div>
+          ${r.spouseName ? `
+            <div class="summary-tile full">
+              <div class="summary-tile-label">${escapeHtml(spouseLabel)}</div>
+              <div class="summary-tile-val">${escapeHtml(r.spouseName)}</div>
+            </div>
+          ` : ""}
+          ${r.memberEmail ? `
+            <div class="summary-tile full">
+              <div class="summary-tile-label">${escapeHtml(t.sumEmail)}</div>
+              <div class="summary-tile-val">${escapeHtml(r.memberEmail)}</div>
+            </div>
+          ` : ""}
+        </div>
+      `;
+    }
+
     function updateTexts() {
       const t = copy[lang];
+      document.documentElement.lang = lang;
+      document.title = t.pageTitle;
       $("langToggle").textContent = t.langBtn;
+      $("heroBadge").textContent = t.heroBadge;
       $("heroTitle").textContent = t.heroTitle;
       $("heroSubtitle").textContent = t.heroSubtitle;
+      $("tokenTitle").textContent = t.tokenTitle;
+      $("tokenHint").textContent = t.tokenHint;
+      $("manualTokenInput").placeholder = t.tokenPlaceholder;
+      $("applyTokenBtn").textContent = t.applyTokenBtn;
+
       $("lblSec1").textContent = t.sec1;
       $("lblPhotoHint").textContent = t.photoHint;
+      $("takePhotoBtn").textContent = t.takePhoto;
       $("pickPhotoBtn").textContent = t.pickPhoto;
       $("removePhotoBtn").textContent = t.removePhoto;
       $("lblFullName").textContent = t.fullName;
+      $("fullName").placeholder = t.fullNamePh;
+
       $("lblSec2").textContent = t.sec2;
       $("lblMyKad").textContent = t.myKad;
+
       $("lblSec3").textContent = t.sec3;
-      $("lblAgeTitle").textContent = t.ageTitle;
+      $("lblPhone").textContent = t.phone;
+
       $("lblSec4").textContent = t.sec4;
+      $("lblAgeTitle").textContent = t.ageTitle;
+      $("lblDobHint").textContent = t.dobHint;
+
+      $("lblSec5").textContent = t.sec5;
       $("btnMale").textContent = t.male;
       $("btnFemale").textContent = t.female;
-      $("lblSec5").textContent = t.sec5;
+
+      $("lblSec6").textContent = t.sec6;
       $("btnSingle").textContent = t.single;
       $("btnMarried").textContent = t.married;
       $("btnWidowed").textContent = t.widowed;
       $("btnDivorced").textContent = t.divorced;
       $("lblSpouse").textContent = selectedGender === "PEREMPUAN" ? t.husband : t.wife;
-      $("lblSec6").textContent = t.sec6;
+      $("spouseName").placeholder = selectedGender === "PEREMPUAN" ? t.husbandPh : t.wifePh;
+
+      $("lblSec7").textContent = t.sec7;
       $("btnNotBaptized").textContent = t.notBaptized;
       $("btnBaptized").textContent = t.baptized;
       $("lblDenom").textContent = t.denom;
-      $("lblSec7").textContent = t.sec7;
+      $("denomination").placeholder = t.denomPh;
+
+      $("lblSec8").textContent = t.sec8;
       $("lblSibNo").textContent = t.sibNo;
+      $("sibMembershipNumber").placeholder = t.sibPh;
+      $("lblSibHint").textContent = t.sibHint;
+
+      $("lblSec9").textContent = t.sec9;
       $("lblEmail").textContent = t.email;
       $("lblEmailHint").textContent = t.emailHint;
+
       $("submitBtn").textContent = t.submit;
       $("successTitle").textContent = t.successTitle;
       $("registerAnotherBtn").textContent = t.registerAnother;
       updateAgePreview();
+      renderSuccessSummary();
     }
 
     function checkTokenState() {
@@ -600,24 +1048,6 @@
         $("tokenCard").classList.add("hidden");
         $("memberForm").classList.remove("hidden");
       }
-    }
-
-    function updateAgePreview() {
-      const dobVal = $("birthDate").value;
-      if (!dobVal) {
-        $("ageValue").textContent = "--";
-        return;
-      }
-      const parts = dobVal.split("-").map(Number);
-      if (parts.length !== 3) {
-        $("ageValue").textContent = "--";
-        return;
-      }
-      const today = new Date();
-      let age = today.getFullYear() - parts[0];
-      const mDiff = (today.getMonth() + 1) - parts[1];
-      if (mDiff < 0 || (mDiff === 0 && today.getDate() < parts[2])) age--;
-      $("ageValue").textContent = age >= 0 && age <= 130 ? `${age} ${copy[lang].yrs}` : "--";
     }
 
     $("langToggle").addEventListener("click", () => {
@@ -635,12 +1065,14 @@
 
     $("birthDate").max = new Date().toISOString().split("T")[0];
     $("birthDate").addEventListener("change", updateAgePreview);
+    $("birthDate").addEventListener("input", updateAgePreview);
 
     document.querySelectorAll("#genderChips .chip-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         selectedGender = btn.dataset.value;
         document.querySelectorAll("#genderChips .chip-btn").forEach((b) => b.classList.toggle("active", b === btn));
         $("lblSpouse").textContent = selectedGender === "PEREMPUAN" ? copy[lang].husband : copy[lang].wife;
+        $("spouseName").placeholder = selectedGender === "PEREMPUAN" ? copy[lang].husbandPh : copy[lang].wifePh;
       });
     });
 
@@ -660,24 +1092,45 @@
         if (selectedBaptism === "DIBAPTIS" && !$("denomination").value.trim()) {
           $("denomination").value = "SIB";
         }
+        syncDenomPresetChips();
       });
     });
 
-    $("pickPhotoBtn").addEventListener("click", () => $("photoInput").click());
-    $("removePhotoBtn").addEventListener("click", () => {
-      passportPhotoBase64 = null;
-      $("photoInput").value = "";
-      $("photoPreview").innerHTML = "3:4";
-      $("photoStatus").textContent = "";
-      $("removePhotoBtn").classList.add("hidden");
+    document.querySelectorAll("#denomPresets .chip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        $("denomination").value = btn.dataset.preset;
+        syncDenomPresetChips();
+      });
     });
+    $("denomination").addEventListener("input", syncDenomPresetChips);
 
-    $("photoInput").addEventListener("change", (ev) => {
-      const file = ev.target.files?.[0];
+    function resetPhotoUi() {
+      passportPhotoBase64 = null;
+      $("cameraInput").value = "";
+      $("photoInput").value = "";
+      $("photoPreview").innerHTML = `
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="#1B5E4E" opacity="0.7"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <span>3:4</span>
+      `;
+      $("photoStatus").textContent = "";
+      $("photoError").classList.add("hidden");
+      $("removePhotoBtn").classList.add("hidden");
+    }
+
+    function processSelectedPhotoFile(file) {
       if (!file) return;
+      $("photoError").classList.add("hidden");
       const reader = new FileReader();
+      reader.onerror = () => {
+        $("photoError").textContent = copy[lang].errPhoto;
+        $("photoError").classList.remove("hidden");
+      };
       reader.onload = () => {
         const img = new Image();
+        img.onerror = () => {
+          $("photoError").textContent = copy[lang].errPhoto;
+          $("photoError").classList.remove("hidden");
+        };
         img.onload = () => {
           const maxDim = 420;
           let w = img.width;
@@ -698,17 +1151,27 @@
             rawB64 = dataUrl.split(",")[1] || "";
             if (rawB64.length <= 120000) break;
           }
-          passportPhotoBase64 = rawB64.length <= 150000 ? rawB64 : null;
-          if (passportPhotoBase64) {
+          if (rawB64 && rawB64.length <= 150000) {
+            passportPhotoBase64 = rawB64;
             $("photoPreview").innerHTML = `<img src="data:image/jpeg;base64,${passportPhotoBase64}" alt="Passport Photo" />`;
             $("photoStatus").textContent = `${w}x${h} • ${Math.round((passportPhotoBase64.length * 3) / 4 / 1024)} KB`;
             $("removePhotoBtn").classList.remove("hidden");
+          } else {
+            passportPhotoBase64 = null;
+            $("photoError").textContent = copy[lang].errPhoto;
+            $("photoError").classList.remove("hidden");
           }
         };
         img.src = reader.result;
       };
       reader.readAsDataURL(file);
-    });
+    }
+
+    $("takePhotoBtn").addEventListener("click", () => $("cameraInput").click());
+    $("pickPhotoBtn").addEventListener("click", () => $("photoInput").click());
+    $("removePhotoBtn").addEventListener("click", resetPhotoUi);
+    $("cameraInput").addEventListener("change", (ev) => processSelectedPhotoFile(ev.target.files?.[0]));
+    $("photoInput").addEventListener("change", (ev) => processSelectedPhotoFile(ev.target.files?.[0]));
 
     function generateWebId(prefix) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -732,6 +1195,7 @@
 
       const fullName = $("fullName").value.trim();
       const myKad = $("myKadNumber").value.trim();
+      const phone = $("phoneNumber").value.trim();
       const birthDate = $("birthDate").value.trim();
       const denomination = selectedBaptism === "DIBAPTIS" ? $("denomination").value.trim() : "";
       const spouseName = selectedMarital === "BERKAHWIN" ? $("spouseName").value.trim() : "";
@@ -739,7 +1203,7 @@
       const memberEmail = $("memberEmail").value.trim().toLowerCase();
 
       if (fullName.length < 2 || fullName.length > 120) return showFormError(t.errName);
-      if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(birthDate)) return showFormError(t.errDob);
+      if (calculateAge(birthDate) === null) return showFormError(t.errDob);
       if (selectedBaptism === "DIBAPTIS" && !denomination) return showFormError(t.errDenom);
       if (!regToken || regToken.length < 16) return showFormError(t.errToken);
 
@@ -776,6 +1240,7 @@
           updatedAt: serverTimestamp()
         };
         if (myKad) detailPayload.myKadNumber = myKad;
+        if (phone) detailPayload.phoneNumber = phone;
         if (spouseName) detailPayload.spouseName = spouseName;
         if (sibNumber) detailPayload.sibMembershipNumber = sibNumber;
         if (passportPhotoBase64) detailPayload.passportPhotoBase64 = passportPhotoBase64;
@@ -799,9 +1264,26 @@
         batch.set(doc(db, "notification_events", notifId), notifPayload);
         await batch.commit();
 
+        lastSubmittedRecord = {
+          webMemberId,
+          fullName,
+          myKad,
+          phone,
+          birthDate,
+          gender: selectedGender,
+          maritalStatus: selectedMarital,
+          spouseName,
+          baptismStatus: selectedBaptism,
+          denomination,
+          sibNumber,
+          memberEmail,
+          passportPhotoBase64
+        };
+
         $("memberForm").classList.add("hidden");
-        $("successBody").textContent = t.successMsg(fullName, webMemberId);
+        renderSuccessSummary();
         $("successCard").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
       } catch (err) {
         console.error(err);
         const code = err?.code ? `[${err.code}] ` : "";
@@ -818,13 +1300,13 @@
     });
 
     $("registerAnotherBtn").addEventListener("click", () => {
+      lastSubmittedRecord = null;
       $("memberForm").reset();
-      passportPhotoBase64 = null;
-      $("photoPreview").innerHTML = "3:4";
-      $("photoStatus").textContent = "";
-      $("removePhotoBtn").classList.add("hidden");
+      resetPhotoUi();
       $("spouseWrap").classList.add("hidden");
       $("denomWrap").classList.add("hidden");
+      $("denomination").value = "SIB";
+      syncDenomPresetChips();
       selectedGender = "LELAKI";
       selectedMarital = "BUJANG";
       selectedBaptism = "BELUM_DIBAPTIS";
@@ -833,7 +1315,8 @@
       document.querySelectorAll("#baptismChips .chip-btn").forEach((b) => b.classList.toggle("active", b.dataset.value === "BELUM_DIBAPTIS"));
       $("successCard").classList.add("hidden");
       $("memberForm").classList.remove("hidden");
-      updateAgePreview();
+      updateTexts();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
 
     updateTexts();

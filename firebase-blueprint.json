@@ -543,6 +543,10 @@
           "type": "string",
           "description": "Nombor Kad Pengenalan (MyKad) ahli jemaat (pilihan, maks 30 karakter)"
         },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Nombor telefon ahli jemaat (pilihan, maks 25 karakter)"
+        },
         "gender": {
           "type": "string",
           "enum": ["LELAKI", "PEREMPUAN"],

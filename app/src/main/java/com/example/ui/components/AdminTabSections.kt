@@ -75,7 +75,7 @@ import com.example.BuildConfig
 import com.example.data.AdminMember
 import com.example.data.AppVersionConfig
 import com.example.data.DynamicCategoryItem
-import com.example.data.ImageUtils
+import com.example.data.rememberBase64ImageBitmap
 import com.example.data.UserProfile
 import com.example.ui.i18n.LocalAppLanguage
 import com.example.ui.i18n.tr
@@ -817,9 +817,7 @@ fun AdminGoogleUsersView(
                                 .fillMaxWidth()
                                 .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)
                         ) {
-                            val userAvatarBitmap = remember(user.photoBase64) {
-                                ImageUtils.decodeBase64ToImageBitmap(user.photoBase64)
-                            }
+                            val userAvatarBitmap = rememberBase64ImageBitmap(user.photoBase64)
                             Surface(
                                 shape = CircleShape,
                                 color = if (isSelf) MaterialTheme.colorScheme.primary
@@ -1066,7 +1064,8 @@ fun AdminVersionManagerView(
                                 )
                             }
 
-                            if (!appVersionConfig?.releaseNotes.isNullOrBlank()) {
+                            val releaseNotes = appVersionConfig?.releaseNotes.orEmpty()
+                            if (releaseNotes.isNotBlank()) {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                                 Text(
                                     text = tr("Nota Keluaran", "Release Notes"),
@@ -1075,7 +1074,7 @@ fun AdminVersionManagerView(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = appVersionConfig?.releaseNotes.orEmpty(),
+                                    text = releaseNotes,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )

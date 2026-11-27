@@ -1,7 +1,7 @@
 package com.example.ui.components
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,12 +18,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -67,7 +67,8 @@ fun AppVersionFooterCard(
 ) {
     val currentName = BuildConfig.VERSION_NAME
     val currentCode = BuildConfig.VERSION_CODE
-    val hasUpdate = versionConfig?.isUpdateAvailable(currentCode) == true
+    val availableUpdate = versionConfig?.takeIf { it.isUpdateAvailable(currentCode) }
+    val hasUpdate = availableUpdate != null
 
     Card(
         shape = MaterialTheme.shapes.large,
@@ -152,8 +153,8 @@ fun AppVersionFooterCard(
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = if (hasUpdate) {
-                                tr("v${versionConfig?.latestVersionName}", "v${versionConfig?.latestVersionName}")
+                            text = if (availableUpdate != null) {
+                                tr("v${availableUpdate.latestVersionName}", "v${availableUpdate.latestVersionName}")
                             } else {
                                 tr("Terkini", "Up to date")
                             },
@@ -169,11 +170,11 @@ fun AppVersionFooterCard(
                 }
             }
 
-            if (hasUpdate && versionConfig != null) {
+            if (availableUpdate != null) {
                 Text(
                     text = tr(
-                        "Kemas kini baharu v${versionConfig.latestVersionName} (Kod ${versionConfig.latestVersionCode}) kini tersedia untuk jemaat.",
-                        "A new update v${versionConfig.latestVersionName} (Build ${versionConfig.latestVersionCode}) is now available."
+                        "Kemas kini baharu v${availableUpdate.latestVersionName} (Kod ${availableUpdate.latestVersionCode}) kini tersedia untuk jemaat.",
+                        "A new update v${availableUpdate.latestVersionName} (Build ${availableUpdate.latestVersionCode}) is now available."
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface
@@ -332,7 +333,7 @@ fun AppUpdateAvailableDialog(
                 Button(
                     onClick = {
                         runCatching {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(config.updateUrl)).apply {
+                            val intent = Intent(Intent.ACTION_VIEW, config.updateUrl.toUri()).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             context.startActivity(intent)
@@ -350,7 +351,7 @@ fun AppUpdateAvailableDialog(
                         .testTag("app_update_download_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.OpenInNew,
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -452,7 +453,7 @@ fun AdminAppVersionDialog(
                         value = versionName,
                         onValueChange = { versionName = it.take(32); validationError = null },
                         label = { Text(tr("Nama Versi *", "Version Name *")) },
-                        placeholder = { Text("1.2.1") },
+                        placeholder = { Text("1.2.3") },
                         singleLine = true,
                         modifier = Modifier
                             .weight(1.2f)
@@ -542,7 +543,7 @@ fun AdminAppVersionDialog(
                             TextButton(
                                 onClick = {
                                     runCatching {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(cleanPreviewUrl)).apply {
+                                        val intent = Intent(Intent.ACTION_VIEW, cleanPreviewUrl.toUri()).apply {
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         }
                                         context.startActivity(intent)
@@ -558,7 +559,7 @@ fun AdminAppVersionDialog(
                                     .testTag("admin_test_version_url_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.OpenInNew,
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )

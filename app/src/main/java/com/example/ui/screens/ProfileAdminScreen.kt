@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -41,7 +42,6 @@ import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -84,6 +84,7 @@ import com.example.data.AppVersionConfig
 import com.example.data.ChurchMemberDetail
 import com.example.data.FellowshipGroup
 import com.example.data.ImageUtils
+import com.example.data.rememberBase64ImageBitmap
 import com.example.data.UserBookmark
 import com.example.data.UserProfile
 import com.example.ui.auth.onGoogleSignInClicked
@@ -154,9 +155,7 @@ fun ProfileAdminScreen(
         ?: "Jemaat SIB Toburon"
     val currentGroup = userProfile?.resolvedGroup() ?: FellowshipGroup.UMUM
     val currentPhotoBase64 = userProfile?.photoBase64?.takeIf { it.isNotBlank() }
-    val avatarBitmap = remember(currentPhotoBase64) {
-        ImageUtils.decodeBase64ToImageBitmap(currentPhotoBase64)
-    }
+    val avatarBitmap = rememberBase64ImageBitmap(currentPhotoBase64)
 
     var showMemberProfileDialog by remember { mutableStateOf(false) }
     var showAvatarSourceDialog by remember { mutableStateOf(false) }
@@ -666,7 +665,7 @@ private fun MemberProfileDialog(
     val lang = LocalAppLanguage.current
     var draftName by remember(initialDisplayName) { mutableStateOf(initialDisplayName) }
     var draftGroup by remember(initialGroup) { mutableStateOf(initialGroup) }
-    val avatarBitmap = remember(photoBase64) { ImageUtils.decodeBase64ToImageBitmap(photoBase64) }
+    val avatarBitmap = rememberBase64ImageBitmap(photoBase64)
     val initials = draftName.trim().take(2).uppercase().ifBlank { "ST" }
 
     AlertDialog(
@@ -1015,7 +1014,7 @@ private fun GuestAccountView(
                                 Spacer(Modifier.width(10.dp))
                                 Text(tr("Menyambung akaun Google…", "Connecting Google account…"))
                             } else {
-                                Icon(Icons.Rounded.Login, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Icon(Icons.AutoMirrored.Rounded.Login, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Text(
                                     tr("Log Masuk dengan Google", "Sign In with Google"),

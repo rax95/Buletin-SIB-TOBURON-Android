@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -28,12 +29,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.WaterDrop
@@ -85,11 +87,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.BaptismStatus
 import com.example.data.ChurchMemberDetail
 import com.example.data.ImageUtils
+import com.example.data.rememberBase64ImageBitmap
 import com.example.data.MaritalStatus
 import com.example.data.MemberGender
 import com.example.data.calculateAgeFromIsoDate
@@ -123,6 +127,7 @@ fun AdminMemberEditorDialog(
     onSave: (
         fullName: String,
         myKadNumber: String?,
+        phoneNumber: String?,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
@@ -142,6 +147,7 @@ fun AdminMemberEditorDialog(
         mutableStateOf(initial?.fullName ?: defaultFullName?.takeIf { isSelfRegistration } ?: "")
     }
     var myKadNumber by remember(initial) { mutableStateOf(initial?.myKadNumber ?: "") }
+    var phoneNumber by remember(initial) { mutableStateOf(initial?.phoneNumber ?: "") }
     var birthDateIso by remember(initial) { mutableStateOf(initial?.birthDate ?: "") }
     var gender by remember(initial) { mutableStateOf(initial?.resolvedGender() ?: MemberGender.LELAKI) }
     var maritalStatus by remember(initial) {
@@ -174,9 +180,7 @@ fun AdminMemberEditorDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
-    val decodedPassportBitmap = remember(passportPhotoBase64) {
-        ImageUtils.decodeBase64ToImageBitmap(passportPhotoBase64)
-    }
+    val decodedPassportBitmap = rememberBase64ImageBitmap(passportPhotoBase64)
 
     fun handleSelectedPhotoUri(uri: Uri?, onCleanup: (() -> Unit)? = null) {
         if (uri == null) {
@@ -262,36 +266,45 @@ fun AdminMemberEditorDialog(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.56f))
+            .background(Color.Black.copy(alpha = 0.64f))
             .pointerInput(isBusy) {
                 detectTapGestures {
                     if (!isBusy) onDismiss()
                 }
             }
-            .safeDrawingPadding()
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
-        Surface(
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            tonalElevation = 4.dp,
-            shadowElevation = 12.dp,
-            modifier = Modifier
-                .widthIn(max = 560.dp)
-                .fillMaxWidth()
-                .pointerInput(Unit) {
-                    detectTapGestures { /* absorb taps inside card */ }
-                }
-                .testTag("member_editor_dialog")
+        BoxWithConstraints(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            val dialogMaxHeight = maxHeight
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                tonalElevation = 4.dp,
+                shadowElevation = 12.dp,
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = dialogMaxHeight)
+                    .pointerInput(Unit) {
+                        detectTapGestures { /* absorb taps inside card */ }
+                    }
+                    .testTag("member_editor_dialog")
+            ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = dialogMaxHeight)
+            ) {
                 // Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 12.dp)
+                        .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 10.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -311,7 +324,9 @@ fun AdminMemberEditorDialog(
                                 else -> tr("Edit Maklumat Ahli", "Edit Member Details")
                             },
                             style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = if (isSelfRegistration) {
@@ -326,7 +341,9 @@ fun AdminMemberEditorDialog(
                                 )
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     IconButton(
@@ -615,10 +632,38 @@ fun AdminMemberEditorDialog(
                         )
                     }
 
-                    // 3. Tarikh Lahir (Date Picker + Auto Umur di sebelah kanan)
+                    // 3. No. Telefon (Tel No)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = tr("3. Tarikh Lahir *", "3. Date of Birth *"),
+                            text = tr("3. No. Telefon (Tel. No.)", "3. Phone Number (Tel. No.)"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        OutlinedTextField(
+                            value = phoneNumber,
+                            onValueChange = {
+                                if (it.length <= 25) {
+                                    phoneNumber = it
+                                    validationError = null
+                                }
+                            },
+                            label = { Text(tr("No. Tel (cth. 012-3456789)", "Tel. No. (e.g. 012-3456789)")) },
+                            placeholder = { Text("012-3456789") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Phone, contentDescription = null)
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("member_phone_input")
+                        )
+                    }
+
+                    // 4. Tarikh Lahir (Date Picker + Auto Umur di sebelah kanan)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = tr("4. Tarikh Lahir *", "4. Date of Birth *"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -732,10 +777,10 @@ fun AdminMemberEditorDialog(
                         }
                     }
 
-                    // 4. Jantina
+                    // 5. Jantina
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = tr("4. Jantina", "4. Gender"),
+                            text = tr("5. Jantina", "5. Gender"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -760,10 +805,10 @@ fun AdminMemberEditorDialog(
                         }
                     }
 
-                    // 5. Status Perkahwinan (Marital Status) + Conditional Nama Suami / Nama Isteri
+                    // 6. Status Perkahwinan (Marital Status) + Conditional Nama Suami / Nama Isteri
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = tr("5. Status Perkahwinan", "5. Marital Status"),
+                            text = tr("6. Status Perkahwinan", "6. Marital Status"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -826,10 +871,10 @@ fun AdminMemberEditorDialog(
                         }
                     }
 
-                    // 6. Status Baptisan + Conditional Denominasi Gereja (only when Sudah Dibaptis)
+                    // 7. Status Baptisan + Conditional Denominasi Gereja (only when Sudah Dibaptis)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = tr("6. Status Baptisan", "6. Baptism Status"),
+                            text = tr("7. Status Baptisan", "7. Baptism Status"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -916,10 +961,10 @@ fun AdminMemberEditorDialog(
                         }
                     }
 
-                    // 7. Nombor Keanggotaan SIB (Jika ada; kosong = "Belum ada")
+                    // 8. Nombor Keanggotaan SIB (Jika ada; kosong = "Belum ada")
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = tr("7. Nombor Keanggotaan SIB", "7. SIB Membership Number"),
+                            text = tr("8. Nombor Keanggotaan SIB", "8. SIB Membership Number"),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -954,12 +999,12 @@ fun AdminMemberEditorDialog(
                     if (!isSelfRegistration) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
-                        // 8. Emel Google Ahli (Pilihan • Pautan Automatik apabila ahli log masuk Google)
+                        // 9. Emel Google Ahli (Pilihan • Pautan Automatik apabila ahli log masuk Google)
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = tr(
-                                    "8. Emel Google Ahli (Pilihan • Pautan Automatik)",
-                                    "8. Member Google Email (Optional • Auto-Link)"
+                                    "9. Emel Google Ahli (Pilihan • Pautan Automatik)",
+                                    "9. Member Google Email (Optional • Auto-Link)"
                                 ),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary
@@ -1015,7 +1060,7 @@ fun AdminMemberEditorDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
                 ) {
                     TextButton(
                         onClick = { if (!isBusy) onDismiss() },
@@ -1061,6 +1106,7 @@ fun AdminMemberEditorDialog(
                             onSave(
                                 fullName.trim(),
                                 myKadNumber.trim().takeIf { it.isNotEmpty() },
+                                phoneNumber.trim().takeIf { it.isNotEmpty() },
                                 gender,
                                 birthDateIso.trim(),
                                 baptismStatus,
@@ -1095,6 +1141,7 @@ fun AdminMemberEditorDialog(
                     }
                 }
             }
+        }
         }
     }
 

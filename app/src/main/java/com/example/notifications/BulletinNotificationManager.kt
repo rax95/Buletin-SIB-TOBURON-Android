@@ -17,6 +17,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.example.BuildConfig
 import com.example.MainActivity
 import com.example.R
@@ -70,14 +71,14 @@ object BulletinNotificationManager {
         prefs(context).getBoolean(KEY_PERMISSION_REQUESTED_ONCE, false)
 
     fun markPermissionRequested(context: Context) {
-        prefs(context).edit().putBoolean(KEY_PERMISSION_REQUESTED_ONCE, true).apply()
+        prefs(context).edit { putBoolean(KEY_PERMISSION_REQUESTED_ONCE, true) }
     }
 
     fun getSavedFcmToken(context: Context): String? =
         prefs(context).getString(KEY_FCM_TOKEN, null)
 
     fun saveFcmTokenLocally(context: Context, token: String) {
-        prefs(context).edit().putString(KEY_FCM_TOKEN, token).apply()
+        prefs(context).edit { putString(KEY_FCM_TOKEN, token) }
     }
 
     fun savePreferences(
@@ -87,12 +88,12 @@ object BulletinNotificationManager {
         masterEnabled: Boolean = isMasterPushEnabled(context),
         optedOut: Boolean = hasUserOptedOut(context)
     ) {
-        prefs(context).edit()
-            .putBoolean(KEY_MASTER_ENABLED, masterEnabled)
-            .putBoolean(KEY_USER_OPTED_OUT, optedOut)
-            .putBoolean(KEY_NEWS_ENABLED, newsEnabled)
-            .putBoolean(KEY_SCHEDULES_ENABLED, schedulesEnabled)
-            .apply()
+        prefs(context).edit {
+            putBoolean(KEY_MASTER_ENABLED, masterEnabled)
+            putBoolean(KEY_USER_OPTED_OUT, optedOut)
+            putBoolean(KEY_NEWS_ENABLED, newsEnabled)
+            putBoolean(KEY_SCHEDULES_ENABLED, schedulesEnabled)
+        }
     }
 
     fun optOutPushNotifications(context: Context) {
@@ -291,6 +292,7 @@ object BulletinNotificationManager {
         val newsEnabled = masterEnabled && isNewsNotificationsEnabled(context)
         val schedulesEnabled = masterEnabled && isScheduleNotificationsEnabled(context)
         return try {
+            @Suppress("DEPRECATION")
             val token = Firebase.messaging.token.await()
             if (token.length in 10..512) {
                 saveFcmTokenLocally(context, token)
@@ -337,9 +339,9 @@ object BulletinNotificationManager {
         val lastNotifiedCode = prefs(appContext).getInt(KEY_NOTIFIED_VERSION_CODE, 0)
         if (config.latestVersionCode <= lastNotifiedCode) return false
 
-        prefs(appContext).edit()
-            .putInt(KEY_NOTIFIED_VERSION_CODE, config.latestVersionCode)
-            .apply()
+        prefs(appContext).edit {
+            putInt(KEY_NOTIFIED_VERSION_CODE, config.latestVersionCode)
+        }
 
         if (!hasNotificationPermission(appContext) || !isMasterPushEnabled(appContext)) {
             return false

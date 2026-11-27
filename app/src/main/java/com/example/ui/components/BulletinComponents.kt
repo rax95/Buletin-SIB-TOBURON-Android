@@ -33,19 +33,19 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.R
 import com.example.data.CoverPreset
-import com.example.data.ImageUtils
+import com.example.data.rememberBase64ImageBitmap
 import com.example.ui.i18n.AppLanguage
 import com.example.ui.i18n.AppLanguageManager
 import com.example.ui.i18n.tr
@@ -61,9 +61,8 @@ fun BulletinCoverImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop
 ) {
-    val decodedBitmap = remember(imageBase64) {
-        ImageUtils.decodeBase64ToImageBitmap(imageBase64)
-    }
+    val context = LocalContext.current
+    val decodedBitmap = rememberBase64ImageBitmap(imageBase64)
     val fallbackRes = when (coverPreset) {
         CoverPreset.SANCTUARY -> R.drawable.img_hero_sanctuary
         CoverPreset.WORSHIP -> R.drawable.img_news_worship
@@ -82,17 +81,20 @@ fun BulletinCoverImage(
         }
         !imageUrl.isNullOrBlank() -> {
             AsyncImage(
-                model = imageUrl,
+                model = ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .fallback(fallbackRes)
+                    .error(fallbackRes)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = contentDescription,
-                placeholder = painterResource(fallbackRes),
-                error = painterResource(fallbackRes),
                 contentScale = contentScale,
                 modifier = modifier
             )
         }
         else -> {
-            Image(
-                painter = painterResource(id = fallbackRes),
+            AsyncImage(
+                model = fallbackRes,
                 contentDescription = contentDescription,
                 contentScale = contentScale,
                 modifier = modifier

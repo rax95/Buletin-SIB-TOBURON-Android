@@ -1573,9 +1573,119 @@ class BulletinRepository(
         }
     }
 
+    private data class NormalizedMemberInput(
+        val cleanName: String,
+        val cleanMyKad: String?,
+        val cleanPhone: String?,
+        val cleanBirth: String,
+        val cleanDenom: String,
+        val cleanSpouse: String?,
+        val cleanSibNo: String?,
+        val cleanPhoto: String?,
+        val cleanEmail: String?
+    )
+
+    private fun normalizeAndValidateMemberInput(
+        fullName: String,
+        myKadNumber: String?,
+        phoneNumber: String?,
+        birthDateIso: String,
+        baptismStatus: BaptismStatus,
+        denomination: String,
+        maritalStatus: MaritalStatus,
+        spouseName: String?,
+        sibMembershipNumber: String?,
+        passportPhotoBase64: String?,
+        memberEmail: String?
+    ): NormalizedMemberInput {
+        val cleanName = fullName.trim()
+        val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanPhone = phoneNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanBirth = birthDateIso.trim()
+        val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
+        val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
+            spouseName?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+        val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanEmail = memberEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+        require(cleanName.length in 2..120) {
+            AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
+        }
+        require(cleanMyKad == null || cleanMyKad.length <= 30) {
+            AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
+        }
+        require(cleanPhone == null || cleanPhone.length <= 25) {
+            AppLanguageManager.tr("Nombor telefon terlalu panjang (maks 25 aksara).", "Phone number is too long (max 25 characters).")
+        }
+        require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
+            AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
+        }
+        require(calculateAgeFromIsoDate(cleanBirth) != null) {
+            AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
+        }
+        if (baptismStatus == BaptismStatus.DIBAPTIS) {
+            require(cleanDenom.length in 1..80) {
+                AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
+            }
+        }
+        require(cleanSpouse == null || cleanSpouse.length <= 120) {
+            AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
+        }
+        require(cleanSibNo == null || cleanSibNo.length <= 40) {
+            AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
+        }
+        require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
+            AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
+        }
+        require(cleanEmail == null || cleanEmail.length <= 160) {
+            AppLanguageManager.tr("Alamat emel terlalu panjang (maks 160 aksara).", "Email address is too long (max 160 characters).")
+        }
+
+        return NormalizedMemberInput(
+            cleanName = cleanName,
+            cleanMyKad = cleanMyKad,
+            cleanPhone = cleanPhone,
+            cleanBirth = cleanBirth,
+            cleanDenom = cleanDenom,
+            cleanSpouse = cleanSpouse,
+            cleanSibNo = cleanSibNo,
+            cleanPhoto = cleanPhoto,
+            cleanEmail = cleanEmail
+        )
+    }
+
+    private fun buildCreateMemberDetailPayload(
+        input: NormalizedMemberInput,
+        gender: MemberGender,
+        baptismStatus: BaptismStatus,
+        maritalStatus: MaritalStatus,
+        uid: String
+    ): Map<String, Any?> = buildMap {
+        put("fullName", input.cleanName)
+        if (input.cleanMyKad != null) put("myKadNumber", input.cleanMyKad)
+        if (input.cleanPhone != null) put("phoneNumber", input.cleanPhone)
+        put("gender", gender.code)
+        put("birthDate", input.cleanBirth)
+        put("baptismStatus", baptismStatus.code)
+        put("denomination", input.cleanDenom)
+        put("maritalStatus", maritalStatus.code)
+        if (input.cleanSpouse != null) put("spouseName", input.cleanSpouse)
+        if (input.cleanSibNo != null) put("sibMembershipNumber", input.cleanSibNo)
+        if (input.cleanPhoto != null) put("passportPhotoBase64", input.cleanPhoto)
+        if (input.cleanEmail != null) put("memberEmail", input.cleanEmail)
+        put("authorId", uid)
+        put("createdAt", FieldValue.serverTimestamp())
+        put("updatedAt", FieldValue.serverTimestamp())
+    }
+
     suspend fun createChurchMember(
         fullName: String,
         myKadNumber: String?,
+        phoneNumber: String? = null,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
@@ -1589,55 +1699,26 @@ class BulletinRepository(
         var docPath = "church_members"
         return try {
             val uid = requireUserId()
-            val cleanName = fullName.trim()
-            val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanBirth = birthDateIso.trim()
-            val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
-            val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
-                spouseName?.trim()?.takeIf { it.isNotEmpty() }
-            } else {
-                null
-            }
-            val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanEmail = memberEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-
-            require(cleanName.length in 2..120) {
-                AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
-            }
-            require(cleanMyKad == null || cleanMyKad.length <= 30) {
-                AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
-            }
-            require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
-                AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
-            }
-            require(calculateAgeFromIsoDate(cleanBirth) != null) {
-                AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
-            }
-            if (baptismStatus == BaptismStatus.DIBAPTIS) {
-                require(cleanDenom.length in 1..80) {
-                    AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
-                }
-            }
-            require(cleanSpouse == null || cleanSpouse.length <= 120) {
-                AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
-            }
-            require(cleanSibNo == null || cleanSibNo.length <= 40) {
-                AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
-            }
-            require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
-                AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
-            }
-            require(cleanEmail == null || cleanEmail.length <= 160) {
-                AppLanguageManager.tr("Alamat emel terlalu panjang (maks 160 aksara).", "Email address is too long (max 160 characters).")
-            }
+            val input = normalizeAndValidateMemberInput(
+                fullName = fullName,
+                myKadNumber = myKadNumber,
+                phoneNumber = phoneNumber,
+                birthDateIso = birthDateIso,
+                baptismStatus = baptismStatus,
+                denomination = denomination,
+                maritalStatus = maritalStatus,
+                spouseName = spouseName,
+                sibMembershipNumber = sibMembershipNumber,
+                passportPhotoBase64 = passportPhotoBase64,
+                memberEmail = memberEmail
+            )
 
             // If Admin entered an email that already matches an existing member record (e.g. user self-registered first),
             // update that existing record instead of creating a duplicate entry in the Admin Members list.
-            if (cleanEmail != null) {
+            if (input.cleanEmail != null) {
                 val existingMatchId = runCatching {
                     db.collection("church_member_details")
-                        .whereEqualTo("memberEmail", cleanEmail)
+                        .whereEqualTo("memberEmail", input.cleanEmail)
                         .limit(1)
                         .get()
                         .await()
@@ -1648,17 +1729,18 @@ class BulletinRepository(
                 if (!existingMatchId.isNullOrBlank()) {
                     return updateChurchMember(
                         memberId = existingMatchId,
-                        fullName = cleanName,
-                        myKadNumber = cleanMyKad,
+                        fullName = input.cleanName,
+                        myKadNumber = input.cleanMyKad,
+                        phoneNumber = input.cleanPhone,
                         gender = gender,
-                        birthDateIso = cleanBirth,
+                        birthDateIso = input.cleanBirth,
                         baptismStatus = baptismStatus,
-                        denomination = cleanDenom,
+                        denomination = input.cleanDenom,
                         maritalStatus = maritalStatus,
-                        spouseName = cleanSpouse,
-                        sibMembershipNumber = cleanSibNo,
-                        passportPhotoBase64 = cleanPhoto,
-                        memberEmail = cleanEmail
+                        spouseName = input.cleanSpouse,
+                        sibMembershipNumber = input.cleanSibNo,
+                        passportPhotoBase64 = input.cleanPhoto,
+                        memberEmail = input.cleanEmail
                     )
                 }
             }
@@ -1668,31 +1750,22 @@ class BulletinRepository(
             docPath = publicRef.path
 
             val publicPayload = buildMap<String, Any?> {
-                put("fullName", cleanName)
+                put("fullName", input.cleanName)
                 put("gender", gender.code)
                 put("baptismStatus", baptismStatus.code)
-                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
+                if (input.cleanPhoto != null) put("passportPhotoBase64", input.cleanPhoto)
                 put("published", true)
                 put("authorId", uid)
                 put("createdAt", FieldValue.serverTimestamp())
                 put("updatedAt", FieldValue.serverTimestamp())
             }
-            val detailPayload = buildMap<String, Any?> {
-                put("fullName", cleanName)
-                if (cleanMyKad != null) put("myKadNumber", cleanMyKad)
-                put("gender", gender.code)
-                put("birthDate", cleanBirth)
-                put("baptismStatus", baptismStatus.code)
-                put("denomination", cleanDenom)
-                put("maritalStatus", maritalStatus.code)
-                if (cleanSpouse != null) put("spouseName", cleanSpouse)
-                if (cleanSibNo != null) put("sibMembershipNumber", cleanSibNo)
-                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
-                if (cleanEmail != null) put("memberEmail", cleanEmail)
-                put("authorId", uid)
-                put("createdAt", FieldValue.serverTimestamp())
-                put("updatedAt", FieldValue.serverTimestamp())
-            }
+            val detailPayload = buildCreateMemberDetailPayload(
+                input = input,
+                gender = gender,
+                baptismStatus = baptismStatus,
+                maritalStatus = maritalStatus,
+                uid = uid
+            )
 
             val batch = db.batch()
             batch.set(publicRef, publicPayload)
@@ -1716,6 +1789,7 @@ class BulletinRepository(
     suspend fun registerOwnChurchMember(
         fullName: String,
         myKadNumber: String?,
+        phoneNumber: String? = null,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
@@ -1736,44 +1810,19 @@ class BulletinRepository(
                     "A verified Google account email is required to register your Member Card."
                 )
             }
-            val cleanName = fullName.trim()
-            val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanBirth = birthDateIso.trim()
-            val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
-            val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
-                spouseName?.trim()?.takeIf { it.isNotEmpty() }
-            } else {
-                null
-            }
-            val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
-
-            require(cleanName.length in 2..120) {
-                AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
-            }
-            require(cleanMyKad == null || cleanMyKad.length <= 30) {
-                AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
-            }
-            require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
-                AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
-            }
-            require(calculateAgeFromIsoDate(cleanBirth) != null) {
-                AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
-            }
-            if (baptismStatus == BaptismStatus.DIBAPTIS) {
-                require(cleanDenom.length in 1..80) {
-                    AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
-                }
-            }
-            require(cleanSpouse == null || cleanSpouse.length <= 120) {
-                AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
-            }
-            require(cleanSibNo == null || cleanSibNo.length <= 40) {
-                AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
-            }
-            require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
-                AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
-            }
+            val input = normalizeAndValidateMemberInput(
+                fullName = fullName,
+                myKadNumber = myKadNumber,
+                phoneNumber = phoneNumber,
+                birthDateIso = birthDateIso,
+                baptismStatus = baptismStatus,
+                denomination = denomination,
+                maritalStatus = maritalStatus,
+                spouseName = spouseName,
+                sibMembershipNumber = sibMembershipNumber,
+                passportPhotoBase64 = passportPhotoBase64,
+                memberEmail = cleanEmail
+            )
 
             val memberId = "member_$uid"
             val publicRef = db.collection("church_members").document(memberId)
@@ -1801,51 +1850,43 @@ class BulletinRepository(
             if (targetExistingId != null) {
                 return updateChurchMember(
                     memberId = targetExistingId,
-                    fullName = cleanName,
-                    myKadNumber = cleanMyKad,
+                    fullName = input.cleanName,
+                    myKadNumber = input.cleanMyKad,
+                    phoneNumber = input.cleanPhone,
                     gender = gender,
-                    birthDateIso = cleanBirth,
+                    birthDateIso = input.cleanBirth,
                     baptismStatus = baptismStatus,
-                    denomination = cleanDenom,
+                    denomination = input.cleanDenom,
                     maritalStatus = maritalStatus,
-                    spouseName = cleanSpouse,
-                    sibMembershipNumber = cleanSibNo,
-                    passportPhotoBase64 = cleanPhoto,
+                    spouseName = input.cleanSpouse,
+                    sibMembershipNumber = input.cleanSibNo,
+                    passportPhotoBase64 = input.cleanPhoto,
                     memberEmail = cleanEmail
                 )
             }
 
             val publicPayload = buildMap<String, Any?> {
-                put("fullName", cleanName)
+                put("fullName", input.cleanName)
                 put("gender", gender.code)
                 put("baptismStatus", baptismStatus.code)
-                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
+                if (input.cleanPhoto != null) put("passportPhotoBase64", input.cleanPhoto)
                 put("published", true)
                 put("authorId", uid)
                 put("createdAt", FieldValue.serverTimestamp())
                 put("updatedAt", FieldValue.serverTimestamp())
             }
-            val detailPayload = buildMap<String, Any?> {
-                put("fullName", cleanName)
-                if (cleanMyKad != null) put("myKadNumber", cleanMyKad)
-                put("gender", gender.code)
-                put("birthDate", cleanBirth)
-                put("baptismStatus", baptismStatus.code)
-                put("denomination", cleanDenom)
-                put("maritalStatus", maritalStatus.code)
-                if (cleanSpouse != null) put("spouseName", cleanSpouse)
-                if (cleanSibNo != null) put("sibMembershipNumber", cleanSibNo)
-                if (cleanPhoto != null) put("passportPhotoBase64", cleanPhoto)
-                put("memberEmail", cleanEmail)
-                put("authorId", uid)
-                put("createdAt", FieldValue.serverTimestamp())
-                put("updatedAt", FieldValue.serverTimestamp())
-            }
+            val detailPayload = buildCreateMemberDetailPayload(
+                input = input,
+                gender = gender,
+                baptismStatus = baptismStatus,
+                maritalStatus = maritalStatus,
+                uid = uid
+            )
             val adminNotifPayload = mapOf(
                 "title" to AppLanguageManager.tr("Ahli Baharu Berdaftar", "New Member Registered"),
                 "body" to AppLanguageManager.tr(
-                    "$cleanName telah mengisi maklumat ahli SIB Toburon.",
-                    "$cleanName has registered their SIB Toburon member details."
+                    "${input.cleanName} telah mengisi maklumat ahli SIB Toburon.",
+                    "${input.cleanName} has registered their SIB Toburon member details."
                 ).take(320),
                 "eventType" to BulletinNotificationManager.TYPE_MEMBER_REGISTERED,
                 "targetId" to memberId,
@@ -1873,6 +1914,7 @@ class BulletinRepository(
         memberId: String,
         fullName: String,
         myKadNumber: String?,
+        phoneNumber: String? = null,
         gender: MemberGender,
         birthDateIso: String,
         baptismStatus: BaptismStatus,
@@ -1887,48 +1929,19 @@ class BulletinRepository(
         return try {
             requireUserId()
             require(memberId.isNotBlank()) { AppLanguageManager.tr("ID ahli tidak sah.", "Invalid member ID.") }
-            val cleanName = fullName.trim()
-            val cleanMyKad = myKadNumber?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanBirth = birthDateIso.trim()
-            val cleanDenom = if (baptismStatus == BaptismStatus.DIBAPTIS) denomination.trim() else ""
-            val cleanSpouse = if (maritalStatus == MaritalStatus.BERKAHWIN) {
-                spouseName?.trim()?.takeIf { it.isNotEmpty() }
-            } else {
-                null
-            }
-            val cleanSibNo = sibMembershipNumber?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanPhoto = passportPhotoBase64?.trim()?.takeIf { it.isNotEmpty() }
-            val cleanEmail = memberEmail?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-
-            require(cleanName.length in 2..120) {
-                AppLanguageManager.tr("Nama penuh mestilah 2 hingga 120 aksara.", "Full name must be 2 to 120 characters.")
-            }
-            require(cleanMyKad == null || cleanMyKad.length <= 30) {
-                AppLanguageManager.tr("Nombor MyKad terlalu panjang (maks 30 aksara).", "MyKad number is too long (max 30 characters).")
-            }
-            require(cleanBirth.matches(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))) {
-                AppLanguageManager.tr("Format tarikh lahir tidak sah (YYYY-MM-DD).", "Invalid date of birth format (YYYY-MM-DD).")
-            }
-            require(calculateAgeFromIsoDate(cleanBirth) != null) {
-                AppLanguageManager.tr("Tarikh lahir tidak sah atau melebihi tarikh hari ini.", "Invalid date of birth or date is in the future.")
-            }
-            if (baptismStatus == BaptismStatus.DIBAPTIS) {
-                require(cleanDenom.length in 1..80) {
-                    AppLanguageManager.tr("Sila masukkan nama denominasi gereja (maks 80 aksara).", "Please enter church denomination (max 80 characters).")
-                }
-            }
-            require(cleanSpouse == null || cleanSpouse.length <= 120) {
-                AppLanguageManager.tr("Nama pasangan terlalu panjang (maks 120 aksara).", "Spouse name is too long (max 120 characters).")
-            }
-            require(cleanSibNo == null || cleanSibNo.length <= 40) {
-                AppLanguageManager.tr("Nombor keanggotaan SIB terlalu panjang (maks 40 aksara).", "SIB membership number is too long (max 40 characters).")
-            }
-            require(cleanPhoto == null || cleanPhoto.length <= 160_000) {
-                AppLanguageManager.tr("Saiz foto pasport terlalu besar. Sila pilih foto lain.", "Passport photo is too large. Please pick another photo.")
-            }
-            require(cleanEmail == null || cleanEmail.length <= 160) {
-                AppLanguageManager.tr("Alamat emel terlalu panjang (maks 160 aksara).", "Email address is too long (max 160 characters).")
-            }
+            val input = normalizeAndValidateMemberInput(
+                fullName = fullName,
+                myKadNumber = myKadNumber,
+                phoneNumber = phoneNumber,
+                birthDateIso = birthDateIso,
+                baptismStatus = baptismStatus,
+                denomination = denomination,
+                maritalStatus = maritalStatus,
+                spouseName = spouseName,
+                sibMembershipNumber = sibMembershipNumber,
+                passportPhotoBase64 = passportPhotoBase64,
+                memberEmail = memberEmail
+            )
 
             val publicRef = db.collection("church_members").document(memberId)
             val detailRef = db.collection("church_member_details").document(memberId)
@@ -1937,27 +1950,28 @@ class BulletinRepository(
             batch.update(
                 publicRef,
                 mapOf(
-                    "fullName" to cleanName,
+                    "fullName" to input.cleanName,
                     "gender" to gender.code,
                     "baptismStatus" to baptismStatus.code,
-                    "passportPhotoBase64" to cleanPhoto,
+                    "passportPhotoBase64" to input.cleanPhoto,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
             batch.update(
                 detailRef,
                 mapOf(
-                    "fullName" to cleanName,
-                    "myKadNumber" to cleanMyKad,
+                    "fullName" to input.cleanName,
+                    "myKadNumber" to input.cleanMyKad,
+                    "phoneNumber" to input.cleanPhone,
                     "gender" to gender.code,
-                    "birthDate" to cleanBirth,
+                    "birthDate" to input.cleanBirth,
                     "baptismStatus" to baptismStatus.code,
-                    "denomination" to cleanDenom,
+                    "denomination" to input.cleanDenom,
                     "maritalStatus" to maritalStatus.code,
-                    "spouseName" to cleanSpouse,
-                    "sibMembershipNumber" to cleanSibNo,
-                    "passportPhotoBase64" to cleanPhoto,
-                    "memberEmail" to cleanEmail,
+                    "spouseName" to input.cleanSpouse,
+                    "sibMembershipNumber" to input.cleanSibNo,
+                    "passportPhotoBase64" to input.cleanPhoto,
+                    "memberEmail" to input.cleanEmail,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )

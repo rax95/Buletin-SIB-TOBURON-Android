@@ -2,7 +2,6 @@ package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -67,11 +66,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.ChurchSchedule
 import com.example.data.DynamicCategoryItem
@@ -154,7 +153,8 @@ fun NewsScreen(
             ?: if (isExpandedScreen) filteredArticles.firstOrNull() else null
     }
 
-    val isCompactDetailVisible = !isExpandedScreen && selectedArticleId != null && activeArticle != null
+    val compactDetailArticle = if (!isExpandedScreen && selectedArticleId != null) activeArticle else null
+    val isCompactDetailVisible = compactDetailArticle != null
 
     LaunchedEffect(activeArticle?.id) {
         onObserveComments(activeArticle?.id)
@@ -170,12 +170,12 @@ fun NewsScreen(
     }
 
     // BackHandler on compact/medium detail view
-    if (isCompactDetailVisible && activeArticle != null) {
+    if (compactDetailArticle != null) {
         BackHandler { selectedArticleId = null }
         NewsDetailPane(
-            article = activeArticle,
+            article = compactDetailArticle,
             newsCategories = newsCategories,
-            isBookmarked = bookmarkedIds.contains(activeArticle.id),
+            isBookmarked = bookmarkedIds.contains(compactDetailArticle.id),
             commentsState = commentsState,
             isPostingComment = isPostingComment,
             currentUserId = currentUserId,
@@ -183,16 +183,16 @@ fun NewsScreen(
             isAdmin = isAdmin,
             showBackButton = true,
             onBack = { selectedArticleId = null },
-            onToggleBookmark = { onToggleBookmark(activeArticle) },
+            onToggleBookmark = { onToggleBookmark(compactDetailArticle) },
             onPostComment = { text, parentId, replyToName, onDone ->
-                onPostComment(activeArticle.id, text, parentId, replyToName, onDone)
+                onPostComment(compactDetailArticle.id, text, parentId, replyToName, onDone)
             },
             onDeleteComment = { commentId ->
-                onDeleteComment(activeArticle.id, commentId)
+                onDeleteComment(compactDetailArticle.id, commentId)
             },
-            onEdit = { onEditNews(activeArticle) },
+            onEdit = { onEditNews(compactDetailArticle) },
             onDelete = {
-                onDeleteNews(activeArticle)
+                onDeleteNews(compactDetailArticle)
                 selectedArticleId = null
             },
             modifier = modifier.fillMaxSize()
@@ -617,8 +617,8 @@ private fun SanctuaryHeroHeader(isAdmin: Boolean) {
             .height(210.dp)
             .clip(MaterialTheme.shapes.large)
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.img_hero_sanctuary),
+        AsyncImage(
+            model = R.drawable.img_hero_sanctuary,
             contentDescription = tr("Ilustrasi Gereja SIB Toburon", "SIB Toburon Church Illustration"),
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()

@@ -67,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,11 +77,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
+import coil.compose.AsyncImage
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -214,40 +215,50 @@ fun AppContent(
         }
     }
 
+    var isFirstFrameDrawn by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        isFirstFrameDrawn = true
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        val user = currentUser
-        if (user == null && !isGuestMode) {
-            AuthScreen(
-                onAuthSuccess = {
-                    currentUser = Firebase.auth.currentUser
-                    isGuestMode = false
-                },
-                onContinueAsGuest = {
-                    isGuestMode = true
-                }
-            )
-        } else {
-            // Key by uid (or guest session key) so account switches cleanly tear down & recreate ViewModel/listeners
-            val sessionKey = user?.uid ?: "guest_readonly_session"
-            key(sessionKey) {
-                BuletinMainShell(
-                    currentUser = user,
-                    sessionKey = sessionKey,
-                    isSplashVisible = showSplash,
-                    pendingDeepLink = pendingDeepLink,
-                    onConsumeDeepLink = onConsumeDeepLink,
-                    onGoogleSignInSuccess = {
+        if (isFirstFrameDrawn) {
+            val user = currentUser
+            if (user == null && !isGuestMode) {
+                AuthScreen(
+                    onAuthSuccess = {
                         currentUser = Firebase.auth.currentUser
                         isGuestMode = false
                     },
-                    onExitGuestMode = {
-                        isGuestMode = false
+                    onContinueAsGuest = {
+                        isGuestMode = true
                     },
-                    onSignedOut = {
-                        currentUser = null
-                        isGuestMode = false
-                    }
+                    isSplashVisible = showSplash
                 )
+            } else {
+                // Key by uid (or guest session key) so account switches cleanly tear down & recreate ViewModel/listeners
+                val sessionKey = user?.uid ?: "guest_readonly_session"
+                key(sessionKey) {
+                    BuletinMainShell(
+                        currentUser = user,
+                        sessionKey = sessionKey,
+                        isSplashVisible = showSplash,
+                        pendingDeepLink = pendingDeepLink,
+                        onConsumeDeepLink = onConsumeDeepLink,
+                        onGoogleSignInSuccess = {
+                            currentUser = Firebase.auth.currentUser
+                            isGuestMode = false
+                        },
+                        onExitGuestMode = {
+                            isGuestMode = false
+                        },
+                        onSignedOut = {
+                            currentUser = null
+                            isGuestMode = false
+                        }
+                    )
+                }
             }
         }
 
@@ -362,14 +373,17 @@ private fun BuletinMainShell(
     var showMemberExportDialog by remember { mutableStateOf(false) }
     var isExportingFile by remember { mutableStateOf(false) }
     var pendingExportMembers by remember { mutableStateOf<List<ChurchMemberDetail>>(emptyList()) }
+    var pendingSingleMemberCv by remember { mutableStateOf<ChurchMemberDetail?>(null) }
     var showAddAdminDialog by remember { mutableStateOf(false) }
     var showMemberQrScanner by remember { mutableStateOf(false) }
     var showVersionManagerDialog by remember { mutableStateOf(false) }
     var dismissedUpdateVersionCode by rememberSaveable { mutableStateOf(0) }
     var forceShowUpdateDialog by remember { mutableStateOf(false) }
     var dismissedPushOptInThisSession by rememberSaveable { mutableStateOf(false) }
-    var shouldPromptPushOptIn by remember {
-        mutableStateOf(BulletinNotificationManager.shouldShowOptInPopup(context))
+    var shouldPromptPushOptIn by remember { mutableStateOf(false) }
+
+    LaunchedEffect(context) {
+        shouldPromptPushOptIn = BulletinNotificationManager.shouldShowOptInPopup(context)
     }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -452,6 +466,41 @@ private fun BuletinMainShell(
             }
         } else {
             pendingExportMembers = emptyList()
+        }
+    }
+
+    val singleMemberCvPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument(MemberExportFormat.PDF.mimeType)
+    ) { uri ->
+        val memberToExport = pendingSingleMemberCv
+        if (uri != null && memberToExport != null) {
+            scope.launch {
+                isExportingFile = true
+                val res = MemberExportUtils.exportMemberCvPdfToUri(
+                    context = context,
+                    uri = uri,
+                    member = memberToExport
+                )
+                isExportingFile = false
+                pendingSingleMemberCv = null
+                res.onSuccess {
+                    viewModel.showSnackbar(
+                        AppLanguageManager.tr(
+                            "Fail PDF maklumat untuk ${memberToExport.fullName} berjaya disimpan.",
+                            "Individual PDF for ${memberToExport.fullName} saved successfully."
+                        )
+                    )
+                }.onFailure { err ->
+                    viewModel.showSnackbar(
+                        err.localizedMessage ?: AppLanguageManager.tr(
+                            "Gagal menyimpan fail PDF maklumat ahli.",
+                            "Failed to save individual member PDF."
+                        )
+                    )
+                }
+            }
+        } else {
+            pendingSingleMemberCv = null
         }
     }
 
@@ -583,7 +632,11 @@ private fun BuletinMainShell(
                             val label = tab.label(appLang)
                             NavigationBarItem(
                                 selected = selected,
-                                onClick = { currentTab = tab },
+                                onClick = {
+                                    showMemberEditor = false
+                                    showSelfMemberEditor = false
+                                    currentTab = tab
+                                },
                                 icon = {
                                     if (tab == BulletinTab.ADMIN && unreadNewMemberCount > 0) {
                                         BadgedBox(
@@ -617,7 +670,7 @@ private fun BuletinMainShell(
             floatingActionButton = {
                 val hideNewsDetailFab = currentTab == BulletinTab.NEWS && isViewingNewsDetail && !isExpandedScreen
                 val hideGalleryDetailFab = currentTab == BulletinTab.GALLERY && isViewingGalleryDetail
-                if (isAdmin && currentTab != BulletinTab.ACCOUNT && currentTab != BulletinTab.ADMIN && !hideNewsDetailFab && !hideGalleryDetailFab) {
+                if (isAdmin && currentTab != BulletinTab.ACCOUNT && currentTab != BulletinTab.ADMIN && !hideNewsDetailFab && !hideGalleryDetailFab && !showMemberEditor && !showSelfMemberEditor) {
                     val (fabLabel, onFabClick) = when (currentTab) {
                         BulletinTab.NEWS -> Pair(tr("Tulis Berita", "Write News")) {
                             editingNews = null
@@ -662,8 +715,8 @@ private fun BuletinMainShell(
                                     .padding(top = 12.dp, bottom = 8.dp)
                                     .size(44.dp)
                             ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.sib_toburon_logo),
+                                AsyncImage(
+                                    model = R.drawable.sib_toburon_logo,
                                     contentDescription = stringResource(R.string.app_name),
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier
@@ -681,7 +734,11 @@ private fun BuletinMainShell(
                             val label = tab.label(appLang)
                             NavigationRailItem(
                                 selected = selected,
-                                onClick = { currentTab = tab },
+                                onClick = {
+                                    showMemberEditor = false
+                                    showSelfMemberEditor = false
+                                    currentTab = tab
+                                },
                                 icon = {
                                     if (tab == BulletinTab.ADMIN && unreadNewMemberCount > 0) {
                                         BadgedBox(
@@ -845,7 +902,7 @@ private fun BuletinMainShell(
                                     membersCount = (membersState as? UiState.Success)?.data?.size ?: 0,
                                     membersState = membersState,
                                     searchQuery = memberSearchQuery,
-                                    isBusy = isBusy,
+                                    isBusy = isBusy || isExportingFile,
                                     selectedMemberDetail = selectedMemberDetail,
                                     isLoadingDetail = isLoadingMemberDetail,
                                     adminMembers = adminMembers,
@@ -869,6 +926,12 @@ private fun BuletinMainShell(
                                     },
                                     onDeleteMember = { memberId ->
                                         viewModel.deleteChurchMember(memberId)
+                                    },
+                                    onExportMemberCvPdf = { detail ->
+                                        pendingSingleMemberCv = detail
+                                        singleMemberCvPdfLauncher.launch(
+                                            MemberExportUtils.suggestedMemberCvFileName(detail)
+                                        )
                                     },
                                     onScanMemberQrClick = {
                                         showMemberQrScanner = true
@@ -1004,59 +1067,61 @@ private fun BuletinMainShell(
                             )
                         }
                     }
+
+                    if (showMemberEditor && currentUser != null) {
+                        AdminMemberEditorDialog(
+                            initial = editingMember,
+                            isBusy = isBusy,
+                            onDismiss = { showMemberEditor = false },
+                            onSave = { fullName, myKadNumber, phoneNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, memberEmail ->
+                                viewModel.saveChurchMember(
+                                    existingId = editingMember?.id,
+                                    fullName = fullName,
+                                    myKadNumber = myKadNumber,
+                                    phoneNumber = phoneNumber,
+                                    gender = gender,
+                                    birthDateIso = birthDateIso,
+                                    baptismStatus = baptismStatus,
+                                    denomination = denomination,
+                                    maritalStatus = maritalStatus,
+                                    spouseName = spouseName,
+                                    sibMembershipNumber = sibMembershipNumber,
+                                    passportPhotoBase64 = passportPhotoBase64,
+                                    memberEmail = memberEmail,
+                                    onComplete = { showMemberEditor = false }
+                                )
+                            }
+                        )
+                    }
+
+                    if (showSelfMemberEditor && currentUser != null) {
+                        AdminMemberEditorDialog(
+                            initial = ownMemberDetail,
+                            isSelfRegistration = true,
+                            defaultFullName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUser.displayName,
+                            defaultEmail = currentUser.email,
+                            isBusy = isBusy,
+                            onDismiss = { showSelfMemberEditor = false },
+                            onSave = { fullName, myKadNumber, phoneNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, _ ->
+                                viewModel.saveOwnChurchMember(
+                                    fullName = fullName,
+                                    myKadNumber = myKadNumber,
+                                    phoneNumber = phoneNumber,
+                                    gender = gender,
+                                    birthDateIso = birthDateIso,
+                                    baptismStatus = baptismStatus,
+                                    denomination = denomination,
+                                    maritalStatus = maritalStatus,
+                                    spouseName = spouseName,
+                                    sibMembershipNumber = sibMembershipNumber,
+                                    passportPhotoBase64 = passportPhotoBase64,
+                                    onComplete = { showSelfMemberEditor = false }
+                                )
+                            }
+                        )
+                    }
                 }
             }
-        }
-
-        if (showMemberEditor && currentUser != null) {
-            AdminMemberEditorDialog(
-                initial = editingMember,
-                isBusy = isBusy,
-                onDismiss = { showMemberEditor = false },
-                onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, memberEmail ->
-                    viewModel.saveChurchMember(
-                        existingId = editingMember?.id,
-                        fullName = fullName,
-                        myKadNumber = myKadNumber,
-                        gender = gender,
-                        birthDateIso = birthDateIso,
-                        baptismStatus = baptismStatus,
-                        denomination = denomination,
-                        maritalStatus = maritalStatus,
-                        spouseName = spouseName,
-                        sibMembershipNumber = sibMembershipNumber,
-                        passportPhotoBase64 = passportPhotoBase64,
-                        memberEmail = memberEmail,
-                        onComplete = { showMemberEditor = false }
-                    )
-                }
-            )
-        }
-
-        if (showSelfMemberEditor && currentUser != null) {
-            AdminMemberEditorDialog(
-                initial = ownMemberDetail,
-                isSelfRegistration = true,
-                defaultFullName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUser.displayName,
-                defaultEmail = currentUser.email,
-                isBusy = isBusy,
-                onDismiss = { showSelfMemberEditor = false },
-                onSave = { fullName, myKadNumber, gender, birthDateIso, baptismStatus, denomination, maritalStatus, spouseName, sibMembershipNumber, passportPhotoBase64, _ ->
-                    viewModel.saveOwnChurchMember(
-                        fullName = fullName,
-                        myKadNumber = myKadNumber,
-                        gender = gender,
-                        birthDateIso = birthDateIso,
-                        baptismStatus = baptismStatus,
-                        denomination = denomination,
-                        maritalStatus = maritalStatus,
-                        spouseName = spouseName,
-                        sibMembershipNumber = sibMembershipNumber,
-                        passportPhotoBase64 = passportPhotoBase64,
-                        onComplete = { showSelfMemberEditor = false }
-                    )
-                }
-            )
         }
     }
 
@@ -1202,7 +1267,7 @@ private fun BuletinMainShell(
         versionNotice.isUpdateAvailable(BuildConfig.VERSION_CODE) &&
         (versionNotice.forceUpdate || forceShowUpdateDialog || dismissedUpdateVersionCode < versionNotice.latestVersionCode)
 
-    if (shouldShowUpdatePrompt && versionNotice != null) {
+    if (shouldShowUpdatePrompt) {
         AppUpdateAvailableDialog(
             config = versionNotice,
             onDismiss = {

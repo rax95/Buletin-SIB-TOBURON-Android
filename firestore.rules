@@ -222,6 +222,7 @@ service cloud.firestore {
         (data.baptismStatus != 'DIBAPTIS' || data.denomination.size() >= 1) &&
         (!('maritalStatus' in data) || data.maritalStatus in ['BUJANG', 'BERKAHWIN', 'BALU_DUDA', 'BERCERAI']) &&
         (!('myKadNumber' in data) || data.myKadNumber == null || (data.myKadNumber is string && data.myKadNumber.size() <= 30)) &&
+        (!('phoneNumber' in data) || data.phoneNumber == null || (data.phoneNumber is string && data.phoneNumber.size() <= 25)) &&
         (!('spouseName' in data) || data.spouseName == null || (data.spouseName is string && data.spouseName.size() <= 120)) &&
         (!('sibMembershipNumber' in data) || data.sibMembershipNumber == null || (data.sibMembershipNumber is string && data.sibMembershipNumber.size() <= 40)) &&
         (!('passportPhotoBase64' in data) || data.passportPhotoBase64 == null || (data.passportPhotoBase64 is string && data.passportPhotoBase64.size() <= 160000)) &&
@@ -703,7 +704,7 @@ service cloud.firestore {
             ]) &&
             incoming().keys().hasOnly([
               'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
-              'myKadNumber', 'spouseName', 'sibMembershipNumber',
+              'myKadNumber', 'phoneNumber', 'spouseName', 'sibMembershipNumber',
               'passportPhotoBase64', 'memberEmail', 'authorId', 'createdAt', 'updatedAt'
             ]) && (
               isAdmin() ||
@@ -719,7 +720,7 @@ service cloud.firestore {
             ]) &&
             incoming().keys().hasOnly([
               'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
-              'myKadNumber', 'spouseName', 'sibMembershipNumber',
+              'myKadNumber', 'phoneNumber', 'spouseName', 'sibMembershipNumber',
               'passportPhotoBase64', 'memberEmail', 'authorId', 'registrationToken', 'createdAt', 'updatedAt'
             ]))
         );
@@ -731,7 +732,7 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().diff(existing()).affectedKeys().hasOnly([
           'fullName', 'gender', 'birthDate', 'baptismStatus', 'denomination', 'maritalStatus',
-          'myKadNumber', 'spouseName', 'sibMembershipNumber',
+          'myKadNumber', 'phoneNumber', 'spouseName', 'sibMembershipNumber',
           'passportPhotoBase64', 'memberEmail', 'updatedAt'
         ]) && (
           isAdmin() ||
